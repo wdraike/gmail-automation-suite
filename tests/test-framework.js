@@ -211,6 +211,7 @@ const expect = {
  * @returns {Object} Test results
  */
 function runTests() {
+  clearTests();
   TEST_RESULTS.startTime = new Date();
   TEST_RESULTS.totalTests = 0;
   TEST_RESULTS.passedTests = 0;

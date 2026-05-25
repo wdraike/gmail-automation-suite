@@ -150,36 +150,22 @@ describe('Email Sorter - Complete Test Suite', () => {
 
   describe('buildGeminiPrompt', () => {
     it('should build prompt with email details', () => {
-      try {
-        const result = buildGeminiPrompt('test@example.com', 'example.com', 'Test Subject');
-
-        expect(result).toContain('test@example.com');
-        expect(result).toContain('example.com');
-        expect(result).toContain('Test Subject');
-        expect(result).toContain('TASK:');
-      } catch (e) {
-        // If getAllCategories fails, just pass the test
-        expect(e).toBeDefined();
-      }
+      const result = buildGeminiPrompt('test@example.com', 'example.com', 'Test Subject');
+      expect(result).toContain('test@example.com');
+      expect(result).toContain('example.com');
+      expect(result).toContain('Test Subject');
+      expect(result).toContain('TASK:');
     });
 
     it('should include category list in prompt', () => {
-      try {
-        const result = buildGeminiPrompt('user@test.com', 'test.com', 'Hello');
-        expect(result).toContain('category');
-        expect(typeof result).toBe('string');
-      } catch (e) {
-        expect(e).toBeDefined();
-      }
+      const result = buildGeminiPrompt('user@test.com', 'test.com', 'Hello');
+      expect(result).toContain('category');
+      expect(typeof result).toBe('string');
     });
 
     it('should handle special characters in subject', () => {
-      try {
-        const result = buildGeminiPrompt('test@test.com', 'test.com', 'Subject with "quotes" & symbols');
-        expect(result).toContain('Subject with "quotes" & symbols');
-      } catch (e) {
-        expect(e).toBeDefined();
-      }
+      const result = buildGeminiPrompt('test@test.com', 'test.com', 'Subject with "quotes" & symbols');
+      expect(result).toContain('Subject with "quotes" & symbols');
     });
   });
 
@@ -189,15 +175,10 @@ describe('Email Sorter - Complete Test Suite', () => {
         throw new Error('Network error');
       });
 
-      try {
-        const result = queryGeminiForCategory('test@test.com', 'test.com', 'Subject');
-        expect(result).toBeDefined();
-        if (result) {
-          expect(result.category).toBe('other');
-        }
-      } catch (e) {
-        // Function uses getAllCategories which may fail
-        expect(e).toBeDefined();
+      const result = queryGeminiForCategory('test@test.com', 'test.com', 'Subject');
+      expect(result).toBeDefined();
+      if (result) {
+        expect(result.category).toBe('other');
       }
     });
   });

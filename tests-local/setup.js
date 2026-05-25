@@ -238,6 +238,5 @@ beforeEach(() => {
 
 // Run after each test
 afterEach(() => {
-  // Optional: Clear mocks after each test
-  // global.resetAllMocks();
+  global.resetAllMocks();
 });

@@ -67,10 +67,8 @@ describe('Config Module - Local Tests', () => {
       const testKey = '  api-key-with-spaces  ';
       setApiKey(testKey);
 
-      // Note: Current implementation doesn't trim,
-      // but it should for better UX
       const stored = getApiKey();
-      expect(stored).toBeDefined();
+      expect(stored).toBe('api-key-with-spaces');
     });
   });
 
