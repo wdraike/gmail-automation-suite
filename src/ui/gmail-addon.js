@@ -2,7 +2,13 @@
  * Comprehensive Gmail add-on with all possible entry points
  */
 
-
+/**
+ * Return the deployed web app URL for the dashboard.
+ * @returns {string} Web app URL
+ */
+function getWebAppUrl() {
+  return 'https://script.google.com/macros/s/AKfycbxWLGID2AytbnJzdGzjXRHeUUlLyMH-bFPcyO4zTeFj/dev';
+}
 
 /**
  * Main entry point for Gmail add-on.
