@@ -250,10 +250,10 @@ function setApiKey(apiKey) {
   }
 
   try {
-    // Store it in script properties
+    // Store it in script properties (trim whitespace)
     PropertiesService.getScriptProperties().setProperty(
       PROPERTY_KEYS.API_KEY,
-      apiKey
+      apiKey.trim()
     );
 
     Logger.log("API key has been set");

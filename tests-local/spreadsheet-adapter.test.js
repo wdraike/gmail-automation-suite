@@ -2,6 +2,8 @@
  * SpreadsheetAdapter Tests
  */
 
+const { SpreadsheetAdapter } = require('../src/core/services/spreadsheet-adapter.js');
+
 describe('SpreadsheetAdapter', () => {
   let adapter;
   let mockSpreadsheetApp;

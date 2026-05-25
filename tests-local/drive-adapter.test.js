@@ -2,6 +2,8 @@
  * DriveAdapter Tests
  */
 
+const { DriveAdapter } = require('../src/core/services/drive-adapter.js');
+
 describe('DriveAdapter', () => {
   let adapter;
   let mockDriveApp;
@@ -91,12 +93,13 @@ describe('DriveAdapter', () => {
   describe('getOrCreateFolder', () => {
     it('should return existing folder if found', () => {
       const mockFolder = { getName: jest.fn(() => 'Existing') };
-      mockDriveApp.getRootFolder.mockReturnValue({
+      const mockRoot = {
         getFolders: jest.fn(() => ({
           hasNext: jest.fn(() => true),
           next: jest.fn(() => mockFolder),
         })),
-      });
+      };
+      mockDriveApp.getRootFolder.mockReturnValue(mockRoot);
 
       const result = adapter.getOrCreateFolder('Existing');
 
@@ -123,11 +126,15 @@ describe('DriveAdapter', () => {
   describe('writeTextFile', () => {
     it('should write content to an existing file', () => {
       const mockFile = { setContent: jest.fn(), getName: jest.fn(() => 'test.txt') };
-      const mockFolder = {
+      const mockSubFolder = {
         getFilesByName: jest.fn(() => ({
           hasNext: jest.fn(() => true),
           next: jest.fn(() => mockFile),
         })),
+      };
+      const mockFolder = {
+        getFolders: jest.fn(() => ({ hasNext: jest.fn(() => false) })),
+        createFolder: jest.fn(() => mockSubFolder),
       };
       mockDriveApp.getRootFolder.mockReturnValue(mockFolder);
 
@@ -137,17 +144,21 @@ describe('DriveAdapter', () => {
     });
 
     it('should create new file if it does not exist', () => {
-      const mockFolder = {
+      const mockSubFolder = {
         getFilesByName: jest.fn(() => ({
           hasNext: jest.fn(() => false),
         })),
         createFile: jest.fn(() => ({ getName: jest.fn(() => 'test.txt') })),
       };
+      const mockFolder = {
+        getFolders: jest.fn(() => ({ hasNext: jest.fn(() => false) })),
+        createFolder: jest.fn(() => mockSubFolder),
+      };
       mockDriveApp.getRootFolder.mockReturnValue(mockFolder);
 
       adapter.writeTextFile('MyFolder', 'test.txt', 'hello world');
 
-      expect(mockFolder.createFile).toHaveBeenCalledWith('test.txt', 'hello world', 'text/plain');
+      expect(mockSubFolder.createFile).toHaveBeenCalledWith('test.txt', 'hello world', 'text/plain');
     });
   });
 });

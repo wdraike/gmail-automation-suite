@@ -2,6 +2,8 @@
  * GmailAdapter Tests
  */
 
+const { GmailAdapter } = require('../src/core/services/gmail-adapter.js');
+
 describe('GmailAdapter', () => {
   let adapter;
   let mockGmailApp;
@@ -76,7 +78,7 @@ describe('GmailAdapter', () => {
 
       adapter.sendEmail('to@test.com', 'Subject', 'Body');
 
-      expect(global.MailApp.sendEmail).toHaveBeenCalledWith('to@test.com', 'Subject', 'Body');
+      expect(global.MailApp.sendEmail).toHaveBeenCalledWith('to@test.com', 'Subject', 'Body', {});
     });
   });
 

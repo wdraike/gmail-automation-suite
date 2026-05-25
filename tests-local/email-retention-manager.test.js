@@ -1008,8 +1008,8 @@ describe('Email Retention Manager - Activity Logging', () => {
       expect(savedLog[1].message).toBe('New activity');
     });
 
-    it('should limit log to 100 entries', () => {
-      const largeLog = Array(105).fill(null).map((_, i) => ({
+    it('should limit log to 50 entries', () => {
+      const largeLog = Array(55).fill(null).map((_, i) => ({
         timestamp: new Date().toISOString(),
         message: `Activity ${i}`,
         ruleId: null
@@ -1024,7 +1024,7 @@ describe('Email Retention Manager - Activity Logging', () => {
       logRetentionActivity('New activity');
 
       const savedLog = JSON.parse(setPropertyMock.mock.calls[0][1]);
-      expect(savedLog).toHaveLength(100);
+      expect(savedLog).toHaveLength(50);
     });
 
     it('should handle errors gracefully', () => {
