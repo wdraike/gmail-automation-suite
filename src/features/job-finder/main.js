@@ -604,7 +604,7 @@ if (typeof module !== 'undefined' && module.exports) {
     processOneEmail,
     processEmailBatch,
     initializeJobFinder,
-    getSpreadsheetId,
+    getJobFinderSpreadsheetId,
     updateJobFinderConfig,
     setupJobFinderTrigger
   };
