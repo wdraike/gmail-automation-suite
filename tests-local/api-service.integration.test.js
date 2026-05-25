@@ -60,9 +60,7 @@ describe.skip('Gemini API - Real Integration Tests', () => {
     jest.clearAllMocks();
 
     // Reset API monitor
-    if (typeof resetApiMonitor === 'function') {
       resetApiMonitor();
-    }
   });
 
   describe('Real API Calls', () => {

@@ -14,9 +14,15 @@ const {
 } = require('../src/core/gmail-service.js');
 
 describe('Gmail Service - Complete Test Suite', () => {
+  let originalGmailApp;
 
   beforeEach(() => {
+    originalGmailApp = global.GmailApp;
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    global.GmailApp = originalGmailApp;
   });
 
   describe('GmailLabelService', () => {

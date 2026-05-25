@@ -42,10 +42,8 @@ describe('Gemini API Service - Complete Test Suite', () => {
     jest.clearAllMocks();
 
     // Reset API monitor
-    if (typeof API_MONITOR !== 'undefined') {
       API_MONITOR.requestCount = 0;
       API_MONITOR.lastResetTime = Date.now();
-    }
   });
 
   describe('API Response Parsing', () => {
@@ -175,9 +173,7 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
     describe('canMakeApiCall', () => {
       it('should return true when under rate limit', () => {
-        if (typeof resetApiMonitor === 'function') {
           resetApiMonitor();
-        }
 
         const canCall = canMakeApiCall();
 
@@ -200,7 +196,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
       });
 
       it('should reset after time window', () => {
-        if (typeof API_MONITOR !== 'undefined') {
           // Set last reset to over 1 minute ago
           API_MONITOR.lastResetTime = Date.now() - 61000;
           API_MONITOR.requestCount = 15;
@@ -209,24 +204,20 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
           // Should have reset
           expect(canCall).toBe(true);
-        }
       });
     });
 
     describe('incrementApiCallCount', () => {
       it('should increment the counter', () => {
-        if (typeof API_MONITOR !== 'undefined') {
           resetApiMonitor();
           const before = API_MONITOR.requestCount;
 
           incrementApiCallCount();
 
           expect(API_MONITOR.requestCount).toBe(before + 1);
-        }
       });
 
       it('should handle multiple increments', () => {
-        if (typeof API_MONITOR !== 'undefined') {
           resetApiMonitor();
 
           incrementApiCallCount();
@@ -234,24 +225,20 @@ describe('Gemini API Service - Complete Test Suite', () => {
           incrementApiCallCount();
 
           expect(API_MONITOR.requestCount).toBe(3);
-        }
       });
     });
 
     describe('getRemainingApiCalls', () => {
       it('should return correct remaining calls', () => {
-        if (typeof getRemainingApiCalls === 'function') {
           resetApiMonitor();
 
           const maxCalls = EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE || 15;
           const remaining = getRemainingApiCalls();
 
           expect(remaining).toBe(maxCalls);
-        }
       });
 
       it('should decrease as calls are made', () => {
-        if (typeof getRemainingApiCalls === 'function') {
           resetApiMonitor();
 
           const before = getRemainingApiCalls();
@@ -259,11 +246,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           const after = getRemainingApiCalls();
 
           expect(after).toBe(before - 1);
-        }
       });
 
       it('should not go below zero', () => {
-        if (typeof getRemainingApiCalls === 'function' && typeof API_MONITOR !== 'undefined') {
           resetApiMonitor();
 
           // Exceed the limit
@@ -273,30 +258,25 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
           const remaining = getRemainingApiCalls();
           expect(remaining).toBeGreaterThanOrEqual(0);
-        }
       });
     });
 
     describe('resetApiMonitor', () => {
       it('should reset request count to zero', () => {
-        if (typeof resetApiMonitor === 'function' && typeof API_MONITOR !== 'undefined') {
           API_MONITOR.requestCount = 10;
 
           resetApiMonitor();
 
           expect(API_MONITOR.requestCount).toBe(0);
-        }
       });
 
       it('should update last reset time', () => {
-        if (typeof resetApiMonitor === 'function' && typeof API_MONITOR !== 'undefined') {
           const before = API_MONITOR.lastResetTime;
 
           Utilities.sleep(10);
           resetApiMonitor();
 
           expect(API_MONITOR.lastResetTime).toBeGreaterThan(before);
-        }
       });
     });
   });
@@ -322,12 +302,10 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test email about work project');
 
           expect(result).toBe('{"category": "work"}'); // Returns raw text from API
           expect(UrlFetchApp.fetch).toHaveBeenCalled();
-        }
       });
 
       it('should handle response with markdown', () => {
@@ -347,12 +325,10 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test email about finances');
 
           // Now returns raw text, not parsed category
           expect(result).toBe('```json\n{"category": "finance"}\n```');
-        }
       });
 
       it('should pass correct API key in headers', () => {
@@ -366,7 +342,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           callGemini('Test prompt');
 
           const fetchCall = UrlFetchApp.fetch.mock.calls[0];
@@ -374,7 +349,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
           // API key should be in headers or URL params
           expect(fetchCall).toBeDefined();
-        }
       });
 
       it('should include prompt in request payload', () => {
@@ -385,7 +359,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const testPrompt = 'Categorize this email about shopping';
           callGemini(testPrompt);
 
@@ -396,7 +369,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
             const payload = JSON.parse(options.payload);
             expect(JSON.stringify(payload)).toContain(testPrompt);
           }
-        }
       });
     });
 
@@ -409,12 +381,10 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           // Should return 'other' or handle error gracefully
           expect(typeof result).toBe('string');
-        }
       });
 
       it('should handle rate limit errors (429)', () => {
@@ -425,11 +395,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           expect(typeof result).toBe('string');
-        }
       });
 
       it('should handle authentication errors (401)', () => {
@@ -440,11 +408,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           expect(typeof result).toBe('string');
-        }
       });
 
       it('should handle network errors', () => {
@@ -452,10 +418,8 @@ describe('Gemini API Service - Complete Test Suite', () => {
           throw new Error('Network connection failed');
         });
 
-        if (typeof callGemini === 'function') {
           expect(() => callGemini('Test prompt')).not.toThrow();
           // Should handle error and return fallback
-        }
       });
 
       it('should handle malformed JSON responses', () => {
@@ -464,12 +428,10 @@ describe('Gemini API Service - Complete Test Suite', () => {
           getContentText: jest.fn(() => 'This is not JSON')
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           // Should handle gracefully
           expect(typeof result).toBe('string');
-        }
       });
 
       it('should handle missing candidates in response', () => {
@@ -480,11 +442,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           expect(result).toBe('other');
-        }
       });
 
       it('should handle empty candidates array', () => {
@@ -495,17 +455,14 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        if (typeof callGemini === 'function') {
           const result = callGemini('Test prompt');
 
           expect(result).toBe('other');
-        }
       });
     });
 
     describe('callGeminiWithRateLimiting', () => {
       it('should wait when rate limit is reached', () => {
-        if (typeof callGeminiWithRateLimiting === 'function' && typeof API_MONITOR !== 'undefined') {
           resetApiMonitor();
 
           // Fill up the rate limit
@@ -530,11 +487,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           expect(sleepSpy).toHaveBeenCalled();
 
           sleepSpy.mockRestore();
-        }
       });
 
       it('should not wait when under rate limit', () => {
-        if (typeof callGeminiWithRateLimiting === 'function') {
           resetApiMonitor();
 
           const sleepSpy = jest.spyOn(Utilities, 'sleep');
@@ -552,7 +507,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
           expect(sleepSpy).not.toHaveBeenCalled();
 
           sleepSpy.mockRestore();
-        }
       });
     });
   });
@@ -561,16 +515,13 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
     describe('getApiCallStats', () => {
       it('should return statistics object', () => {
-        if (typeof getApiCallStats === 'function') {
           const stats = getApiCallStats();
 
           expect(typeof stats).toBe('object');
           expect(stats).toHaveProperty('totalCalls');
-        }
       });
 
       it('should track call counts', () => {
-        if (typeof getApiCallStats === 'function' && typeof API_MONITOR !== 'undefined') {
           resetApiMonitor();
 
           incrementApiCallCount();
@@ -579,13 +530,11 @@ describe('Gemini API Service - Complete Test Suite', () => {
           const stats = getApiCallStats();
 
           expect(stats.totalCalls).toBeGreaterThanOrEqual(2);
-        }
       });
     });
 
     describe('logApiCall', () => {
       it('should log successful API calls', () => {
-        if (typeof logApiCall === 'function') {
           const mockLogger = jest.spyOn(Logger, 'log');
 
           logApiCall('gemini-categorize', 'success', 200);
@@ -593,11 +542,9 @@ describe('Gemini API Service - Complete Test Suite', () => {
           expect(mockLogger).toHaveBeenCalled();
 
           mockLogger.mockRestore();
-        }
       });
 
       it('should log failed API calls', () => {
-        if (typeof logApiCall === 'function') {
           const mockLogger = jest.spyOn(Logger, 'log');
 
           logApiCall('gemini-categorize', 'error', 500);
@@ -605,7 +552,6 @@ describe('Gemini API Service - Complete Test Suite', () => {
           expect(mockLogger).toHaveBeenCalled();
 
           mockLogger.mockRestore();
-        }
       });
     });
   });
@@ -614,44 +560,36 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
     describe('isRetryableError', () => {
       it('should identify retryable errors', () => {
-        if (typeof isRetryableError === 'function') {
           const networkError = { code: 503, message: 'Service unavailable' };
           const rateLimitError = { code: 429, message: 'Too many requests' };
 
           expect(isRetryableError(networkError)).toBe(true);
           expect(isRetryableError(rateLimitError)).toBe(true);
-        }
       });
 
       it('should identify non-retryable errors', () => {
-        if (typeof isRetryableError === 'function') {
           const authError = { code: 401, message: 'Unauthorized' };
           const badRequest = { code: 400, message: 'Bad request' };
 
           expect(isRetryableError(authError)).toBe(false);
           expect(isRetryableError(badRequest)).toBe(false);
-        }
       });
     });
 
     describe('handleApiError', () => {
       it('should format error messages', () => {
-        if (typeof handleApiError === 'function') {
           const error = new Error('Test error');
           const formatted = handleApiError(error);
 
           expect(typeof formatted).toBe('string');
           expect(formatted.toLowerCase()).toContain('error');
-        }
       });
 
       it('should include error details', () => {
-        if (typeof handleApiError === 'function') {
           const error = { message: 'API quota exceeded', code: 429 };
           const formatted = handleApiError(error);
 
           expect(formatted).toContain('429');
-        }
       });
     });
   });
