@@ -1,0 +1,92 @@
+<script>
+// Toast notifications
+function showToast(message) {
+  const toast = document.getElementById("toastNotification");
+  const toastMessage = document.getElementById("toastMessage");
+
+  if (toast && toastMessage) {
+    toastMessage.textContent = message;
+    toast.classList.add("show");
+
+    setTimeout(function () {
+      toast.classList.remove("show");
+    }, 3000);
+  }
+}
+
+// Auto-scroll functionality for drag and drop
+let autoScrollInterval = null;
+const AUTOSCROLL_SPEED = 20; // pixels per interval
+const AUTOSCROLL_MARGIN = 50; // pixels from edge to trigger scrolling
+
+// Function to set up auto-scrolling
+function setupAutoScroll() {
+  // Clear any existing interval
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval);
+    autoScrollInterval = null;
+  }
+
+  // Add dragover event to the document to detect when we need to auto-scroll
+  document.addEventListener('dragover', function(e) {
+    e.preventDefault(); // Necessary for drag and drop to work
+
+    const scrollableContainers = document.querySelectorAll('.column-body');
+    
+    scrollableContainers.forEach(container => {
+      // Get container bounds
+      const rect = container.getBoundingClientRect();
+      
+      // Calculate distance from mouse to top and bottom edges
+      const distanceToTop = e.clientY - rect.top;
+      const distanceToBottom = rect.bottom - e.clientY;
+      
+      // Check if mouse is over this container
+      if (e.clientX >= rect.left && e.clientX <= rect.right && 
+          e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        
+        // If we're near the top edge, scroll up
+        if (distanceToTop < AUTOSCROLL_MARGIN) {
+          if (!autoScrollInterval) {
+            autoScrollInterval = setInterval(() => {
+              container.scrollTop -= AUTOSCROLL_SPEED;
+            }, 16); // ~60fps
+          }
+        } 
+        // If we're near the bottom edge, scroll down
+        else if (distanceToBottom < AUTOSCROLL_MARGIN) {
+          if (!autoScrollInterval) {
+            autoScrollInterval = setInterval(() => {
+              container.scrollTop += AUTOSCROLL_SPEED;
+            }, 16); // ~60fps
+          }
+        } 
+        // If we're in the middle, stop auto-scrolling
+        else if (autoScrollInterval) {
+          clearInterval(autoScrollInterval);
+          autoScrollInterval = null;
+        }
+      }
+    });
+  });
+
+  // Clear the interval when the drag operation ends
+  document.addEventListener('dragend', function() {
+    if (autoScrollInterval) {
+      clearInterval(autoScrollInterval);
+      autoScrollInterval = null;
+    }
+  });
+
+  document.addEventListener('drop', function() {
+    if (autoScrollInterval) {
+      clearInterval(autoScrollInterval);
+      autoScrollInterval = null;
+    }
+  });
+}
+</script>
+
+
+
+</script>

@@ -1,0 +1,183 @@
+<script>
+  // Load settings when the settings view is shown
+  function loadSettings() {
+    console.log("loadSettings called - loading settings data");
+    showToast("Loading settings...");
+
+    // Check if API key is set
+    google.script.run
+      .withSuccessHandler(function (result) {
+        console.log("API key check result:", result);
+        // Fill in API key field with placeholder if key exists
+        if (result) {
+          document.getElementById("apiKeyInput").value = "••••••••••••••••••••";
+          showApiStatus(true, "API key is set");
+        } else {
+          document.getElementById("apiKeyInput").value = "";
+          showApiStatus(false, "No API key is set");
+        }
+      })
+      .withFailureHandler(function (error) {
+        console.error("Error checking API key:", error);
+        showToast(`Error checking API key: ${error}`);
+      })
+      .isApiKeySet();
+
+    // Load dynamic categories setting
+    google.script.run
+      .withSuccessHandler(function (result) {
+        console.log("Dynamic categories setting:", result);
+        document.getElementById("dynamicCategoriesEnabled").value =
+          result.toString();
+      })
+      .withFailureHandler(function (error) {
+        console.error("Error loading dynamic categories setting:", error);
+        showToast(`Error loading dynamic categories setting: ${error}`);
+      })
+      .isDynamicCategoriesEnabled();
+
+    console.log("Settings load requests sent to server");
+    showToast("Settings loaded");
+  }
+
+  // Save API key
+  function saveApiKey() {
+    const apiKey = document.getElementById("apiKeyInput").value.trim();
+
+    if (!apiKey) {
+      showToast("Please enter an API key");
+      return;
+    }
+
+    showToast("Saving API key...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        showToast("API key saved successfully");
+        showApiStatus(true, "API key saved successfully");
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+        showApiStatus(false, `Error: ${error}`);
+      })
+      .setApiKey(apiKey);
+  }
+
+  // Test API key
+  function testApiKey() {
+    showToast("Testing API connection...");
+    showApiStatus(null, "Testing connection...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          showToast("API connection successful");
+          showApiStatus(true, "API connection successful! The key is valid.");
+        } else {
+          showToast(`API test failed: ${result.message}`);
+          showApiStatus(false, `API test failed: ${result.message}`);
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+        showApiStatus(false, `Error: ${error}`);
+      })
+      .testApiKey();
+  }
+
+  // Show API status message with appropriate styling
+  function showApiStatus(isSuccess, message) {
+    const statusDiv = document.getElementById("apiStatusMessage");
+
+    if (!statusDiv) return;
+
+    statusDiv.classList.remove(
+      "hidden",
+      "text-green-600",
+      "text-red-600",
+      "text-blue-600"
+    );
+
+    if (isSuccess === true) {
+      statusDiv.classList.add("text-green-600");
+    } else if (isSuccess === false) {
+      statusDiv.classList.add("text-red-600");
+    } else {
+      statusDiv.classList.add("text-blue-600");
+    }
+
+    statusDiv.textContent = message;
+    statusDiv.classList.remove("hidden");
+  }
+
+  // Save all settings
+  function saveAllSettings() {
+    // Save dynamic categories setting
+    const dynamicCategories =
+      document.getElementById("dynamicCategoriesEnabled").value === "true";
+
+    showToast("Saving settings...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result) {
+          showToast("Settings saved successfully");
+        } else {
+          showToast("Failed to save settings");
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .setDynamicCategoriesEnabled(dynamicCategories);
+  }
+
+  // Toggle API key visibility
+  function toggleApiKeyVisibility() {
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    if (apiKeyInput.type === "password") {
+      apiKeyInput.type = "text";
+    } else {
+      apiKeyInput.type = "password";
+    }
+  }
+
+// Event listeners for settings page
+function setupSettingsEventListeners() {
+  // API key actions
+  document.getElementById("saveApiKeyBtn").addEventListener("click", saveApiKey);
+  document.getElementById("testApiKeyBtn").addEventListener("click", testApiKey);
+  document.getElementById("showApiKeyBtn").addEventListener("click", toggleApiKeyVisibility);
+
+  // Save all settings
+  document.getElementById("saveSettingsBtn").addEventListener("click", saveAllSettings);
+  
+  // Data management buttons (if they exist)
+  const exportDataBtn = document.getElementById("exportDataBtn");
+  if (exportDataBtn) {
+    exportDataBtn.addEventListener("click", function() {
+      alert("Export functionality will be implemented soon.");
+    });
+  }
+  
+  const importDataBtn = document.getElementById("importDataBtn");
+  if (importDataBtn) {
+    importDataBtn.addEventListener("click", function() {
+      alert("Import functionality will be implemented soon.");
+    });
+  }
+  
+  const resetDataBtn = document.getElementById("resetDataBtn");
+  if (resetDataBtn) {
+    resetDataBtn.addEventListener("click", function() {
+      if (confirm("Are you sure you want to reset all data? This cannot be undone.")) {
+        alert("Reset functionality will be implemented soon.");
+      }
+    });
+  }
+}
+  
+  function initializeSettings() {
+    setupSettingsEventListeners();
+  }
+</script>

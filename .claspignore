@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+package.json
+package-lock.json
+
+# Tests and dev tools (relative to rootDir which is ./src)
+../tests/
+../tests-local/
+dev/
+**/*.test.js
+**/*.spec.js
+
+# Config files
+jest.config.js
+.eslintrc.json
+.gitignore
+.claspignore
+
+# Documentation
+*.md
+docs/
+
+# Scripts and build tools
+scripts/
+
+# Source modules (Node.js format - don't deploy these)
+src-modules/
+
+# Coverage and reports
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Only deploy files from src/ directory
+!src/**/*.js

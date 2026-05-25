@@ -1,0 +1,908 @@
+<script>
+  // Escape helper for safe HTML/JS-in-HTML insertion
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, '\\\'')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Component 1: Label Tree Renderer
+  function renderLabelTree() {
+    const container = document.getElementById("labelTreeContainer");
+    if (!container) return;
+
+    // Clear previous content
+    container.innerHTML = "";
+
+    // Check if we have valid labels
+    if (!allLabels || !Array.isArray(allLabels) || allLabels.length === 0) {
+      container.innerHTML =
+        '<div class="text-gray-500 text-center py-4">No labels found. Refresh to load Gmail labels.</div>';
+      return;
+    }
+
+    // Build hierarchy structure
+    const hierarchy = buildLabelHierarchy(allLabels);
+
+    // Render the hierarchy
+    renderLabelHierarchy(container, hierarchy, 0);
+
+    // Setup expand/collapse handlers
+    setupExpandCollapseHandlers();
+
+    // Setup drop zones for category pills
+    setupCategoryDropZones();
+
+    // Setup event listeners for gear icons
+    setupRetentionButtons();
+  }
+
+  // Helper function to create a category pill - defined BEFORE it's used
+  function createCategoryPill(categoryKey, labelName) {
+    const pill = document.createElement("div");
+    // Added leading-none for minimal text height, icons further shrunk
+    pill.className = "category-pill flex items-center bg-gray-100 text-gray-700 text-xs leading-none px-1.5 py-0 rounded-full mr-1 mb-0.5";
+    pill.setAttribute("draggable", "true");
+    pill.setAttribute("data-category", categoryKey);
+    pill.setAttribute("data-label", labelName);
+
+    // Get display name
+    let displayName = categoryKey;
+    if (allCategories[categoryKey]) {
+      if (typeof allCategories[categoryKey] === "string") {
+        displayName = allCategories[categoryKey];
+      } else if (allCategories[categoryKey].displayName) {
+        displayName = allCategories[categoryKey].displayName;
+      }
+    }
+
+    pill.innerHTML = [
+      '<svg class="h-2 w-2 mr-0.5" viewBox="0 0 20 20" fill="currentColor">',
+      '<path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />',
+      '</svg>',
+      '<span class="truncate">' + escapeAttr(displayName) + '</span>',
+      '<button class="ml-0.5 text-blue-400 hover:text-red-500 focus:outline-none" onclick="removeCategoryFromLabel(\'' + escapeAttr(labelName) + '\', \'' + escapeAttr(categoryKey) + '\')">',
+      '<svg class="h-2 w-2" viewBox="0 0 20 20" fill="currentColor">',
+      '<path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" />',
+      '</svg>',
+      '</button>'
+    ].join('');
+
+    // Add dragstart event handler to include the source label
+    pill.addEventListener("dragstart", function (e) {
+      e.dataTransfer.setData(
+        "text/plain",
+        JSON.stringify({
+          type: "category",
+          categoryKey: categoryKey,
+          sourceLabel: labelName,
+        })
+      );
+      this.classList.add("opacity-50");
+    });
+
+    pill.addEventListener("dragend", function () {
+      this.classList.remove("opacity-50");
+    });
+
+    return pill;
+  }
+
+  // Helper function to build label hierarchy
+  function buildLabelHierarchy(labels) {
+    const hierarchy = {};
+
+    console.log(`Building hierarchy from ${labels.length} labels`);
+    
+    labels.forEach((label) => {
+      if (!label || !label.name) return;
+
+      const name = label.name;
+      const parts = name.split("/");
+
+      if (parts.length === 1) {
+        // Top-level label
+        if (!hierarchy[name]) {
+          hierarchy[name] = {
+            type: "label",
+            name: name,
+            fullName: name, // Add fullName for top-level labels too
+            data: label,
+          };
+        } else {
+          // Node already exists, it's likely a folder created by a nested label (e.g., "name/child").
+          // Add label-specific data to this existing folder node, as 'name' itself is also a label.
+          hierarchy[name].data = label;
+          hierarchy[name].fullName = name; // This identifies the folder as also being this specific label.
+          // Type should remain/be folder if it has children or was already a folder.
+        }
+      } else {
+        // Nested label - process ALL parts to create proper depth
+        let currentLevel = hierarchy;
+        let currentPath = "";
+        // Create folders for ALL intermediate parts
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+          // Create folder if needed
+          if (!currentLevel[part]) {
+            currentLevel[part] = {
+              type: "folder",
+              path: currentPath,
+              name: part, // Add name for the folder node for display consistency
+              children: {},
+              // data and fullName will be populated if this path is also an actual label
+            };
+          } else {
+            // Node 'part' already exists. Ensure it's correctly typed as a folder
+            // as it's an intermediate part of the current path.
+            const existingNode = currentLevel[part];
+            existingNode.type = "folder"; // Explicitly set/confirm as folder
+            if (!existingNode.name) existingNode.name = part; // Ensure name for folder display
+            if (!existingNode.path) existingNode.path = currentPath; // Ensure path for folder
+            if (!existingNode.children) { // Ensure children object exists
+              existingNode.children = {};
+            }
+            // Original data (existingNode.data, existingNode.fullName) is preserved if it was a label
+          }
+          // Move to the next level
+          currentLevel = currentLevel[part].children;
+        }
+
+        // Add the leaf label
+        const leafName = parts[parts.length - 1];
+        if (!currentLevel[leafName]) {
+          currentLevel[leafName] = {
+            type: "label",
+            name: leafName, // Short name of the label
+            fullName: name, // Full path of this label
+            data: label,
+          };
+        } else {
+          // Node for leafName already exists. This means it was previously created as a folder
+          // (e.g., for a path like "parent/leafName/grandChild").
+          // The current label 'name' (e.g., "parent/leafName") means that 'leafName'
+          // is an actual label in addition to being a folder.
+          const existingNode = currentLevel[leafName];
+          existingNode.data = label; // Add/overwrite label data
+          existingNode.fullName = name; // This is the full name of THIS label
+          existingNode.type = "folder"; // It must be a folder if it already existed and has/had children
+          if (!existingNode.name) existingNode.name = leafName; // Ensure name
+          if (!existingNode.path) existingNode.path = name; // The path of this folder/label entity
+          // Children should already exist if it was a folder, or be {} if converting from label
+          if (!existingNode.children) existingNode.children = {};
+        }
+      }
+    });
+
+    return hierarchy;
+  }
+
+  // Render label hierarchy recursively
+  function renderLabelHierarchy(container, hierarchy, level) {
+    if (!hierarchy) return;
+
+    // Sort keys alphabetically
+    const keys = Object.keys(hierarchy).sort();
+
+    keys.forEach((key) => {
+      const node = hierarchy[key];
+      if (!node) return;
+
+      if (node.type === "label") {
+        // Render a label node
+        const labelDiv = document.createElement("div");
+        labelDiv.className =
+          "tree-node bg-white px-1 py-0.5 rounded-md border border-gray-100 mb-0.5"; // Reduced padding and margin
+        labelDiv.style.marginLeft = level * 10 + "px"; // Reduced indentation step
+
+        const labelName = node.fullName || node.name;
+        labelDiv.setAttribute("data-label", labelName);
+        
+        // Apply any active filter immediately
+        if (currentLabelFilter && !labelName.toLowerCase().includes(currentLabelFilter.toLowerCase())) {
+          labelDiv.style.display = "none";
+        }
+
+        // Create label header
+        const labelHeader = document.createElement("div");
+        labelHeader.className = "flex items-center justify-between";
+
+        // Create left side with label icon and name
+        const leftSide = document.createElement("div");
+        leftSide.className = "flex items-center";
+
+        // Add label icon and category indicator
+        const categoryCount = labelCategories[labelName] ? labelCategories[labelName].length : 0;
+        const categoryIndicator = categoryCount > 0 ? 
+          `<span class="ml-1 bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded-full">${categoryCount}</span>` : // Reduced margin and padding
+          '';
+        
+        leftSide.innerHTML = `
+        <svg class="h-4 w-4 text-yellow-500 mr-1" viewBox="0 0 20 20" fill="currentColor"> {/* Reduced margin */}
+          <path d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" />
+        </svg>
+        <span class="text-sm font-medium">${escapeAttr(node.name)}</span>
+        ${categoryIndicator}
+      `;
+
+        // Check if this label has a retention policy
+        if (retentionRules[labelName]) {
+          // Add retention icon
+          const retentionIcon = document.createElement("span");
+          retentionIcon.className = "retention-icon ml-1 text-yellow-500"; // Reduced margin
+          retentionIcon.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+          </svg>
+        `;
+
+          // Create tooltip text
+          const rule = retentionRules[labelName];
+          let tooltipText = `${rule.retentionDays} days retention`;
+          if (rule.action === "delete") {
+            tooltipText += " → Delete";
+          } else if (rule.action === "archive") {
+            tooltipText += " → Archive";
+            if (rule.targetLabel) {
+              tooltipText += ` to "${rule.targetLabel}"`;
+            }
+          }
+
+          retentionIcon.setAttribute("title", tooltipText);
+          leftSide.appendChild(retentionIcon);
+        }
+
+        // Add gear icon for retention settings
+        const gearButton = document.createElement("button");
+        gearButton.className =
+          "ml-1 text-gray-400 hover:text-gray-700 retention-settings-btn focus:outline-none"; // Reduced margin
+        gearButton.setAttribute("title", "Retention Settings");
+        gearButton.setAttribute("data-label", labelName);
+        gearButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+        </svg>
+      `;
+        leftSide.appendChild(gearButton);
+
+        labelHeader.appendChild(leftSide);
+        labelDiv.appendChild(labelHeader);
+
+        // Create category drop zone
+        const dropZone = document.createElement("div");
+        dropZone.className = "drop-zone mt-1"; // Reduced margin
+        dropZone.setAttribute("data-label", labelName);
+
+        // Add existing category pills if any
+        if (
+          labelCategories[labelName] &&
+          labelCategories[labelName].length > 0
+        ) {
+          dropZone.classList.add("has-categories");
+          labelCategories[labelName].forEach((categoryKey) => {
+            const pill = createCategoryPill(categoryKey, labelName);
+            dropZone.appendChild(pill);
+          });
+        } else {
+          dropZone.classList.add("empty-zone");
+          dropZone.innerHTML =
+            '<span class="text-gray-400 text-xs">Drop categories here</span>';
+        }
+
+        labelDiv.appendChild(dropZone);
+        container.appendChild(labelDiv);
+      } else if (node.type === "folder") {
+        // Render a folder node
+        const folderContainer = document.createElement("div");
+        folderContainer.className = "tree-parent mb-0.5"; // Reduced margin
+        folderContainer.style.marginLeft = level * 10 + "px"; // Reduced indentation step
+        
+        // Apply any active filter state to folders
+        if (currentLabelFilter) {
+          folderContainer.style.display = "none"; // Start hidden and show if children match
+        }
+
+        // Create folder header
+        const folderHeader = document.createElement("div");
+        folderHeader.className =
+          "folder-header bg-white px-1 py-0.5 rounded-md border border-gray-100 cursor-pointer flex items-center justify-between"; // Reduced padding
+        if (node.path) folderHeader.setAttribute("data-folder", node.path);
+
+        // Create folder header left side (expand icon + name + category indicator)
+        const folderHeaderLeft = document.createElement("div");
+        folderHeaderLeft.className = "flex items-center";
+        
+        const folderCategoryCount = node.path && labelCategories[node.path] ? labelCategories[node.path].length : 0;
+        const folderCategoryIndicator = folderCategoryCount > 0 ? 
+          `<span class="ml-1 bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded-full">${folderCategoryCount}</span>` : // Reduced margin and padding
+          '';
+        
+        folderHeaderLeft.innerHTML = `
+        <svg class="h-4 w-4 text-gray-500 mr-1 expand-icon" viewBox="0 0 20 20" fill="currentColor"> {/* Reduced margin */}
+          <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" />
+        </svg>
+        <svg class="h-5 w-5 text-yellow-600 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"> {/* Reduced margin */}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        <span class="text-sm font-medium">${escapeAttr(key)}</span>
+        ${folderCategoryIndicator}
+      `;
+
+        // Create folder header right side (settings etc.)
+        const folderHeaderRight = document.createElement("div");
+        folderHeaderRight.className = "folder-actions flex items-center";
+
+        // Check if this folder/path has a retention policy
+        if (node.path && retentionRules[node.path]) {
+          // Add retention icon
+          const retentionIcon = document.createElement("span");
+          retentionIcon.className = "retention-icon ml-1 text-yellow-500"; // Reduced margin
+          retentionIcon.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+          </svg>
+        `;
+
+          const rule = retentionRules[node.path];
+          let tooltipText = `${rule.retentionDays} days retention`;
+          retentionIcon.setAttribute("title", tooltipText);
+          folderHeaderRight.appendChild(retentionIcon);
+        }
+
+        // Add gear icon for folder retention settings
+        if (node.path) {
+          const gearButton = document.createElement("button");
+          gearButton.className =
+            "ml-1 text-gray-400 hover:text-gray-700 retention-settings-btn focus:outline-none"; // Reduced margin
+          gearButton.setAttribute("title", "Folder Retention Settings");
+          gearButton.setAttribute("data-label", node.path);
+          gearButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+          </svg>
+        `;
+
+          // Add event listener to stop propagation so clicking the gear doesn't toggle folder
+          gearButton.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+
+          folderHeaderRight.appendChild(gearButton);
+        }
+
+        // Add the header parts to the folder header
+        folderHeader.appendChild(folderHeaderLeft);
+        folderHeader.appendChild(folderHeaderRight);
+
+        folderContainer.appendChild(folderHeader);
+
+        // Also add a drop zone for the folder itself so we can assign categories to parent folders
+        if (node.path) {
+          const folderDropZone = document.createElement("div");
+          folderDropZone.className = "drop-zone mt-1"; // Reduced margin
+          folderDropZone.setAttribute("data-label", node.path);
+
+          // Add existing category pills if any
+          if (
+            labelCategories[node.path] &&
+            labelCategories[node.path].length > 0
+          ) {
+            folderDropZone.classList.add("has-categories");
+            labelCategories[node.path].forEach((categoryKey) => {
+              const pill = createCategoryPill(categoryKey, node.path);
+              folderDropZone.appendChild(pill);
+            });
+          } else {
+            folderDropZone.classList.add("empty-zone");
+            folderDropZone.innerHTML =
+              '<span class="text-gray-400 text-xs">Drop categories to this folder</span>';
+          }
+
+          folderContainer.appendChild(folderDropZone);
+        }
+
+        // Create children container - start expanded by default
+        const childrenContainer = document.createElement("div");
+        childrenContainer.className = "children-container";
+        // childrenContainer.style.paddingLeft = "6px"; // Removed, relying on item marginLeft now
+        // Ensure it starts expanded (remove any hidden class)
+        childrenContainer.classList.remove("hidden");
+        folderContainer.appendChild(childrenContainer);
+
+        // Add to DOM first
+        container.appendChild(folderContainer);
+
+        // Recursively render children if they exist
+        if (node.children && Object.keys(node.children).length > 0) {
+          // Mark folder as expanded since we're showing children
+          folderHeader.classList.add("expanded");
+          renderLabelHierarchy(childrenContainer, node.children, level + 1);
+          
+          // If we're filtering and any child is visible, show this folder
+          if (currentLabelFilter) {
+            const hasVisibleChildren = Array.from(childrenContainer.querySelectorAll("[data-label]")).some(
+              el => el.style.display !== "none"
+            );
+            if (hasVisibleChildren) {
+              folderContainer.style.display = "";
+            }
+          }
+        }
+      }
+    });
+
+    // Debug: Log drop zones after rendering
+    console.log("Checking drop zones in renderLabelHierarchy...");
+    const allDropZones = container.querySelectorAll(".drop-zone");
+    console.log(`Found ${allDropZones.length} drop zones in this container`);
+    allDropZones.forEach((zone, index) => {
+      const labelAttr = zone.getAttribute("data-label");
+      if (!labelAttr) {
+        console.log(`Drop zone #${index} missing data-label attribute:`, zone);
+      }
+    });
+  }
+
+  // Setup expand/collapse handlers
+  function setupExpandCollapseHandlers() {
+    // Add click handlers to all folder headers
+    const folderHeaders = document.querySelectorAll(".folder-header");
+
+    folderHeaders.forEach((header) => {
+      header.addEventListener("click", function (e) {
+        // Skip if clicking on a button or action element
+        if (e.target.closest(".folder-actions") || e.target.closest("button")) {
+          return;
+        }
+
+        const childrenContainer = this.nextElementSibling;
+
+        // If the next element is a drop-zone, get the element after that
+        let targetContainer = childrenContainer;
+        if (
+          targetContainer &&
+          targetContainer.classList.contains("drop-zone")
+        ) {
+          targetContainer = targetContainer.nextElementSibling;
+        }
+
+        if (
+          targetContainer &&
+          targetContainer.classList.contains("children-container")
+        ) {
+          if (targetContainer.classList.contains("hidden")) {
+            targetContainer.classList.remove("hidden");
+            this.classList.add("expanded");
+          } else {
+            targetContainer.classList.add("hidden");
+            this.classList.remove("expanded");
+          }
+        }
+      });
+    });
+
+    // Setup expand/collapse all buttons
+    document
+      .getElementById("expandAllBtn")
+      .addEventListener("click", function () {
+        const childrenContainers = document.querySelectorAll(
+          ".children-container"
+        );
+        const folderHeaders = document.querySelectorAll(".folder-header");
+
+        childrenContainers.forEach((container) => {
+          container.classList.remove("hidden");
+        });
+
+        folderHeaders.forEach((header) => {
+          header.classList.add("expanded");
+        });
+      });
+
+    document
+      .getElementById("collapseAllBtn")
+      .addEventListener("click", function () {
+        const childrenContainers = document.querySelectorAll(
+          ".children-container"
+        );
+        const folderHeaders = document.querySelectorAll(".folder-header");
+
+        childrenContainers.forEach((container) => {
+          container.classList.add("hidden");
+        });
+
+        folderHeaders.forEach((header) => {
+          header.classList.remove("expanded");
+        });
+      });
+  }
+
+// Set up drop zones for categories
+function setupCategoryDropZones() {
+  // Find all label drop zones
+  const dropZones = document.querySelectorAll(".drop-zone[data-label]");
+
+  dropZones.forEach((zone) => {
+    zone.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      this.classList.add("highlight");
+    });
+
+    zone.addEventListener("dragleave", function () {
+      this.classList.remove("highlight");
+    });
+
+    zone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      this.classList.remove("highlight");
+
+      try {
+        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+
+        if (data.type === "category") {
+          const categoryKey = data.categoryKey;
+          const labelName = this.getAttribute("data-label");
+
+          // Check if this category is already assigned to this label
+          const existingCategories = labelCategories[labelName] || [];
+
+          if (!existingCategories.includes(categoryKey)) {
+            // Add category to label
+            addCategoryToLabel(labelName, categoryKey);
+          }
+        }
+      } catch (error) {
+        console.error("Error handling drop:", error);
+      }
+    });
+  });
+}
+
+
+  // Set up gear button event listeners
+  function setupRetentionButtons() {
+    // Find all gear buttons
+    document.querySelectorAll(".retention-settings-btn").forEach((button) => {
+      button.addEventListener("click", function (e) {
+        // Prevent the click from bubbling up to parent elements
+        e.stopPropagation();
+
+        // Get the label name from the data attribute
+        const labelName = this.getAttribute("data-label");
+        if (labelName) {
+          console.log("Gear clicked for label:", labelName); // Debug log
+          showRetentionPolicyModal(labelName);
+        }
+      });
+    });
+  }
+
+  // Add a function to move a category between labels
+  function moveCategoryBetweenLabels(categoryKey, sourceLabel, targetLabel) {
+    // Don't do anything if source and target are the same
+    if (sourceLabel === targetLabel) {
+      return;
+    }
+
+    // Show loading state
+    showToast(`Moving category from ${sourceLabel} to ${targetLabel}...`);
+
+    // Call server function to move category
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Update local data
+          // Remove from source label
+          if (labelCategories[sourceLabel]) {
+            labelCategories[sourceLabel] = labelCategories[sourceLabel].filter(
+              (cat) => cat !== categoryKey
+            );
+            if (labelCategories[sourceLabel].length === 0) {
+              delete labelCategories[sourceLabel];
+            }
+          }
+
+          // Add to target label
+          if (!labelCategories[targetLabel]) {
+            labelCategories[targetLabel] = [];
+          }
+          if (!labelCategories[targetLabel].includes(categoryKey)) {
+            labelCategories[targetLabel].push(categoryKey);
+            labelCategories[targetLabel].sort(); // Keep categories sorted
+          }
+
+          // Update UI
+          // Remove from source
+          const sourcePill = document.querySelector(
+            `.category-pill[data-category="${categoryKey}"][data-label="${sourceLabel}"]`
+          );
+          if (sourcePill) {
+            sourcePill.remove();
+
+            // Add placeholder if needed
+            const sourceDropZone = document.querySelector(
+              `.drop-zone[data-label="${sourceLabel}"]`
+            );
+            if (sourceDropZone && sourceDropZone.children.length === 0) {
+              sourceDropZone.innerHTML =
+                '<span class="text-gray-400 text-xs">Drop categories here</span>';
+            }
+          }
+
+          // Add to target
+          const targetDropZone = document.querySelector(
+            `.drop-zone[data-label="${targetLabel}"]`
+          );
+          if (targetDropZone) {
+            // Clear placeholder if it exists
+            if (targetDropZone.querySelector(".text-gray-400")) {
+              targetDropZone.innerHTML = "";
+            }
+
+            // Add the category pill
+            const newPill = createCategoryPill(categoryKey, targetLabel);
+            targetDropZone.appendChild(newPill);
+          }
+
+          // Re-apply the current filter to ensure UI consistency
+          setTimeout(() => {
+            if (currentLabelFilter) {
+              // Just use the stored filter value
+              filterLabels(currentLabelFilter);
+            }
+          }, 0);
+
+          showToast("Category moved successfully");
+        } else {
+          showToast(
+            `Error: ${result ? result.message : "Failed to move category"}`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .moveCategoryBetweenLabels(categoryKey, sourceLabel, targetLabel);
+  }
+
+  // Add category to label
+  function addCategoryToLabel(labelName, categoryKey) {
+    // Show loading state
+    showToast("Adding category to label...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Update local data
+          if (!labelCategories[labelName]) {
+            labelCategories[labelName] = [];
+          }
+
+          if (!labelCategories[labelName].includes(categoryKey)) {
+            labelCategories[labelName].push(categoryKey);
+            labelCategories[labelName].sort(); // Keep it sorted
+          }
+
+          // Update UI
+          const dropZone = document.querySelector(
+            `.drop-zone[data-label="${labelName}"]`
+          );
+          if (dropZone) {
+            // Clear any placeholder text
+            if (dropZone.querySelector(".text-gray-400")) {
+              dropZone.innerHTML = "";
+            }
+
+            // Add the category pill
+            const pill = createCategoryPill(categoryKey, labelName);
+            dropZone.appendChild(pill);
+          }
+
+          // Re-apply the current filter to ensure UI consistency
+          setTimeout(() => {
+            if (currentLabelFilter) {
+              // Just use the stored filter value
+              filterLabels(currentLabelFilter);
+            }
+          }, 0);
+
+          showToast("Category added to label");
+        } else {
+          showToast(
+            "Error: " + (result ? result.message : "Failed to add category")
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast("Error: " + error);
+      })
+      .addCategoryToLabel(labelName, categoryKey);
+  }
+
+  // Remove category from label
+  function removeCategoryFromLabel(labelName, categoryKey) {
+    // Show confirmation
+    showDeleteConfirmModal(`Remove category "${categoryKey}" from label "${labelName}"?`, () => {
+      // Show loading state
+      showToast("Removing category from label...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Update local data
+          if (labelCategories[labelName]) {
+            labelCategories[labelName] = labelCategories[labelName].filter(
+              (cat) => cat !== categoryKey
+            );
+
+            if (labelCategories[labelName].length === 0) {
+              delete labelCategories[labelName];
+            }
+          }
+
+          // Update UI
+          const pill = document.querySelector(
+            `.category-pill[data-category="${categoryKey}"][data-label="${labelName}"]`
+          );
+          if (pill) {
+            pill.remove();
+
+            // Add placeholder text if no more pills
+            const dropZone = document.querySelector(
+              `.drop-zone[data-label="${labelName}"]`
+            );
+            if (dropZone && dropZone.children.length === 0) {
+              dropZone.innerHTML =
+                '<span class="text-gray-400 text-xs">Drop categories here</span>';
+            }
+          }
+
+          // Re-apply the current filter to ensure UI consistency
+          setTimeout(() => {
+            if (currentLabelFilter) {
+              // Just use the stored filter value
+              filterLabels(currentLabelFilter);
+            }
+          }, 0);
+
+          showToast("Category removed from label");
+        } else {
+          showToast(
+            "Error: " + (result ? result.message : "Failed to remove category")
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast("Error: " + error);
+      })
+      .removeCategoryFromLabel(labelName, categoryKey);
+    });
+  }
+
+  // Filter labels
+  // Store the current filter text globally so it can be reapplied after operations
+  let currentLabelFilter = "";
+  
+  function filterLabels(searchText) {
+    // Update the global filter text
+    currentLabelFilter = searchText || "";
+    
+    if (!searchText) {
+      // Show all labels
+      document.querySelectorAll(".tree-node, .tree-parent").forEach((node) => {
+        node.style.display = "";
+      });
+      return;
+    }
+
+    searchText = searchText.toLowerCase();
+
+    // Filter label nodes
+    document.querySelectorAll("[data-label]").forEach((node) => {
+      const labelName = node.getAttribute("data-label");
+
+      if (labelName && labelName.toLowerCase().includes(searchText)) {
+        node.style.display = "";
+
+        // Show parent folders
+        let parent = node.parentElement;
+        while (parent) {
+          if (parent.classList.contains("children-container")) {
+            parent.classList.remove("hidden");
+
+            const folderHeader = parent.previousElementSibling;
+            if (
+              folderHeader &&
+              folderHeader.classList.contains("folder-header")
+            ) {
+              folderHeader.classList.add("expanded");
+            }
+
+            const parentFolder = parent.parentElement;
+            if (parentFolder) {
+              parentFolder.style.display = "";
+            }
+          }
+          parent = parent.parentElement;
+        }
+      } else {
+        node.style.display = "none";
+      }
+    });
+
+    // Hide empty folders
+    document.querySelectorAll(".tree-parent").forEach((folder) => {
+      let hasVisibleChildren = false;
+
+      folder.querySelectorAll("[data-label]").forEach((label) => {
+        if (label.style.display !== "none") {
+          hasVisibleChildren = true;
+        }
+      });
+
+      if (!hasVisibleChildren) {
+        folder.style.display = "none";
+      }
+    });
+  }
+
+  // Update label with retention policy icon
+  function updateLabelWithRetention(labelName, hasRetention) {
+    // Find the label node
+    const labelNode = document.querySelector(`[data-label="${labelName}"]`);
+
+    if (labelNode) {
+      // Find or create the retention icon
+      // Find or create the retention icon
+      let retentionIcon = labelNode.querySelector(".retention-icon");
+
+      if (hasRetention) {
+        // Add or update retention icon
+        if (!retentionIcon) {
+          retentionIcon = document.createElement("span"); // Ensure this matches the creation logic above
+          retentionIcon.className = "retention-icon ml-1 text-yellow-500"; // Reduced margin
+          retentionIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+            </svg>
+          `;
+
+          // Create tooltip text
+          const rule = retentionRules[labelName];
+          if (rule) {
+            let tooltipText = `${rule.retentionDays} days retention`;
+            if (rule.action === "delete") {
+              tooltipText += " → Delete";
+            } else if (rule.action === "archive") {
+              tooltipText += " → Archive";
+              if (rule.targetLabel) {
+                tooltipText += ` to "${rule.targetLabel}"`;
+              }
+            }
+            retentionIcon.setAttribute("title", tooltipText);
+          } else {
+            retentionIcon.setAttribute("title", "Has retention policy");
+          }
+
+          // Add to label header
+          const labelHeader = labelNode.querySelector(".flex.items-center");
+          if (labelHeader) {
+            labelHeader.appendChild(retentionIcon);
+          }
+        }
+      } else {
+        // Remove retention icon if it exists
+        if (retentionIcon) {
+          retentionIcon.remove();
+        }
+      }
+    }
+  }
+</script>

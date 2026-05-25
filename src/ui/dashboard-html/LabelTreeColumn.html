@@ -1,0 +1,48 @@
+<div class="dashboard-column" id="labelsView">
+  <div class="column-header">
+    <h3 class="text-sm font-semibold">Labels</h3>
+    <div class="flex space-x-2">
+      <button
+        id="expandAllBtn"
+        class="text-xs text-gray-600 hover:text-blue-600"
+      >
+        Expand All
+      </button>
+      <button
+        id="collapseAllBtn"
+        class="text-xs text-gray-600 hover:text-blue-600"
+      >
+        Collapse All
+      </button>
+    </div>
+  </div>
+  <div class="p-2">
+    <div class="search-box">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4 search-icon"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
+      </svg>
+      <input id="labelSearchInput" type="text" placeholder="Search labels..." />
+      <div id="clearLabelSearch" class="clear-search">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <div class="column-body" id="labelTreeContainer">
+    <!-- Labels will be loaded here dynamically -->
+    <div class="text-gray-500 text-center py-2 text-xs">Loading labels...</div>
+  </div>
+</div>

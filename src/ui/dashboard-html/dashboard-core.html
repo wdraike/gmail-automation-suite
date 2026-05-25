@@ -1,0 +1,1023 @@
+<script>
+  // Global variables
+  let allLabels = [];
+  let allCategories = {};
+  let labelCategories = {};
+  let allItems = { domains: [], emails: [] };
+  let retentionRules = {};
+
+  // Add this function to track dragged items globally
+  let draggedItem = null;
+
+  // Change this line at around line 37:
+  const DEBUG_MODE = false; // Changed from true to false
+
+  // Remove or comment out these debug helper functions:
+  function debugLog(...args) {
+    if (DEBUG_MODE) {
+      console.log(...args);
+    }
+  }
+
+  function logDragEvent(event, type, details) {
+    if (!DEBUG_MODE) return;
+
+    console.log(`Drag Event: ${type}`, event.type);
+    if (details) console.log("Details:", details);
+  }
+
+  // Setup global drag tracking
+  function setupEnhancedDragEvents() {
+    // Global variable to track dragged items
+    window.draggedItem = null;
+
+    document.addEventListener("dragstart", function (e) {
+      // Store a reference to the dragged element
+      const draggedElement = e.target;
+
+      // Store information about the dragged item
+      if (draggedElement.classList.contains("category-pill")) {
+        window.draggedItem = {
+          type: "category",
+          element: draggedElement,
+          categoryKey: draggedElement.getAttribute("data-category"),
+          sourceLabel: draggedElement.getAttribute("data-label"),
+        };
+      } else if (
+        draggedElement.classList.contains("item-domain") ||
+        draggedElement.classList.contains("item-email")
+      ) {
+        window.draggedItem = {
+          type: draggedElement.getAttribute("data-type"),
+          element: draggedElement,
+          item: draggedElement.getAttribute("data-item"),
+          category: draggedElement.getAttribute("data-category"),
+        };
+      } else if (draggedElement.classList.contains("category-tile")) {
+        window.draggedItem = {
+          type: "category-tile",
+          element: draggedElement,
+          categoryKey: draggedElement.getAttribute("data-category"),
+        };
+      }
+    });
+
+    document.addEventListener("dragend", function () {
+      // Reset the dragged item
+      window.draggedItem = null;
+
+      // Remove highlights from all drop zones
+      document.querySelectorAll(".drop-zone").forEach((zone) => {
+        zone.classList.remove("highlight");
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+  // Initialize the UI - order matters here
+  setupTopNavigation();
+  setupEventListeners();
+  setupEnhancedDragEvents();
+  setupNewFeatureEventListeners();
+  setupResizablePanels();
+  initializeSettings();
+  
+  
+  // Make sure the default view is shown - explicitly call showView
+  showView("labelsView");
+
+  // Set the default active button style
+  resetButtonStyles();
+  const defaultButton = document.getElementById("labelsBtn");
+  if (defaultButton) {
+    defaultButton.classList.remove("text-gray-700");
+    defaultButton.classList.add("bg-blue-50", "text-blue-600");
+  }
+
+  // Log initial state
+  console.log("Initial view set to labelsView");
+
+  // Load data last after UI is set up
+  loadData();
+});
+
+  // Fetch all categorized items
+  function fetchAllItems() {
+    console.log("Fetching all items...");
+
+    // Empty our arrays first
+    allItems = {
+      domains: [],
+      emails: [],
+    };
+
+    // Show loading state
+    showToast("Loading items...");
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        console.log("Items fetch success:", result);
+
+        if (result && result.success) {
+          // Process items from all categories
+          const assignments = result.assignments || {};
+
+          for (const [categoryKey, categoryData] of Object.entries(assignments)) {
+            // Handle new data structure with separate emails and domains arrays
+            if (categoryData && typeof categoryData === 'object') {
+              // Process emails
+              if (Array.isArray(categoryData.emails)) {
+                categoryData.emails.forEach((email) => {
+                  if (typeof email === "string") {
+                    allItems.emails.push({
+                      email: email,
+                      category: categoryKey,
+                    });
+                  }
+                });
+              }
+
+              // Process domains
+              if (Array.isArray(categoryData.domains)) {
+                categoryData.domains.forEach((domain) => {
+                  if (typeof domain === "string") {
+                    allItems.domains.push({
+                      domain: domain,
+                      category: categoryKey,
+                    });
+                  }
+                });
+              }
+            }
+          }
+
+          console.log(
+            "Items processed, domains:",
+            allItems.domains.length,
+            "emails:",
+            allItems.emails.length
+          );
+
+          // Render categories
+          renderCategoryTiles();
+
+          // Set up drag and drop AFTER rendering is complete
+          setTimeout(function () {
+            setupDragAndDrop();
+          }, 200);
+
+          showToast("Items loaded successfully");
+        } else {
+          showToast(
+            "Error loading items: " +
+              (result ? result.message : "Unknown error")
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        console.error("Error fetching items:", error);
+        showToast("Error: " + error);
+      })
+      .getCategoryAssignments();
+  }
+
+// Load all necessary data
+function loadData() {
+  showToast("Loading data...");
+
+  google.script.run
+    .withSuccessHandler(function (result) {
+      if (result && result.success) {
+        // Store data in global variables
+        allLabels = result.labels || [];
+        
+        // Sort labels alphabetically by name for consistent display
+        if (allLabels.length > 0) {
+          allLabels.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        }
+        
+        allCategories = result.categories || {};
+        labelCategories = result.labelCategories || {};
+        retentionRules = result.retentionRules || [];
+
+        // Debug: Log the labelCategories data
+        console.log('labelCategories received:', labelCategories);
+        console.log('labelCategories keys:', Object.keys(labelCategories));
+        if (Object.keys(labelCategories).length > 0) {
+          console.log('Sample labelCategories entries:', Object.entries(labelCategories).slice(0, 3));
+        }
+
+        // Debug: Log the actual labels received
+        console.log(`Received ${allLabels.length} labels from server:`);
+        allLabels.forEach((label, index) => {
+          if (label.name && label.name.includes('/')) {
+            const parts = label.name.split('/');
+            console.log(`Label ${index}: ${label.name} (${parts.length} levels: ${parts.join(' -> ')})`);
+          }
+        });
+        
+        // Show labels with 3+ levels specifically
+        const deepLabels = allLabels.filter(label => label.name && label.name.split('/').length >= 3);
+        console.log(`Found ${deepLabels.length} labels with 3+ levels:`, deepLabels.map(l => l.name));
+
+        // Convert retention rules to a map for easier access
+        if (Array.isArray(retentionRules)) {
+          const rulesMap = {};
+          retentionRules.forEach((rule) => {
+            if (rule.labelName) {
+              rulesMap[rule.labelName] = rule;
+            }
+          });
+          retentionRules = rulesMap;
+        }
+
+        // First render the label tree
+        renderLabelTree();
+
+        // Then fetch items - this will render categories when complete
+        fetchAllItems();
+
+        // Check view states after loading data
+        setTimeout(checkViewStates, 500);
+
+        console.log("Data loaded successfully");
+        showToast("Data loaded successfully");
+      } else {
+        console.error(
+          "Error loading data:",
+          result ? result.message : "Unknown error"
+        );
+        showToast(
+          "Error loading data: " + (result ? result.message : "Unknown error")
+        );
+      }
+    })
+    .withFailureHandler(function (error) {
+      console.error("Error in loadData:", error);
+      showToast("Error: " + error);
+    })
+    .getAllLabelsAndCategories();
+}
+
+// Set up top navigation buttons directly
+function setupTopNavigation() {
+  console.log("Setting up top navigation...");
+
+  // Labels button
+  const labelsBtn = document.getElementById("labelsBtn");
+  if (labelsBtn) {
+    labelsBtn.addEventListener("click", function () {
+      console.log("Labels button clicked");
+      showView("labelsView");
+      
+      // Update button styles
+      resetButtonStyles();
+      this.classList.remove("text-gray-700");
+      this.classList.add("bg-blue-50", "text-blue-600");
+    });
+  }
+
+  // Settings button
+  const settingsBtn = document.getElementById("settingsBtn");
+  if (settingsBtn) {
+    settingsBtn.addEventListener("click", function () {
+      console.log("Settings button clicked");
+      showView("settingsView");
+      
+      // Update button styles
+      resetButtonStyles();
+      this.classList.remove("text-gray-700");
+      this.classList.add("bg-blue-50", "text-blue-600");
+    });
+  }
+
+  // Refresh button
+  const refreshBtn = document.getElementById("refreshBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", function () {
+      console.log("Refresh button clicked");
+      loadData();
+    });
+  }
+
+  // Help button
+  const helpBtn = document.getElementById("helpBtn");
+  if (helpBtn) {
+    helpBtn.addEventListener("click", function () {
+      console.log("Help button clicked");
+      showHelpModal();
+    });
+  }
+}
+
+// Helper function to hide all views
+function hideAllViews() {
+  const views = ["labelsView", "settingsView"];
+
+  views.forEach((viewId) => {
+    const view = document.getElementById(viewId);
+    if (view) {
+      view.classList.add("hidden");
+      // Make sure display style is not overriding the hidden class
+      view.style.display = 'none';
+    }
+  });
+}
+
+// Helper function to show a specific view
+function showView(viewId) {
+  // First hide all views
+  hideAllViews();
+  
+  // Then show the requested view
+  const view = document.getElementById(viewId);
+  if (view) {
+    // Remove the hidden class
+    view.classList.remove("hidden");
+    // Explicitly set display style based on view type
+    view.style.display = viewId === 'labelsView' ? 'grid' : 'block';
+    
+    console.log(`View ${viewId} should now be visible, classList: ${view.classList.toString()}`);
+    
+    // If it's the settings view, load settings
+    if (viewId === 'settingsView') {
+      loadSettings();
+    } else if (viewId === 'labelsView') {
+      // Re-render both labels and categories when showing labelsView
+      renderLabelTree();
+      renderCategoryTiles();
+    }
+    
+    // Check view states after short delay to allow rendering
+    setTimeout(checkViewStates, 100);
+  } else {
+    console.error(`View ${viewId} not found`);
+  }
+}
+
+// Debug function to check view states
+function checkViewStates() {
+  const labelsView = document.getElementById("labelsView");
+  const settingsView = document.getElementById("settingsView");
+  
+  console.log("=== View States ===");
+  console.log("labelsView:", {
+    element: labelsView,
+    classList: labelsView?.classList.toString(),
+    display: labelsView?.style.display,
+    visible: labelsView ? !labelsView.classList.contains("hidden") && labelsView.style.display !== "none" : false,
+    childrenCount: labelsView?.children.length || 0
+  });
+  
+  console.log("settingsView:", {
+    element: settingsView,
+    classList: settingsView?.classList.toString(),
+    display: settingsView?.style.display,
+    visible: settingsView ? !settingsView.classList.contains("hidden") && settingsView.style.display !== "none" : false,
+    childrenCount: settingsView?.children.length || 0
+  });
+  
+  // Check if categories are visible
+  const categoriesContainer = document.getElementById("categoriesContainer");
+  console.log("categoriesContainer:", {
+    element: categoriesContainer,
+    childrenCount: categoriesContainer?.children.length || 0,
+    visible: categoriesContainer ? categoriesContainer.offsetParent !== null : false
+  });
+}
+
+  // Helper function to reset all button styles
+  function resetButtonStyles() {
+    const buttons = ["labelsBtn", "settingsBtn"];
+
+    buttons.forEach((buttonId) => {
+      const button = document.getElementById(buttonId);
+      if (button) {
+        button.classList.remove("bg-blue-50", "text-blue-600");
+        button.classList.add("text-gray-700");
+      }
+    });
+  }
+
+  // Add this function for the help button
+  function showHelpModal() {
+    alert(
+      "Gmail Automation Dashboard Help\n\n" +
+        "• Labels: View and manage Gmail labels and their categories\n" +
+        "• Settings: Configure automation settings\n" +
+        "• Refresh: Reload data from Gmail\n\n" +
+        "Drag and drop emails or domains between categories to reorganize them."
+    );
+  }
+
+  // Custom modal functions
+  function showDeleteConfirmModal(message, onConfirm, onCancel) {
+    const modal = document.getElementById("deleteConfirmModal");
+    const messageElement = document.getElementById("deleteConfirmMessage");
+    const confirmBtn = document.getElementById("confirmDeleteBtn");
+    
+    if (!modal || !messageElement || !confirmBtn) {
+      console.error("Delete confirmation modal elements not found");
+      // Fallback to browser confirm
+      if (confirm(message)) {
+        onConfirm();
+      } else if (onCancel) {
+        onCancel();
+      }
+      return;
+    }
+
+    // Set the message
+    messageElement.textContent = message;
+    
+    // Remove any existing event listeners
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    
+    // Add new event listeners
+    newConfirmBtn.addEventListener("click", function() {
+      modal.classList.add("hidden");
+      onConfirm();
+    });
+
+    // Handle cancel - both X button and cancel button
+    const cancelBtns = modal.querySelectorAll(".closeModal");
+    cancelBtns.forEach(btn => {
+      const newCancelBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newCancelBtn, btn);
+      newCancelBtn.addEventListener("click", function() {
+        modal.classList.add("hidden");
+        if (onCancel) onCancel();
+      });
+    });
+
+    // Show the modal
+    modal.classList.remove("hidden");
+  }
+  // Set up other event listeners
+  function setupEventListeners() {
+    // New category button
+    document
+      .getElementById("newCategoryBtn")
+      .addEventListener("click", function () {
+        showNewCategoryModal();
+      });
+
+    // Create category button in modal
+    document
+      .getElementById("createCategoryBtn")
+      .addEventListener("click", function () {
+        createNewCategory();
+      });
+
+    // Filter and search for items
+    const itemsFilterSelect = document.getElementById("itemsFilterSelect");
+    if (itemsFilterSelect) {
+      itemsFilterSelect.addEventListener("change", renderItemsList);
+    }
+
+    const itemsSearchInput = document.getElementById("itemsSearchInput");
+    if (itemsSearchInput) {
+      itemsSearchInput.addEventListener("input", function() {
+        renderItemsList();
+        
+        // Show/hide clear button
+        const clearItemsSearch = document.getElementById("clearItemsSearch");
+        if (clearItemsSearch) {
+          if (this.value) {
+            clearItemsSearch.classList.remove("hidden");
+          } else {
+            clearItemsSearch.classList.add("hidden");
+          }
+        }
+      });
+      
+      // Setup clear button
+      const clearItemsSearch = document.getElementById("clearItemsSearch");
+      if (clearItemsSearch) {
+        clearItemsSearch.addEventListener("click", function() {
+          itemsSearchInput.value = "";
+          renderItemsList();
+          this.classList.add("hidden");
+        });
+        
+        // Always show the clear button (even if empty)
+        clearItemsSearch.classList.remove("hidden");
+      }
+    }
+
+    // Filter and search for labels
+    const labelSearchInput = document.getElementById("labelSearchInput");
+    if (labelSearchInput) {
+      labelSearchInput.addEventListener("input", function () {
+        filterLabels(this.value);
+        
+        // Show/hide clear button
+        const clearLabelSearch = document.getElementById("clearLabelSearch");
+        if (clearLabelSearch) {
+          if (this.value) {
+            clearLabelSearch.classList.remove("hidden");
+          } else {
+            clearLabelSearch.classList.add("hidden");
+          }
+        }
+      });
+      
+      // Setup clear button
+      const clearLabelSearch = document.getElementById("clearLabelSearch");
+      if (clearLabelSearch) {
+        clearLabelSearch.addEventListener("click", function() {
+          labelSearchInput.value = "";
+          filterLabels("");
+          this.classList.add("hidden");
+        });
+        
+        // Always show the clear button (even if empty)
+        clearLabelSearch.classList.remove("hidden");
+      }
+    }
+
+    // Filter and search for categories
+    const categorySearchInput = document.getElementById("categorySearchInput");
+    if (categorySearchInput) {
+      categorySearchInput.addEventListener("input", function () {
+        filterCategories(this.value);
+        
+        // Show/hide clear button
+        const clearCategorySearch = document.getElementById("clearCategorySearch");
+        if (clearCategorySearch) {
+          if (this.value) {
+            clearCategorySearch.classList.remove("hidden");
+          } else {
+            clearCategorySearch.classList.add("hidden");
+          }
+        }
+      });
+      
+      // Setup clear button
+      const clearCategorySearch = document.getElementById("clearCategorySearch");
+      if (clearCategorySearch) {
+        clearCategorySearch.addEventListener("click", function() {
+          categorySearchInput.value = "";
+          filterCategories("");
+          this.classList.add("hidden");
+        });
+        
+        // Always show the clear button (even if empty)
+        clearCategorySearch.classList.remove("hidden");
+      }
+    }
+
+    // Retention policy action change
+    const retentionAction = document.getElementById("retentionAction");
+    if (retentionAction) {
+      retentionAction.addEventListener("change", function () {
+        const targetLabelContainer = document.getElementById(
+          "targetLabelContainer"
+        );
+        if (this.value === "archive") {
+          targetLabelContainer.classList.remove("hidden");
+        } else {
+          targetLabelContainer.classList.add("hidden");
+        }
+      });
+    }
+
+    // Save retention policy button
+    const saveRetentionBtn = document.getElementById("saveRetentionBtn");
+    if (saveRetentionBtn) {
+      saveRetentionBtn.addEventListener("click", saveRetentionPolicy);
+    }
+
+    // Remove retention policy button
+    const removeRetentionBtn = document.getElementById("removeRetentionBtn");
+    if (removeRetentionBtn) {
+      removeRetentionBtn.addEventListener("click", removeRetentionPolicy);
+    }
+
+    // Close modal buttons
+    document.querySelectorAll(".closeModal").forEach((button) => {
+      button.addEventListener("click", function () {
+        // Find the parent modal
+        let modal = this.closest('[id$="Modal"]');
+        if (modal) {
+          modal.classList.add("hidden");
+        }
+      });
+    });
+
+    // Set up auto-scrolling for drag and drop
+    setupAutoScroll();
+  }
+
+  // Function to show the new category modal with populated labels
+  function showNewCategoryModal() {
+    const modal = document.getElementById("newCategoryModal");
+    const labelSelect = document.getElementById("categoryLabel");
+
+    // Clear previous values
+    document.getElementById("categoryKey").value = "";
+    document.getElementById("categoryDisplayName").value = "";
+
+    // Clear previous options and add placeholder
+    labelSelect.innerHTML = '<option value="">-- Select a Label --</option>';
+
+    // Labels are already sorted alphabetically in the allLabels global variable
+    // Add all labels (they're already in alphabetical order)
+    allLabels.forEach((label) => {
+      const option = document.createElement("option");
+      option.value = label.name;
+      option.textContent = label.name;
+      labelSelect.appendChild(option);
+    });
+
+    // Default to "Other" if it exists
+    const otherOption = Array.from(labelSelect.options).find(
+      (option) => option.value === "Other" || option.value === "other"
+    );
+    if (otherOption) {
+      otherOption.selected = true;
+    }
+
+    // Show the modal
+    modal.classList.remove("hidden");
+  }
+
+  // Function to create a new category
+  function createNewCategory() {
+    const categoryKey = document.getElementById("categoryKey").value.trim();
+    const displayName = document
+      .getElementById("categoryDisplayName")
+      .value.trim();
+    const label = document.getElementById("categoryLabel").value;
+
+    // Validation
+    if (!categoryKey) {
+      showToast("Category key is required");
+      return;
+    }
+
+    if (!displayName) {
+      showToast("Display name is required");
+      return;
+    }
+
+    if (!label) {
+      showToast("You must select a label");
+      return;
+    }
+
+    // Show loading state
+    showToast("Creating category...");
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Close modal
+          document.getElementById("newCategoryModal").classList.add("hidden");
+
+          // Update local data - add new category
+          if (typeof allCategories[categoryKey] === "undefined") {
+            allCategories[categoryKey] = displayName;
+          }
+
+          // Update labelCategories
+          if (!labelCategories[label]) {
+            labelCategories[label] = [];
+          }
+          if (!labelCategories[label].includes(categoryKey)) {
+            labelCategories[label].push(categoryKey);
+          }
+
+          // Refresh UI
+          renderCategoryTiles();
+          setupTooltips();
+          renderLabelTree();
+
+          showToast(`Category "${displayName}" created successfully`);
+        } else {
+          showToast(
+            `Error: ${result ? result.message : "Failed to create category"}`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .addCategory(categoryKey, displayName, label);
+  }
+
+  // Set up event listeners for additional features
+  function setupNewFeatureEventListeners() {
+    // Add button for adding new item
+    const confirmAddItemBtn = document.getElementById("confirmAddItemBtn");
+    if (confirmAddItemBtn) {
+      confirmAddItemBtn.addEventListener("click", function () {
+        addItemToCategory();
+      });
+    }
+    
+    // Note: Search input event listeners are now handled in setupEventListeners
+  }
+
+  // Function to reinitialize the dashboard after layout changes
+  function reinitializeDashboard() {
+    // Update layout first
+    document
+      .querySelector(".dashboard-container")
+      .classList.remove("grid-cols-3");
+    document.querySelector(".dashboard-container").classList.add("grid-cols-2");
+
+    // Re-render all components
+    loadData();
+
+    // Set up event listeners for the new features
+    setupNewFeatureEventListeners();
+
+    showToast("Dashboard layout updated");
+  }
+
+  // Set up all drag and drop functionality after DOM has been rendered
+  function setupDragAndDrop() {
+    console.log("Setting up drag and drop functionality...");
+
+    // First set up the drop zones (clones tiles, so must run before item/tile listeners)
+    setupDropZones();
+
+    // Then set up the item dragging on the fresh tiles
+    setupDraggableItems();
+
+    // Then set up category tile drag if needed
+    setupCategoryTileDragDrop();
+
+    console.log("Drag and drop setup complete");
+  }
+  // Setup draggable items
+  function setupDraggableItems() {
+    // Find all draggable items
+    const draggableItems = document.querySelectorAll(
+      ".item-domain, .item-email"
+    );
+    console.log(`Found ${draggableItems.length} draggable items`);
+
+    draggableItems.forEach(function (item) {
+      // Get item details
+      const itemType = item.getAttribute("data-type");
+      const itemValue = item.getAttribute("data-item");
+      const itemCategory = item.getAttribute("data-category");
+
+      // Make sure it's draggable
+      item.setAttribute("draggable", "true");
+
+      // Remove existing event listeners
+      const newItem = item.cloneNode(true);
+      if (item.parentNode) {
+        item.parentNode.replaceChild(newItem, item);
+      }
+
+      // Set up event handlers
+      newItem.addEventListener("dragstart", function (e) {
+        // Stop propagation to prevent parent from also starting drag
+        e.stopPropagation();
+
+        // Create the data object
+        const data = {
+          type: itemType,
+          item: itemValue,
+          category: itemCategory,
+          source: "item",
+        };
+
+        // Store globally
+        window.draggedItem = data;
+
+        // Set the data transfer
+        e.dataTransfer.setData("text/plain", JSON.stringify(data));
+        e.dataTransfer.effectAllowed = "move";
+
+        // Log
+        console.log("DRAGSTART ITEM:", data);
+
+        // Visual feedback
+        this.classList.add("opacity-50");
+      });
+
+      newItem.addEventListener("dragend", function (e) {
+        e.stopPropagation();
+        this.classList.remove("opacity-50");
+        window.draggedItem = null;
+      });
+
+      // Make sure the delete button works
+      const deleteBtn = newItem.querySelector("button");
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          deleteItem(itemValue, itemType);
+        });
+      }
+    });
+  }
+
+  // Setup category tiles as drop zones - simplest approach
+  function setupDropZones() {
+    // Make the entire category tiles drop zones
+    const categoryTiles = document.querySelectorAll(".category-tile");
+    console.log(
+      `Setting up ${categoryTiles.length} category tiles as drop zones`
+    );
+
+    categoryTiles.forEach(function (tile) {
+      const targetCategory = tile.getAttribute("data-category");
+
+      // Remove any existing listeners to prevent duplicates
+      const newTile = tile.cloneNode(true); // deep clone to preserve structure and listeners
+
+      // Replace in DOM
+      if (tile.parentNode) {
+        tile.parentNode.replaceChild(newTile, tile);
+      }
+
+      // Basic drop handlers
+      newTile.addEventListener("dragover", function (e) {
+        // This is CRITICAL for drop to work
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Add visual feedback
+        this.classList.add("drop-highlight");
+      });
+
+      newTile.addEventListener("dragleave", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove("drop-highlight");
+      });
+
+      newTile.addEventListener("drop", function (e) {
+        // This is CRITICAL for drop to work
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Remove highlighting
+        this.classList.remove("drop-highlight");
+
+        console.log(`DROP ON CATEGORY TILE: ${targetCategory}`);
+
+        try {
+          // Get the data from the dragged element
+          const dataString = e.dataTransfer.getData("text/plain");
+          console.log("DROP DATA RECEIVED:", dataString);
+
+          if (!dataString) {
+            console.log("No data in drop event");
+            return;
+          }
+
+          // Parse the data
+          const data = JSON.parse(dataString);
+          console.log("PARSED DROP DATA:", data);
+
+          // Make sure this is dragging an item, not a category
+          if (data.source === "item") {
+            const itemType = data.type;
+            const itemValue = data.item;
+            const sourceCategory = data.category;
+
+            // Skip if same category
+            if (sourceCategory === targetCategory) {
+              console.log("Item already in this category");
+              return;
+            }
+
+            // Show we're moving the item
+            console.log(
+              `Moving ${itemType} '${itemValue}' from '${sourceCategory}' to '${targetCategory}'`
+            );
+            showToast(`Moving ${itemType} to ${targetCategory}...`);
+
+            // Call server function to move the item
+            google.script.run
+              .withSuccessHandler(function (result) {
+                console.log("SERVER RESULT:", result);
+
+                if (result && result.success) {
+                  // Update local data
+                  if (itemType === "domain") {
+                    // Find the domain in our data and update its category
+                    for (let i = 0; i < allItems.domains.length; i++) {
+                      if (allItems.domains[i].domain === itemValue) {
+                        console.log(
+                          `Updating domain ${itemValue} category from ${allItems.domains[i].category} to ${targetCategory}`
+                        );
+                        allItems.domains[i].category = targetCategory;
+                        break;
+                      }
+                    }
+                  } else if (itemType === "email") {
+                    // Find the email in our data and update its category
+                    for (let i = 0; i < allItems.emails.length; i++) {
+                      if (allItems.emails[i].email === itemValue) {
+                        console.log(
+                          `Updating email ${itemValue} category from ${allItems.emails[i].category} to ${targetCategory}`
+                        );
+                        allItems.emails[i].category = targetCategory;
+                        break;
+                      }
+                    }
+                  }
+
+                  // Re-render everything to reflect the changes
+                  renderCategoryTiles();
+
+                  // Setup drag and drop again
+                  setTimeout(setupDragAndDrop, 200);
+
+                  showToast(`${itemType} moved successfully`);
+                } else {
+                  showToast(
+                    `Error: ${result ? result.message : "Failed to move item"}`
+                  );
+                }
+              })
+              .withFailureHandler(function (error) {
+                console.error("SERVER ERROR:", error);
+                showToast(`Error: ${error}`);
+              })
+              .moveItemToCategory(itemValue, targetCategory, itemType);
+          } else {
+            console.log("Not an item drop, ignoring");
+          }
+        } catch (error) {
+          console.error("Error processing drop:", error);
+          showToast("Error: " + error);
+        }
+      });
+    });
+  }
+  /* 
+ * Clear input functionality is now handled directly in the setupEventListeners function
+ * We're now directly attaching listeners to the clear buttons in the same function
+ */
+
+  /* This function allows users to resize the label panel */
+
+  function setupResizablePanels() {
+    const labelsColumn = document.querySelector(
+      "#labelsView .dashboard-column:first-child"
+    );
+    if (!labelsColumn) return;
+
+    // Make the column resizable
+    labelsColumn.classList.add("resizable");
+
+    // Add resizer element
+    const resizer = document.createElement("div");
+    resizer.className = "resizer";
+    labelsColumn.appendChild(resizer);
+
+    // Set initial width
+    labelsColumn.style.width = "250px"; // Or any default width you prefer
+    labelsColumn.style.minWidth = "150px"; // Set minimum width
+
+    // Update grid to use auto layout instead of fixed fractions
+    const container = document.querySelector(".dashboard-container");
+    if (container) {
+      container.style.gridTemplateColumns = "auto 1fr";
+    }
+
+    let isResizing = false;
+    let lastX = 0;
+
+    resizer.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      lastX = e.clientX;
+      resizer.classList.add("resizing");
+      document.body.style.cursor = "col-resize";
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isResizing) return;
+
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+
+      const newWidth = labelsColumn.offsetWidth + dx;
+      if (newWidth > 150) {
+        // Respect minimum width
+        labelsColumn.style.width = newWidth + "px";
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isResizing) {
+        isResizing = false;
+        resizer.classList.remove("resizing");
+        document.body.style.cursor = "";
+      }
+    });
+  }
+</script>

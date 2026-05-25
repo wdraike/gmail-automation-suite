@@ -1,0 +1,568 @@
+<style>
+  /* Overall layout */
+  .dashboard-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+  }
+
+  .dashboard-column {
+    display: flex;
+    flex-direction: column;
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .column-header {
+    padding: 3px 8px;
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+    font-size: 0.8rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 28px;
+  }
+
+  .column-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+    scroll-behavior: smooth;
+    min-height: 0; /* This ensures proper scrolling in flexbox */
+  }
+
+  /* Tree view styles */
+  .tree-view {
+    padding-left: 8px;
+  }
+
+  .tree-node {
+    position: relative;
+    margin: 1px 0;
+  }
+
+  .tree-node::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 8px;
+    width: 6px;
+    height: 1px;
+    background-color: #ccc;
+  }
+
+  .tree-parent {
+    position: relative;
+  }
+
+  .tree-parent::after {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 8px;
+    bottom: 0;
+    width: 1px;
+    background-color: #ccc;
+  }
+
+  /* Category Tile Styles */
+  .category-tile {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background-color: white;
+    cursor: grab;
+    transition: all 0.2s;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .category-tile:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-color: #d1d5db;
+  }
+
+  .category-tile.is-dragging {
+    opacity: 0.7;
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .category-tile.filtered {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+    opacity: 0.8;
+  }
+  
+  .category-tile.filtered .category-name {
+    color: #64748b;
+  }
+  
+  .filter-indicator {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: normal;
+    margin-left: 8px;
+    background-color: #e5e7eb;
+    padding: 2px 6px;
+    border-radius: 10px;
+    display: none;
+  }
+  
+  .category-tile.filtered .filter-indicator {
+    display: inline !important;
+  }
+
+  /* Email/Domain items styles - IMPROVED */
+  .item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Enhanced item display with smaller font and better truncation */
+  .item-domain,
+  .item-email {
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 100%;
+    margin-bottom: 4px;
+    cursor: grab;
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .item-domain {
+    background-color: #e0f2fe;
+    color: #0369a1;
+  }
+
+  .item-email {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+
+  .item-domain span,
+  .item-email span {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
+    max-width: calc(100% - 30px);
+  }
+
+  .item-domain button,
+  .item-email button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.5);
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .item-domain button:hover,
+  .item-email button:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+  }
+
+  /* Add tooltip on hover */
+  .item-domain span[class*="truncate"]:hover::after,
+  .item-email span[class*="truncate"]:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 10;
+    background-color: #333;
+    color: white;
+    padding: 5px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-size: 11px;
+    max-width: 300px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Category pill styles */
+  .category-pill {
+    display: inline-flex;
+    align-items: center;
+    background-color: #e0f2fe;
+    color: #0369a1;
+    padding: 2px 6px;
+    border-radius: 9999px;
+    font-size: 11px;
+    margin-right: 3px;
+    margin-bottom: 3px;
+    cursor: grab;
+  }
+
+  /* Dropzone styling */
+  .drop-zone.highlight {
+    border-color: #3b82f6;
+    background-color: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+  }
+
+  .drop-zone.has-categories {
+    border-color: #10b981;
+    background-color: rgba(16, 185, 129, 0.05);
+    border-style: solid;
+    justify-content: flex-start;
+  }
+
+  .drop-zone.empty-zone {
+    border-color: #e5e7eb;
+    background-color: #f9fafb;
+    justify-content: center;
+  }
+
+  .drop-zone.empty-zone:hover {
+    border-color: #d1d5db;
+    background-color: #f3f4f6;
+  }
+
+  /* Expanded/collapsed folder state */
+  .expand-icon {
+    transition: transform 0.2s;
+  }
+
+  .expanded .expand-icon {
+    transform: rotate(90deg);
+  }
+
+  .children-container {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .children-container.hidden {
+    max-height: 0;
+    display: none;
+  }
+
+  /* Search and Filter UI */
+  .search-box {
+    position: relative;
+    margin-bottom: 8px;
+    width: 100%; /* Fill available space */
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 32px;
+    padding-right: 32px; /* Make room for clear button */
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .search-box svg.search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: #9ca3af;
+  }
+
+  .search-box .clear-search {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #9ca3af;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.75;
+    background-color: #f3f4f6;
+    border-radius: 50%;
+    transition: all 0.2s;
+    z-index: 10; /* Ensure it's clickable */
+  }
+
+  .search-box .clear-search:hover {
+    opacity: 1;
+    background-color: #e5e7eb;
+    color: #4b5563;
+  }
+
+  #categorySearchInput::placeholder,
+  #labelSearchInput::placeholder,
+  #itemsSearchInput::placeholder {
+    color: #9ca3af;
+  }
+
+  /* Enhanced tooltips for retention icons */
+  .retention-icon {
+    position: relative;
+    cursor: help;
+  }
+  
+  .retention-icon:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #1f2937;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
+    margin-bottom: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  .retention-icon:hover::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1f2937;
+    margin-bottom: -4px;
+  }
+
+  /* Toast notifications */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 16px;
+    background-color: #1f2937;
+    color: white;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .toast.show {
+    opacity: 1;
+  }
+
+  /* Loading state */
+  .loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-left-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Dropdown toggle styles */
+  .toggle-icon {
+    transition: transform 0.2s ease;
+  }
+
+  /* Category items section - IMPROVED */
+  .category-items {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+    border-top: 1px solid #f3f4f6;
+    border-bottom: 1px solid #f3f4f6;
+    padding: 8px 0;
+    margin: 8px 0;
+    scrollbar-width: thin;
+  }
+
+  /* Category items section - empty state */
+  .category-items:empty {
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  /* Scrollbar styling for modern browsers */
+  .category-items::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .category-items::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+
+  .category-items::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+  }
+
+  .category-items::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+  }
+
+  /* Responsive grid for category tiles */
+  .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    width: 100%;
+    align-content: start; /* Ensures grid items start from top */
+  }
+
+  /* Improved truncation with better balance */
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px; /* More space for text */
+    display: inline-block;
+  }
+
+  /* Fix for duplicate entries */
+  .item-domain[data-item],
+  .item-email[data-item] {
+    /* This ensures we can uniquely identify items */
+    transition: background-color 0.2s;
+  }
+
+  /* Ensure button doesn't shrink */
+  .flex-shrink-0 {
+    flex-shrink: 0;
+  }
+
+  /* Improved drag and drop styling */
+  [draggable="true"] {
+    cursor: grab;
+  }
+
+  [draggable="true"]:active {
+    cursor: grabbing !important;
+  }
+
+  .is-dragging {
+    cursor: grabbing !important;
+  }
+
+  .opacity-50 {
+    opacity: 0.5;
+  }
+
+  /* Make search results more visible */
+  .highlight-search {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-radius: 2px;
+  }
+
+  /* Enhanced styling for the email/envelope icon */
+  .category-tile button svg {
+    transition: color 0.2s;
+  }
+
+  /* Section heading styles */
+  .category-items h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Highlight style for category tile drops */
+  .drop-highlight {
+    background-color: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8);
+  }
+
+  /* In DashboardStyles.html */
+  /* Add this to your CSS */
+  .drop-zone {
+    min-height: 25px;
+    border: 2px dashed #e5e7eb;
+    border-radius: 6px;
+    margin: 6px 0;
+    transition: all 0.2s;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 4px;
+    gap: 4px;
+    justify-content: flex-start; /* Change from center to flex-start to left-align */
+    align-items: center;
+  }
+
+  /* Only center the placeholder text */
+  .drop-zone .text-gray-400 {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Add this to DashboardStyles.html */
+
+  /* Resizable panel */
+  .resizable {
+    position: relative;
+  }
+
+  .resizer {
+    width: 10px;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.1);
+    position: absolute;
+    right: 0;
+    top: 0;
+    cursor: col-resize;
+    z-index: 10;
+  }
+
+  .resizer:hover,
+  .resizer.resizing {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  /* Delete button visibility */
+  .delete-btn {
+    opacity: 0.7;
+    color: #ef4444;
+    background-color: rgba(255, 255, 255, 0.6);
+    padding: 3px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .delete-btn:hover {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.9);
+  }
+
+  .delete-btn.always-visible {
+    opacity: 1;
+  }
+</style>

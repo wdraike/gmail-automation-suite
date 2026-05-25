@@ -1,0 +1,384 @@
+<script>
+  function showRetentionPolicyModal(labelName) {
+    console.log("Opening retention policy modal for label:", labelName);
+
+    const modal = document.getElementById("retentionPolicyModal");
+    if (!modal) {
+      console.error("Retention policy modal not found!");
+      return;
+    }
+
+    const labelNameField = document.getElementById("retentionLabelName");
+    const retentionDays = document.getElementById("retentionDays");
+    const retentionAction = document.getElementById("retentionAction");
+    const targetLabelSelect = document.getElementById("targetLabelSelect");
+    const removeBtn = document.getElementById("removeRetentionBtn");
+    const runBtn = document.getElementById("runRetentionBtn");
+
+    // Clear previous values
+    if (labelNameField) labelNameField.value = labelName;
+    if (retentionDays) retentionDays.value = "30";
+    if (retentionAction) retentionAction.value = "delete";
+
+    // Show the modal right away
+    modal.classList.remove("hidden");
+
+    // Populate target label dropdown
+    populateTargetLabelDropdown(targetLabelSelect, labelName);
+
+    // Check if this label already has a retention policy
+    google.script.run
+      .withSuccessHandler(function (rule) {
+        console.log("Received rule:", rule);
+
+        if (rule) {
+          // Populate form with existing rule
+          if (retentionDays) retentionDays.value = rule.retentionDays;
+          if (retentionAction) retentionAction.value = rule.action || "delete";
+
+          const targetLabelContainer = document.getElementById(
+            "targetLabelContainer"
+          );
+          if (targetLabelContainer) {
+            if (rule.action === "archive" && rule.targetLabel) {
+              targetLabelContainer.classList.remove("hidden");
+              // Select the target label if it exists in dropdown
+              if (targetLabelSelect) {
+                const options = targetLabelSelect.options;
+                for (let i = 0; i < options.length; i++) {
+                  if (options[i].value === rule.targetLabel) {
+                    targetLabelSelect.selectedIndex = i;
+                    break;
+                  }
+                }
+              }
+            } else {
+              targetLabelContainer.classList.add("hidden");
+            }
+          }
+
+          // Show remove button and enable run button
+          if (removeBtn) removeBtn.classList.remove("hidden");
+          if (runBtn) runBtn.disabled = false;
+        } else {
+          // New rule
+          const targetLabelContainer = document.getElementById(
+            "targetLabelContainer"
+          );
+          if (targetLabelContainer) {
+            targetLabelContainer.classList.add("hidden");
+          }
+
+          // Hide remove button and disable run button
+          if (removeBtn) removeBtn.classList.add("hidden");
+          if (runBtn) runBtn.disabled = true;
+        }
+      })
+      .withFailureHandler(function (error) {
+        console.error("Error loading retention policy:", error);
+        showToast("Error loading retention policy: " + error);
+      })
+      .getRetentionRuleByLabel(labelName);
+
+    // Remove any existing event listeners by cloning and replacing elements
+    const saveBtn = document.getElementById("saveRetentionBtn");
+    const newSaveBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+
+    const removeButton = document.getElementById("removeRetentionBtn");
+    const newRemoveBtn = removeButton.cloneNode(true);
+    removeButton.parentNode.replaceChild(newRemoveBtn, removeButton);
+
+    const runButton = document.getElementById("runRetentionBtn");
+    const newRunBtn = runButton.cloneNode(true);
+    runButton.parentNode.replaceChild(newRunBtn, runButton);
+
+    const runAllButton = document.getElementById("runAllRetentionBtn");
+    const newRunAllBtn = runAllButton.cloneNode(true);
+    runAllButton.parentNode.replaceChild(newRunAllBtn, runAllButton);
+
+    const scheduleButton = document.getElementById("scheduleRetentionBtn");
+    const newScheduleBtn = scheduleButton.cloneNode(true);
+    scheduleButton.parentNode.replaceChild(newScheduleBtn, scheduleButton);
+
+    const actionSelect = document.getElementById("retentionAction");
+    const newActionSelect = actionSelect.cloneNode(true);
+    actionSelect.parentNode.replaceChild(newActionSelect, actionSelect);
+
+    // Set up event listeners for all buttons
+    newSaveBtn.addEventListener("click", saveRetentionPolicy);
+    newRemoveBtn.addEventListener("click", removeRetentionPolicy);
+    newRunBtn.addEventListener("click", runSingleRetentionRule);
+    newRunAllBtn.addEventListener("click", runAllRetentionRules);
+    newScheduleBtn.addEventListener("click", setupRetentionSchedule);
+
+    // Set up action change handler
+    newActionSelect.addEventListener("change", function () {
+      const targetLabelContainer = document.getElementById(
+        "targetLabelContainer"
+      );
+      if (this.value === "archive") {
+        targetLabelContainer.classList.remove("hidden");
+      } else {
+        targetLabelContainer.classList.add("hidden");
+      }
+    });
+  }
+
+  function populateTargetLabelDropdown(dropdown, currentLabel) {
+    // Clear existing options
+    dropdown.innerHTML = "";
+
+    // Add default option
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- Select a target label --";
+    dropdown.appendChild(defaultOption);
+
+    // Labels are already sorted alphabetically in the allLabels global variable
+    // Add all labels except the current one (they're already in alphabetical order)
+    allLabels.forEach((label) => {
+      if (label.name !== currentLabel) {
+        const option = document.createElement("option");
+        option.value = label.name;
+        option.textContent = label.name;
+        dropdown.appendChild(option);
+      }
+    });
+  }
+
+  function saveRetentionPolicy() {
+    const labelName = document.getElementById("retentionLabelName").value;
+    const retentionDays = parseInt(
+      document.getElementById("retentionDays").value
+    );
+    const action = document.getElementById("retentionAction").value;
+    let targetLabel = "";
+
+    if (action === "archive") {
+      targetLabel = document.getElementById("targetLabelSelect").value;
+    }
+
+    // Validate inputs
+    if (!labelName) {
+      showToast("Label name is required");
+      return;
+    }
+
+    if (isNaN(retentionDays) || retentionDays <= 0) {
+      showToast("Retention days must be a positive number");
+      return;
+    }
+
+    if (action === "archive" && !targetLabel) {
+      showToast("Target label is required for archive action");
+      return;
+    }
+
+    // Show loading state
+    showToast("Saving retention policy...");
+
+    // Call server function to save
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Close modal
+          document
+            .getElementById("retentionPolicyModal")
+            .classList.add("hidden");
+
+          // Update local data
+          if (!retentionRules) retentionRules = {};
+          retentionRules[labelName] = {
+            labelName: labelName,
+            retentionDays: retentionDays,
+            action: action,
+            targetLabel: targetLabel,
+            id: result.rule ? result.rule.id : null,
+          };
+
+          // Update UI
+          updateLabelWithRetention(labelName, true);
+
+          showToast("Retention policy saved successfully");
+        } else {
+          showToast(
+            "Error: " +
+              (result ? result.message : "Failed to save retention policy")
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast("Error: " + error);
+      })
+      .updateRetentionRule(labelName, retentionDays, action, targetLabel);
+  }
+
+  function removeRetentionPolicy() {
+    const labelName = document.getElementById("retentionLabelName").value;
+
+    showDeleteConfirmModal(`Remove retention policy from label "${labelName}"?`, () => {
+
+    // Show loading state
+    showToast("Removing retention policy...");
+
+    // Call server function to remove
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Close modal
+          document
+            .getElementById("retentionPolicyModal")
+            .classList.add("hidden");
+
+          // Update local data
+          if (retentionRules && retentionRules[labelName]) {
+            delete retentionRules[labelName];
+          }
+
+          // Update UI
+          updateLabelWithRetention(labelName, false);
+
+          showToast("Retention policy removed successfully");
+        } else {
+          showToast(
+            "Error: " +
+              (result ? result.message : "Failed to remove retention policy")
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast("Error: " + error);
+      })
+      .deleteRetentionRuleByLabel(labelName);
+    });
+  }
+
+  // Function to run a single retention rule
+  function runSingleRetentionRule() {
+    const labelName = document.getElementById("retentionLabelName").value;
+
+    if (!labelName) {
+      showToast("No retention rule selected");
+      return;
+    }
+
+    // Find the rule for this label
+    const rule = retentionRules[labelName];
+    if (!rule) {
+      showToast("No retention rule found for this label");
+      return;
+    }
+
+    // Show confirmation dialog
+    if (
+      !confirm(
+        `Are you sure you want to run the retention rule for "${labelName}"? This will process emails older than ${rule.retentionDays} days.`
+      )
+    ) {
+      return;
+    }
+
+    // Show loading state
+    showToast(`Running retention rule for "${labelName}"...`);
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Show success message
+          showToast(
+            result.message || `Processed ${result.affectedCount || 0} emails`
+          );
+        } else {
+          showToast(
+            `Error: ${result ? result.message : "Failed to run retention rule"}`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .runRetentionRuleByLabel(labelName);
+  }
+
+  // Function to run all retention rules
+  function runAllRetentionRules() {
+    // Show confirmation dialog
+    if (
+      !confirm(
+        "Are you sure you want to run all retention rules? This will process emails for all rules."
+      )
+    ) {
+      return;
+    }
+
+    // Show loading state
+    showToast("Running all retention rules...");
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Show success message
+          showToast(
+            result.message || `Processed ${result.totalAffected || 0} emails`
+          );
+        } else {
+          showToast(
+            `Error: ${
+              result ? result.message : "Failed to run retention rules"
+            }`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .runAllRetentionRulesFromUI();
+  }
+
+  // Add this function to the dashboard-retention.html file
+
+  // Function to set up automatic scheduling of retention rules
+  function setupRetentionSchedule() {
+    const frequency = document.getElementById("scheduleFrequency").value;
+    const hour = parseInt(document.getElementById("scheduleHour").value);
+
+    // Validate inputs
+    if (!frequency || isNaN(hour) || hour < 0 || hour > 23) {
+      showToast("Invalid scheduling parameters");
+      return;
+    }
+
+    // Show confirmation dialog
+    if (
+      !confirm(
+        `Are you sure you want to schedule retention rules to run ${frequency} at ${hour}:00? This will overwrite any existing schedule.`
+      )
+    ) {
+      return;
+    }
+
+    // Show loading state
+    showToast("Setting up retention schedule...");
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          showToast(
+            `Retention schedule set up to run ${frequency} at ${hour}:00`
+          );
+        } else {
+          showToast(
+            `Error: ${result ? result.message : "Failed to set up schedule"}`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .setupRetentionTrigger(frequency, hour);
+  }
+</script>

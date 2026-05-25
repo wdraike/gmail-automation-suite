@@ -1,0 +1,19 @@
+<script>
+  // Setup item drag and drop - now handled in dashboard-categories.html
+  
+  // Utility function to format items for display
+  function formatItemForDisplay(value, type) {
+    if (type === "email") {
+      // For emails, you might want to truncate or style differently
+      return value.length > 30 ? value.substring(0, 27) + "..." : value;
+    } else {
+      // For domains, just return the value
+      return value;
+    }
+  }
+
+  // Helper function for generating unique IDs for items
+  function generateItemId(value, type) {
+    return `${type}_${value.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  }
+</script>

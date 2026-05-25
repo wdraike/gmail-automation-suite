@@ -1,0 +1,944 @@
+<script>
+  // Escape helper for safe HTML/JS-in-HTML insertion
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, '\\\'')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderCategoryTiles() {
+    const container = document.getElementById("categoriesContainer");
+    if (!container) return;
+
+    console.log(
+      "renderCategoryTiles: Starting. Initial allItems:",
+      JSON.parse(JSON.stringify(allItems))
+    );
+    console.log(
+      "renderCategoryTiles: Initial allCategories:",
+      JSON.parse(JSON.stringify(allCategories))
+    );
+    if (allCategories && typeof allCategories === "object") {
+      console.log(
+        "renderCategoryTiles: Keys of Initial allCategories:",
+        Object.keys(allCategories)
+      );
+    }
+
+    // Clear previous content
+    container.innerHTML = "";
+
+    // Check if we have valid categories
+    if (!allCategories || Object.keys(allCategories).length === 0) {
+      container.innerHTML =
+        '<div class="text-gray-500 text-center py-4">No categories found. Create a category first.</div>';
+      return;
+    }
+
+    // Create responsive grid container for tiles
+    const gridContainer = document.createElement("div");
+    gridContainer.className = "categories-grid"; // Use our new grid class
+    container.appendChild(gridContainer);
+
+    // Convert categories to array and sort alphabetically
+    const categoriesArray = [];
+    for (const [key, value] of Object.entries(allCategories)) {
+      let displayName = key;
+      if (typeof value === "string") {
+        displayName = value;
+      } else if (value && value.displayName) {
+        displayName = value.displayName;
+      }
+
+      categoriesArray.push({ key, displayName });
+    }
+
+    categoriesArray.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    // Create a tile for each category
+    categoriesArray.forEach((category) => {
+      console.log(
+        `renderCategoryTiles: Processing category - Key: '${category.key}', DisplayName: '${category.displayName}'`
+      );
+      // Check if this category has a valid label assignment
+      // Since allCategories only contains display names, we need to check if the category
+      // is assigned to any label by looking in labelCategories
+      let hasValidLabel = false;
+      
+      // Check if this category appears in any label's category list
+      for (const [label, categories] of Object.entries(labelCategories)) {
+        if (categories && categories.includes(category.key)) {
+          hasValidLabel = true;
+          break;
+        }
+      }
+
+      // Get items for this category
+      const categoryDomains = [];
+      const categoryEmails = [];
+
+      // Filter domains for this category, avoiding duplicates
+      const seenDomains = new Set();
+      for (let i = 0; i < allItems.domains.length; i++) {
+        const domainItem = allItems.domains[i];
+        // Detailed log for a specific item/category you are debugging:
+        // if (category.key === 'EXPECTED_CATEGORY_KEY' && domainItem.domain === 'EXPECTED_DOMAIN_NAME') {
+        //   console.log(`Debug Domain Match: Item Domain='${domainItem.domain}', Item Category='${domainItem.category}' (type: ${typeof domainItem.category}), Tile Category Key='${category.key}' (type: ${typeof category.key}), Match? ${domainItem.category === category.key}`);
+        // }
+        if (
+          domainItem.category === category.key &&
+          !seenDomains.has(domainItem.domain)
+        ) {
+          categoryDomains.push(domainItem.domain);
+          seenDomains.add(domainItem.domain);
+        } else if (
+          domainItem.category === category.key &&
+          seenDomains.has(domainItem.domain)
+        ) {
+          // console.log(`renderCategoryTiles: Domain '${domainItem.domain}' for category '${category.key}' is a duplicate, not adding again.`);
+        } else if (domainItem.category !== category.key) {
+          // Optional: Log if an item's category doesn't match the current tile's category key, can be verbose
+          // console.log(`renderCategoryTiles: Domain '${domainItem.domain}' category '${domainItem.category}' does not match current tile category '${category.key}'.`);
+        }
+      }
+
+      // Filter emails for this category, avoiding duplicates
+      const seenEmails = new Set();
+      for (let i = 0; i < allItems.emails.length; i++) {
+        const emailItem = allItems.emails[i];
+        // Detailed log for a specific item/category you are debugging:
+        // if (category.key === 'EXPECTED_CATEGORY_KEY' && emailItem.email === 'EXPECTED_EMAIL_ADDRESS') {
+        //   console.log(`Debug Email Match: Item Email='${emailItem.email}', Item Category='${emailItem.category}' (type: ${typeof emailItem.category}), Tile Category Key='${category.key}' (type: ${typeof category.key}), Match? ${emailItem.category === category.key}`);
+        // }
+        if (
+          emailItem.category === category.key &&
+          !seenEmails.has(emailItem.email)
+        ) {
+          categoryEmails.push(emailItem.email);
+          seenEmails.add(emailItem.email);
+        }
+      }
+
+      // Create the tile
+      const tile = document.createElement("div");
+      tile.className = "category-tile";
+      tile.setAttribute("draggable", "true");
+      tile.setAttribute("data-category", category.key);
+
+      // Make the entire tile a drop target
+      tile.setAttribute("droppable", "true"); // This is a custom attribute, not standard HTML
+
+      // Header with category name and actions
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between mb-2";
+      header.innerHTML = `
+      <div class="flex items-center">
+        <svg class="h-4 w-4 text-blue-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+        </svg>
+        <span class="font-medium category-name">${escapeAttr(category.displayName)}</span>
+        ${
+          !hasValidLabel
+            ? '<svg class="h-4 w-4 text-yellow-500 ml-2" viewBox="0 0 20 20" fill="currentColor" title="Category not assigned to any label"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>'
+            : ""
+        }
+      </div>
+      <div class="flex space-x-1">
+        <button class="text-gray-400 hover:text-blue-500 p-1" onclick="showAddItemModal('${
+          escapeAttr(category.key)
+        }')" title="Add Email/Domain">
+          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <button class="text-gray-400 hover:text-blue-500 p-1" onclick="editCategory('${
+          escapeAttr(category.key)
+        }')">
+          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+          </svg>
+        </button>
+        <button class="text-gray-400 hover:text-red-500 p-1" onclick="confirmDeleteCategory('${
+          escapeAttr(category.key)
+        }')">
+          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    `;
+      tile.appendChild(header);
+
+      // Create items container
+      const itemsContainer = document.createElement("div");
+      itemsContainer.className = "category-items mt-2";
+
+      // Add domains section if there are domains
+      buildItemListSection(
+        itemsContainer,
+        "Domains",
+        categoryDomains,
+        "domain",
+        category.key
+      );
+      if (
+        categoryDomains.length === 0 &&
+        allItems.domains.some((d) => d.category === category.key)
+      ) {
+        console.warn(
+          `renderCategoryTiles: Category '${category.key}' should have domains but categoryDomains array is empty. Check matching logic or data for domains like:`,
+          allItems.domains.filter((d) => d.category === category.key)
+        );
+      }
+      // Add emails section if there are emails
+      buildItemListSection(
+        itemsContainer,
+        "Emails",
+        categoryEmails,
+        "email",
+        category.key
+      );
+      if (
+        categoryEmails.length === 0 &&
+        allItems.emails.some((e) => e.category === category.key)
+      ) {
+        console.warn(
+          `renderCategoryTiles: Category '${category.key}' should have emails but categoryEmails array is empty. Check matching logic or data for emails like:`,
+          allItems.emails.filter((e) => e.category === category.key)
+        );
+      }
+
+      // Add the items container to the tile if we have any content
+      if (categoryDomains.length > 0 || categoryEmails.length > 0) {
+        tile.appendChild(itemsContainer);
+      }
+
+      // Create a drop zone for adding items via drag and drop
+      const dropZone = document.createElement("div");
+      dropZone.className = "drop-zone mt-2";
+      dropZone.setAttribute("data-category", category.key);
+      dropZone.innerHTML =
+        '<span class="text-gray-400 text-xs">Drop emails or domains here</span>';
+      tile.appendChild(dropZone);
+
+      // Add the complete tile to the grid
+      gridContainer.appendChild(tile);
+    });
+
+    // Setup drag and drop for category tiles
+    setupCategoryTileDragDrop();
+
+    // Set up tooltips for truncated items
+    setupTooltips();
+  }
+
+  // Helper function to build a list of items (domains or emails) for a category tile
+  function buildItemListSection(
+    parentContainer,
+    sectionTitle,
+    items,
+    itemType,
+    categoryKey
+  ) {
+    if (items.length > 0) {
+      const section = document.createElement("div");
+      section.className = "mb-3";
+
+      const header = document.createElement("div");
+      header.className = "text-xs font-medium text-gray-500 mb-1";
+      header.textContent = sectionTitle;
+      section.appendChild(header);
+
+      const list = document.createElement("div");
+      list.className = "space-y-1";
+
+      items.sort(); // Sort items alphabetically
+
+      items.forEach((itemValue) => {
+        const listItemElement = createDraggableListItem(
+          itemValue,
+          itemType,
+          categoryKey
+        );
+        list.appendChild(listItemElement);
+      });
+
+      section.appendChild(list);
+      parentContainer.appendChild(section);
+    }
+  }
+
+  // Add this helper function for tooltips
+  function setupTooltips() {
+    // Find all truncated items
+    document.querySelectorAll(".truncate").forEach((elem) => {
+      // Make sure title attribute is set
+      if (elem.textContent && !elem.hasAttribute("title")) {
+        elem.setAttribute("title", elem.textContent);
+      }
+    });
+  }
+
+  // Refactored function to create a draggable list item (domain or email)
+  function createDraggableListItem(itemValue, itemType, categoryKey) {
+    const item = document.createElement("div");
+    item.className = itemType === "domain" ? "item-domain" : "item-email"; // e.g., item-domain or item-email
+    item.setAttribute("draggable", "true");
+    item.setAttribute("data-item", itemValue);
+    item.setAttribute("data-type", itemType);
+    item.setAttribute("data-category", categoryKey);
+
+    // Create a container for better layout control
+    const container = document.createElement("div");
+    container.className = "flex items-center justify-between w-full";
+
+    // Create the text element
+    const domainText = document.createElement("span");
+    domainText.className = "truncate"; // Ensure your CSS handles truncation
+    domainText.setAttribute("title", itemValue);
+    domainText.textContent = itemValue;
+
+    // Create a simpler, more visible delete button
+    const deleteButton = document.createElement("button");
+    deleteButton.innerText = "×";
+    deleteButton.style.color = "#FF0000";
+    deleteButton.style.fontSize = "18px";
+    deleteButton.style.fontWeight = "bold";
+    deleteButton.style.width = "24px";
+    deleteButton.style.height = "24px";
+    deleteButton.style.display = "flex";
+    deleteButton.style.justifyContent = "center";
+    deleteButton.style.alignItems = "center";
+    deleteButton.style.background = "#FFEEEE";
+    deleteButton.style.borderRadius = "4px";
+    deleteButton.style.border = "1px solid #FFCCCC";
+
+    // Attach click event
+    deleteButton.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteItem(itemValue, itemType);
+    });
+
+    // Add elements to container
+    container.appendChild(domainText);
+    container.appendChild(deleteButton);
+
+    // Add container to item
+    item.appendChild(container);
+
+    // Add dragstart event
+    item.addEventListener("dragstart", function (e) {
+      e.dataTransfer.setData(
+        "text/plain",
+        JSON.stringify({
+          type: itemType,
+          item: itemValue,
+          category: categoryKey,
+          source: "item",
+        })
+      );
+
+      this.classList.add("opacity-50");
+      document.body.classList.add("is-dragging");
+    });
+
+    item.addEventListener("dragend", function () {
+      this.classList.remove("opacity-50");
+      document.body.classList.remove("is-dragging");
+    });
+
+    return item;
+  }
+
+  // Set up drag and drop functionality for categories
+  function setupCategoryTileDragDrop() {
+    const categoryTiles = document.querySelectorAll(".category-tile");
+
+    categoryTiles.forEach((tile) => {
+      tile.addEventListener("dragstart", function (e) {
+        const categoryKey = this.getAttribute("data-category");
+
+        // Mark this as a category drag, not an item drag
+        const data = {
+          type: "category",
+          categoryKey: categoryKey,
+          source: "category", // Add a marker to distinguish from item drags
+        };
+
+        console.log("DRAGSTART CATEGORY:", data);
+        e.dataTransfer.setData("text/plain", JSON.stringify(data));
+
+        this.classList.add("is-dragging");
+        document.body.classList.add("is-dragging");
+      });
+
+      tile.addEventListener("dragend", function () {
+        this.classList.remove("is-dragging");
+        document.body.classList.remove("is-dragging");
+      });
+    });
+  }
+
+  // In dashboard-categories.html
+  // Update the showAddItemModal function
+
+  function showAddItemModal(categoryKey) {
+    console.log("showAddItemModal called with categoryKey:", categoryKey);
+
+    const modal = document.getElementById("addDomainEmailModal");
+    if (!modal) {
+      console.error("Add Domain/Email modal not found");
+      return;
+    }
+
+    console.log("Modal found, proceeding to show modal");
+
+    // Set the category key in the hidden input
+    document.getElementById("addItemCategoryKey").value = categoryKey;
+
+    // Clear any previous value
+    document.getElementById("newItemValue").value = "";
+
+    // Set domain as the default type
+    document.querySelector(
+      'input[name="newItemType"][value="domain"]'
+    ).checked = true;
+
+    // Get category display name
+    let displayName = categoryKey;
+    if (allCategories[categoryKey]) {
+      if (typeof allCategories[categoryKey] === "string") {
+        displayName = allCategories[categoryKey];
+      } else if (allCategories[categoryKey].displayName) {
+        displayName = allCategories[categoryKey].displayName;
+      }
+    }
+
+    // Update modal title if possible
+    const modalTitle = modal.querySelector(".p-4.border-b h3");
+    if (modalTitle) {
+      modalTitle.textContent = `Add Item to "${displayName}"`;
+    }
+
+    // Show the modal
+    modal.classList.remove("hidden");
+
+    // Set up the confirm button action
+    const confirmBtn = document.getElementById("confirmAddItemBtn");
+    if (confirmBtn) {
+      // Remove any previous event listeners
+      const newConfirmBtn = confirmBtn.cloneNode(true);
+      confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+      // Add the new event listener
+      newConfirmBtn.addEventListener("click", function () {
+        addItemToCategory();
+      });
+    }
+  }
+
+  // Add this function to handle adding an item to category
+  function addItemToCategory() {
+    const categoryKey = document.getElementById("addItemCategoryKey").value;
+    const itemValue = document.getElementById("newItemValue").value.trim();
+    const itemType = document.querySelector(
+      'input[name="newItemType"]:checked'
+    ).value;
+
+    console.log(
+      `Adding ${itemType} "${itemValue}" to category "${categoryKey}"`
+    );
+
+    // Validation
+    if (!itemValue) {
+      showToast("Please enter a value for the item");
+      return;
+    }
+
+    if (itemType === "email" && !validateEmail(itemValue)) {
+      showToast("Please enter a valid email address");
+      return;
+    }
+
+    // Show loading state
+    showToast(`Adding ${itemType} to category...`);
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        console.log("Add item result:", result);
+
+        if (result && result.success) {
+          // Update local data
+          if (itemType === "domain") {
+            // Check for existing domain
+            const existingDomainIndex = allItems.domains.findIndex(
+              (d) => d.domain === itemValue
+            );
+
+            if (existingDomainIndex !== -1) {
+              // Update existing domain category
+              allItems.domains[existingDomainIndex].category = categoryKey;
+            } else {
+              // Add new domain
+              allItems.domains.push({
+                domain: itemValue,
+                category: categoryKey,
+              });
+            }
+          } else if (itemType === "email") {
+            // Check for existing email
+            const existingEmailIndex = allItems.emails.findIndex(
+              (e) => e.email === itemValue
+            );
+
+            if (existingEmailIndex !== -1) {
+              // Update existing email category
+              allItems.emails[existingEmailIndex].category = categoryKey;
+            } else {
+              // Add new email
+              allItems.emails.push({
+                email: itemValue,
+                category: categoryKey,
+              });
+            }
+          }
+
+          // Close the modal
+          document
+            .getElementById("addDomainEmailModal")
+            .classList.add("hidden");
+
+          // Re-render categories
+          renderCategoryTiles();
+
+          // Set up drag and drop again
+          setTimeout(setupDragAndDrop, 100);
+
+          showToast(`${itemType} added successfully`);
+        } else {
+          showToast(`Error: ${result ? result.message : "Failed to add item"}`);
+        }
+      })
+      .withFailureHandler(function (error) {
+        console.error("Server error:", error);
+        showToast(`Error: ${error}`);
+      })
+      .moveItemToCategory(itemValue, categoryKey, itemType);
+  }
+
+  // Email validation helper
+  function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+  }
+
+  // Store the item being deleted to prevent double confirmation
+  let currentDeletingItem = null;
+
+  // Function to delete an item
+
+  // Store a flag to prevent duplicate confirmations
+  let isDeleting = false;
+
+  // Function to delete an item
+  function deleteItem(item, itemType) {
+    console.log(`Deleting ${itemType}: ${item}`);
+
+    // Prevent duplicate confirmation dialogs
+    if (isDeleting) {
+      console.log("Delete operation already in progress, ignoring");
+      return;
+    }
+
+    // Set flag to prevent duplicate dialogs
+    isDeleting = true;
+
+    // Use setTimeout to allow UI to update before showing confirm dialog
+    setTimeout(() => {
+      try {
+        // Show custom delete confirmation modal
+        showDeleteConfirmModal(
+          `Are you sure you want to delete this ${itemType}?`,
+          () => {
+            // Show loading state
+            showToast(`Deleting ${itemType}...`);
+
+            // Call server function
+            google.script.run
+              .withSuccessHandler(function (result) {
+                console.log("Delete result:", result);
+                isDeleting = false;
+
+                if (result && result.success) {
+                  // Update local data
+                  if (itemType === "domain") {
+                    allItems.domains = allItems.domains.filter(
+                      (d) => d.domain !== item
+                    );
+                  } else if (itemType === "email") {
+                    allItems.emails = allItems.emails.filter(
+                      (e) => e.email !== item
+                    );
+                  }
+
+                  // Re-render the category tiles
+                  renderCategoryTiles();
+
+                  // Set up drag and drop again
+                  setTimeout(setupDragAndDrop, 100);
+
+                  showToast(`${itemType} deleted successfully`);
+                } else {
+                  showToast(
+                    `Error: ${
+                      result ? result.message : "Failed to delete item"
+                    }`
+                  );
+                }
+              })
+              .withFailureHandler(function (error) {
+                console.error("Server error:", error);
+                showToast(`Error: ${error}`);
+                isDeleting = false;
+              })
+              .removeCategoryAssignment(item, itemType);
+          },
+          () => {
+            // Cancel callback
+            isDeleting = false;
+          }
+        );
+      } catch (e) {
+        console.error("Error in delete confirmation:", e);
+        isDeleting = false;
+      }
+    }, 50);
+  }
+
+  // Filter categories and items based on search text
+  function filterCategories(searchText) {
+    const tiles = document.querySelectorAll(".category-tile");
+
+    if (!searchText) {
+      // Show all categories and items
+      tiles.forEach((tile) => {
+        tile.style.display = "";
+
+        // Reset tile appearance
+        tile.classList.remove("filtered");
+
+        // Show all items
+        tile.querySelectorAll(".item-domain, .item-email").forEach((item) => {
+          item.style.display = "";
+        });
+
+        // Show all sections
+        tile.querySelectorAll(".mb-3").forEach((section) => {
+          section.style.display = "";
+        });
+      });
+      return;
+    }
+
+    searchText = searchText.toLowerCase();
+
+    tiles.forEach((tile) => {
+      const categoryKey = tile.getAttribute("data-category");
+      let displayName = categoryKey;
+
+      // Get category display name
+      if (allCategories[categoryKey]) {
+        if (typeof allCategories[categoryKey] === "string") {
+          displayName = allCategories[categoryKey];
+        } else if (allCategories[categoryKey].displayName) {
+          displayName = allCategories[categoryKey].displayName;
+        }
+      }
+
+      const categoryMatches =
+        displayName.toLowerCase().includes(searchText) ||
+        categoryKey.toLowerCase().includes(searchText);
+
+      // Always keep the category tile visible
+      tile.style.display = "";
+
+      // Check all items in this category
+      const items = tile.querySelectorAll(".item-domain, .item-email");
+      let matchingItemsCount = 0;
+      let totalItemsCount = items.length;
+
+      items.forEach((item) => {
+        const itemValue = item.getAttribute("data-item");
+        if (itemValue && itemValue.toLowerCase().includes(searchText)) {
+          item.style.display = "";
+          matchingItemsCount++;
+        } else if (!categoryMatches) {
+          // Only hide items if category name doesn't match
+          item.style.display = "none";
+        } else {
+          // Show all items if category name matches
+          item.style.display = "";
+          matchingItemsCount++;
+        }
+      });
+
+      // Handle sections (domains/emails) visibility
+      const sections = tile.querySelectorAll(".mb-3");
+      sections.forEach((section) => {
+        const sectionItems = section.querySelectorAll(
+          ".item-domain, .item-email"
+        );
+        const visibleSectionItems = Array.from(sectionItems).filter(
+          (item) => item.style.display !== "none"
+        );
+
+        // Show section if it has visible items or if category matches
+        if (visibleSectionItems.length > 0 || categoryMatches) {
+          section.style.display = "";
+        } else {
+          section.style.display = "none";
+        }
+      });
+
+      // Add visual indicator if category is filtered
+      if (matchingItemsCount < totalItemsCount && !categoryMatches) {
+        tile.classList.add("filtered");
+
+        // Add or update filter indicator
+        let filterIndicator = tile.querySelector(".filter-indicator");
+        if (!filterIndicator) {
+          filterIndicator = document.createElement("span");
+          filterIndicator.className = "filter-indicator";
+          const categoryNameElement = tile.querySelector(".category-name");
+          if (categoryNameElement) {
+            categoryNameElement.parentNode.appendChild(filterIndicator);
+          }
+        }
+        filterIndicator.textContent = `(${matchingItemsCount}/${totalItemsCount})`;
+        filterIndicator.style.display = "inline";
+      } else {
+        tile.classList.remove("filtered");
+
+        // Hide filter indicator
+        const filterIndicator = tile.querySelector(".filter-indicator");
+        if (filterIndicator) {
+          filterIndicator.style.display = "none";
+        }
+      }
+    });
+  }
+
+  // Get category item counts
+  function getCategoryItemCounts(categoryKey, callback) {
+    // Default values
+    const counts = {
+      emails: 0,
+      domains: 0,
+    };
+
+    // Count items from the global allItems object
+    allItems.emails.forEach((item) => {
+      if (item.category === categoryKey) {
+        counts.emails++;
+      }
+    });
+
+    allItems.domains.forEach((item) => {
+      if (item.category === categoryKey) {
+        counts.domains++;
+      }
+    });
+
+    callback(counts);
+  }
+
+  // Function to update all category item counts
+  function updateCategoryItemCounts() {
+    const categoryTiles = document.querySelectorAll(".category-tile");
+
+    categoryTiles.forEach((tile) => {
+      const categoryKey = tile.getAttribute("data-category");
+      const statsElement = tile.querySelector(".category-stats");
+
+      if (categoryKey && statsElement) {
+        getCategoryItemCounts(categoryKey, function (counts) {
+          statsElement.innerHTML = `
+            <span>${counts.emails} emails</span>
+            <span>${counts.domains} domains</span>
+          `;
+        });
+      }
+    });
+  }
+  // Add this function to handle the error
+  function renderItemsList() {
+    // This is now a no-op since we've integrated items into category tiles
+    console.log("renderItemsList called - items are now in category tiles");
+    // No need to do anything as the items are now displayed within the category tiles
+  }
+
+  // Edit category function
+  function editCategory(categoryKey) {
+    // Get the category information
+    const category = allCategories[categoryKey];
+    if (!category) {
+      showToast(`Category "${categoryKey}" not found`);
+      return;
+    }
+
+    // Populate the edit modal
+    const modal = document.getElementById("editCategoryModal");
+    if (!modal) {
+      showToast("Edit category modal not found");
+      return;
+    }
+
+    // Set values in the form
+    document.getElementById("editCategoryKey").value = categoryKey;
+
+    let displayName = categoryKey;
+    if (typeof category === "string") {
+      displayName = category;
+    } else if (category.displayName) {
+      displayName = category.displayName;
+    }
+
+    document.getElementById("editCategoryDisplayName").value = displayName;
+
+    // Show the modal
+    modal.classList.remove("hidden");
+
+    // Set up the update button
+    document.getElementById("updateCategoryBtn").onclick = function () {
+      const newDisplayName = document
+        .getElementById("editCategoryDisplayName")
+        .value.trim();
+
+      if (!newDisplayName) {
+        showToast("Display name is required");
+        return;
+      }
+
+      // Show loading state
+      showToast("Updating category...");
+
+      // Call server function
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (result && result.success) {
+            // Update local data
+            if (typeof allCategories[categoryKey] === "string") {
+              allCategories[categoryKey] = newDisplayName;
+            } else {
+              allCategories[categoryKey].displayName = newDisplayName;
+            }
+
+            // Close modal
+            modal.classList.add("hidden");
+
+            // Re-render categories
+            renderCategoryTiles();
+
+            showToast("Category updated successfully");
+          } else {
+            showToast(
+              `Error: ${result ? result.message : "Failed to update category"}`
+            );
+          }
+        })
+        .withFailureHandler(function (error) {
+          showToast(`Error: ${error}`);
+        })
+        .updateCategory(categoryKey, categoryKey, newDisplayName);
+    };
+  }
+
+  // Confirm delete category function
+  function confirmDeleteCategory(categoryKey) {
+    // Get the category information
+    const category = allCategories[categoryKey];
+    if (!category) {
+      showToast(`Category "${categoryKey}" not found`);
+      return;
+    }
+
+    // Get display name
+    let displayName = categoryKey;
+    if (typeof category === "string") {
+      displayName = category;
+    } else if (category.displayName) {
+      displayName = category.displayName;
+    }
+
+    // Set up confirm modal
+    const modal = document.getElementById("deleteConfirmModal");
+    if (!modal) {
+      // Fallback to basic confirmation if modal doesn't exist
+      if (
+        confirm(
+          `Are you sure you want to delete the category "${displayName}"? This will remove all email and domain assignments.`
+        )
+      ) {
+        deleteCategory(categoryKey);
+      }
+      return;
+    }
+
+    // Set the message
+    document.getElementById(
+      "deleteConfirmMessage"
+    ).textContent = `Are you sure you want to delete the category "${displayName}"? This will remove all email and domain assignments.`;
+
+    // Show the modal
+    modal.classList.remove("hidden");
+
+    // Set up the confirm button
+    document.getElementById("confirmDeleteBtn").onclick = function () {
+      deleteCategory(categoryKey);
+      modal.classList.add("hidden");
+    };
+  }
+
+  // Delete category function
+  function deleteCategory(categoryKey) {
+    // Show loading state
+    showToast("Deleting category...");
+
+    // Call server function
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result && result.success) {
+          // Update local data
+          delete allCategories[categoryKey];
+
+          // Remove items from this category
+          allItems.domains = allItems.domains.filter(
+            (item) => item.category !== categoryKey
+          );
+          allItems.emails = allItems.emails.filter(
+            (item) => item.category !== categoryKey
+          );
+
+          // Re-render categories
+          renderCategoryTiles();
+
+          showToast("Category deleted successfully");
+        } else {
+          showToast(
+            `Error: ${result ? result.message : "Failed to delete category"}`
+          );
+        }
+      })
+      .withFailureHandler(function (error) {
+        showToast(`Error: ${error}`);
+      })
+      .deleteCategory(categoryKey);
+  }
+</script>
