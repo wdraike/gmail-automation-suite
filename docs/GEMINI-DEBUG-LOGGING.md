@@ -90,7 +90,7 @@ FULL RESPONSE:
 
 ## Implementation Details
 
-The logging is automatic and happens in [src/core/api-service.js](src/core/api-service.js):
+The logging is automatic and happens in [src/core/api-service.js](../src/core/api-service.js):
 
 - `logGeminiInteraction()` - Main logging function
 - `saveGeminiInteractionToDrive()` - Saves to Drive

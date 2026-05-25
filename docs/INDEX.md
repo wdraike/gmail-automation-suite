@@ -53,7 +53,7 @@ All current, useful documentation for the project.
 **Testing approach and coverage**
 - Current test coverage: 25.59%
 - Hybrid module system explanation
-- 282 passing tests
+- ~528 tests total (~390 Jest + ~138 Apps Script)
 - How to run tests locally
 
 ---
@@ -75,7 +75,7 @@ All current, useful documentation for the project.
 
 | Feature | Code Location | Key Functions |
 |---------|---------------|---------------|
-| Email Categorization | `src/features/email-sorter/` | `categorizeEmail()`, `sortEmails()` |
+| Email Categorization | `src/features/email-sorter/` | `categorizeEmails()` |
 | Job Finder | `src/features/job-finder/` | `processJobEmailsMain()`, `testCompleteJobWorkflow()` |
 | Email Retention | `src/features/email-retention-manager.js` | Retention policies |
 | Label Management | `src/features/enhanced-label-manager.js` | Label operations |
@@ -110,7 +110,7 @@ All current, useful documentation for the project.
 Gmail Automation Suite
 ├── 12,129 lines of code
 ├── 19 JavaScript files
-├── 282 passing tests
+├── ~528 tests total (~390 Jest + ~138 Apps Script)
 ├── 25.59% test coverage
 └── 4 main features
 ```
@@ -118,13 +118,13 @@ Gmail Automation Suite
 ### File Organization
 ```
 src/
-├── core/              # Shared services (4 files)
+├── core/              # Shared services (4 files + adapters)
+├── dev/               # Development scripts (not deployed)
 ├── features/          # Main features
 │   ├── email-sorter/  # Email categorization (2 files)
 │   └── job-finder/    # Job extraction (5 files)
 ├── ui/                # User interfaces (3 files)
-├── utils/             # Utilities (1 file)
-└── dev/               # Tests (3 files, not deployed)
+└── utils/             # Utilities (1 file)
 ```
 
 ---

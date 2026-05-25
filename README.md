@@ -32,39 +32,36 @@ A comprehensive Google Apps Script solution for automating Gmail organization, e
 
 ```
 gmail-automation/
-├── src/                            # Apps Script source (auto-generated)
+├── src/                            # Apps Script source
 │   ├── core/                       # Core services
+│   ├── dev/                        # Development/test scripts
 │   ├── features/                   # Feature modules
-│   ├── job-finder/                # Job alert processing
-│   ├── ui/                        # User interface
-│   └── utils/                     # Utilities
+│   │   ├── email-sorter/           # Email categorization
+│   │   └── job-finder/             # Job alert processing
+│   ├── ui/                         # User interface
+│   └── utils/                      # Utilities
 │
-├── src-modules/                    # Source of truth (Node.js modules)
-│   └── (same structure as src/)   # Develop here, test here
+├── tests/                          # Apps Script tests (custom framework)
+│   ├── test-framework.js           # Custom test framework
+│   └── *.test.js                   # In-script test suites
 │
-├── tests/                         # Apps Script tests
-│   ├── test-framework.js          # Custom test framework
-│   └── *.test.js                  # In-script test suites
+├── tests-local/                    # Jest tests (~390 tests)
+│   ├── setup.js                    # Mock Google services
+│   └── *.test.js                   # Local unit tests
 │
-├── tests-local/                   # Jest tests (282 tests)
-│   ├── setup.js                   # Mock Google services
-│   └── *.test.js                  # Local unit tests
+├── docs/                           # Documentation
+│   ├── testing/                    # Testing guides
+│   ├── coverage/                   # Coverage reports
+│   └── guides/                     # User guides
 │
-├── docs/                          # Documentation
-│   ├── testing/                   # Testing guides
-│   ├── coverage/                  # Coverage reports (25.56%)
-│   └── guides/                    # User guides
-│
-├── scripts/                       # Build/automation scripts
+├── scripts/                        # Build/automation scripts
 │   ├── convert-to-modules.js      # Apps Script → Modules
 │   ├── build-for-apps-script.js   # Modules → Apps Script
-│   └── run-all-tests.sh           # Test runner
 │   ├── pre-push.js                # Pre-deployment validation
 │   ├── setup-script.js            # Setup utilities
-│   ├── run-all-tests.sh           # Master test runner
 │   └── appsscript.json            # Apps Script config
 │
-└── package.json                   # NPM configuration
+└── package.json                    # NPM configuration
 ```
 
 ## Setup
@@ -95,18 +92,11 @@ gmail-automation/
    clasp create --type standalone --title "Gmail Automation"
    ```
 
-4. **Build Apps Script Code**
+4. **Build and Push the Code**
    ```bash
    # Convert modules to Apps Script format
    npm run build
 
-   # This runs:
-   # 1. npm run modules (src → src-modules with module.exports)
-   # 2. Strips module.exports for clean Apps Script
-   ```
-
-5. **Push the Code**
-   ```bash
    # IMPORTANT: Run tests first!
    npm test
 
@@ -124,10 +114,10 @@ gmail-automation/
 6. **Initialize the System**
    ```javascript
    // Run in Apps Script editor
-   runInitialSetup()
+   initializeCategorizerCache()
    ```
 
-7. **Deploy Web App** (Optional)
+### Deploy Web App (Optional)
    - In Apps Script editor: Deploy > New deployment
    - Type: Web app
    - Execute as: Me
@@ -146,7 +136,7 @@ After deployment, configure the system:
 2. **Create Retention Rules** (Optional)
    ```javascript
    // Example: Delete emails in "Newsletters" older than 30 days
-   createRetentionRule({
+   addRetentionRule({
      labelName: 'Newsletters',
      retentionDays: 30,
      action: 'delete',
@@ -164,9 +154,9 @@ After deployment, configure the system:
 
 ### Making Changes
 
-1. **Edit code in `src-modules/`** (not `src/`)
+1. **Edit code in `src/`**
    ```bash
-   vim src-modules/core/my-feature.js
+   vim src/core/my-feature.js
    ```
 
 2. **Write tests**
@@ -182,7 +172,7 @@ After deployment, configure the system:
 
 4. **Build for Apps Script**
    ```bash
-   npm run build  # Creates src/ from src-modules/
+   npm run build
    ```
 
 5. **Deploy**
@@ -194,8 +184,8 @@ After deployment, configure the system:
 
 ```bash
 # Development
-npm run modules          # Convert src → src-modules (add module.exports)
-npm run build           # Convert src-modules → src (remove module.exports)
+npm run modules          # Add module.exports for local testing
+npm run build           # Remove module.exports for Apps Script deployment
 
 # Testing
 npm test                # Run all Jest tests
@@ -232,12 +222,7 @@ createCategorizationTrigger()
 
 #### Create a Rule
 ```javascript
-createRetentionRule({
-  labelName: 'Promotions',
-  retentionDays: 90,
-  action: 'delete',  // or 'archive'
-  enabled: true
-})
+addRetentionRule('Promotions', 90, '', true, 'delete')
 ```
 
 #### Run Rules Manually
@@ -254,17 +239,17 @@ createRetentionTrigger()  // Runs daily
 
 #### Process New Job Emails
 ```javascript
-processNewJobAlerts()
+processJobEmailsMain()
 ```
 
 #### Export Jobs to CSV
 ```javascript
-exportJobListingsToCsv()
+writeJobsToCsv(jobs)
 ```
 
 ## Testing
 
-### Local Testing (Jest) ✅ 282 Tests
+### Local Testing (Jest) ✅ ~390 Tests
 
 ```bash
 # Run all tests
@@ -345,15 +330,15 @@ const EMAIL_SORTER_CONFIG = {
 - `updateCategoryForEmail(email, category)` - Assign email to category
 
 #### Retention Management
-- `createRetentionRule(rule)` - Create new retention rule
+- `addRetentionRule` - Create new retention rule
 - `runRetentionRule(ruleId)` - Execute specific rule
 - `runAllRetentionRules()` - Execute all enabled rules
 - `getRetentionRules()` - List all rules
 
 #### Job Finder
-- `processNewJobAlerts()` - Process new job emails
+- `processJobEmailsMain()` - Process new job emails
 - `addJobToSpreadsheet(job)` - Add job to tracking sheet
-- `exportJobListingsToCsv()` - Export jobs as CSV
+- `writeJobsToCsv()` - Export jobs as CSV
 
 ### Utility Functions
 

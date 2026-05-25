@@ -324,10 +324,22 @@ function saveCategorizerData(data = null) {
     // Update backup in properties if file save was successful
     if (saved) {
       try {
-        scriptProperties.setProperty(
-          "EMAIL_CATEGORIZER_BACKUP",
-          JSON.stringify(data)
-        );
+        const backupJson = JSON.stringify(data);
+
+        // Guard: PropertiesService has a 500KB total limit. If the backup
+        // alone exceeds 100KB, skip the in-Properties backup and rely on
+        // the Drive file (which was just saved above). TODO: If category
+        // data grows large, move backups entirely to Drive or Sheets.
+        if (backupJson.length > 100000) {
+          Logger.log(
+            `WARN: EMAIL_CATEGORIZER_BACKUP too large (${backupJson.length} bytes). Skipping PropertiesService backup; Drive file is the canonical source.`
+          );
+        } else {
+          scriptProperties.setProperty(
+            "EMAIL_CATEGORIZER_BACKUP",
+            backupJson
+          );
+        }
 
         // Update cache
         EMAIL_CATEGORIZER.data = data;

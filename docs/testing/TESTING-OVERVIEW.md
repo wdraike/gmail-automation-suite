@@ -24,7 +24,7 @@ npm run test:watch
 **Run with:** `npm run test:all` or `./run-all-tests.sh`
 
 **Includes:**
-- ✅ All 74 unit tests
+- ✅ All ~390 unit tests
 - ✅ Coverage report
 - ✅ ESLint checks
 - ✅ Integration test status
@@ -41,7 +41,7 @@ npm run test:watch
 **Run with:** `npm test` or `npm run test:unit`
 
 **Details:**
-- 74 tests total
+- ~390 tests total
 - <1 second runtime
 - Zero API calls
 - Works offline
@@ -53,7 +53,7 @@ npm run test:watch
 
 **When to use:** During development, TDD workflow, CI/CD
 
-**Documentation:** [tests-local/README.md](tests-local/README.md)
+**Documentation:** [tests-local/README.md](../../tests-local/README.md)
 
 ---
 
@@ -133,7 +133,7 @@ npm run lint:fix            # Auto-fix linting issues
 | **API Calls** | ❌ Zero | ✅ Real | ⚠️ If enabled |
 | **Internet** | ✅ Offline | ❌ Required | ✅ Mostly offline |
 | **API Key** | ❌ Not needed | ✅ Required | ⚠️ If enabled |
-| **Tests** | 74 | 8 | 82 total |
+| **Tests** | ~390 | 8 | ~398 total |
 | **Use Case** | Development | Validation | Pre-deployment |
 | **Cost** | 💰 Free | 💰 Free (quota) | 💰 Free |
 
@@ -142,9 +142,9 @@ npm run lint:fix            # Auto-fix linting issues
 ## Test Coverage
 
 ### Current Status
-- **Unit Tests:** 74/74 passing (100%)
+- **Unit Tests:** ~390 Jest tests (~16 test files)
 - **Integration Tests:** 8/8 available (skipped by default)
-- **Total:** 82 tests available
+- **Total:** ~398 tests available
 
 ### What's Tested
 
@@ -213,7 +213,7 @@ npm run test:integration
 
 ### Getting Started
 - [TEST-RUNNER-README.md](TEST-RUNNER-README.md) - Master test runner guide
-- [tests-local/README.md](tests-local/README.md) - Local testing setup
+- [tests-local/README.md](../../tests-local/README.md) - Local testing setup
 
 ### Advanced
 - [INTEGRATION-TESTING.md](INTEGRATION-TESTING.md) - Real API testing guide
@@ -221,9 +221,8 @@ npm run test:integration
 - [NO-REAL-API-CALLS.md](NO-REAL-API-CALLS.md) - Proof of mocking
 
 ### Reference
-- [TESTING-SUMMARY.md](TESTING-SUMMARY.md) - Complete testing infrastructure
-- [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) - Implementation details
-- [COMPLETION-SUMMARY.md](COMPLETION-SUMMARY.md) - What was built
+- [TESTING-SUMMARY.md](../TESTING-SUMMARY.md) - Complete testing infrastructure
+- [IMPLEMENTATION-STATUS.md](../coverage/IMPLEMENTATION-STATUS.md) - Implementation details
 
 ---
 
@@ -280,7 +279,7 @@ npm init @eslint/config
 
 You now have:
 
-✅ **74 unit tests** - Fast, mocked, reliable
+✅ **~390 unit tests** - Fast, mocked, reliable
 ✅ **8 integration tests** - Real API validation
 ✅ **Master test runner** - Run everything at once
 ✅ **Complete documentation** - Guides for all scenarios

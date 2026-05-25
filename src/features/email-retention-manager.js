@@ -5,8 +5,8 @@
  * and user-defined retention periods.
  */
 
-// RETENTION_RULES is declared in dashboardController.js, we don't redeclare it here
-// Note: This file assumes that dashboardController.js is loaded first
+// RETENTION_RULES is declared centrally in src/core/config.js to eliminate
+// dangerous load-order dependencies (ARCH-BLOCK-01).
 
 /**
  * Initialize the retention manager by loading saved rules
@@ -1085,9 +1085,23 @@ function logRetentionActivity(message, ruleId = null) {
       ruleId: ruleId,
     });
 
-    // Keep only last 100 entries
-    if (log.length > 100) {
-      log = log.slice(-100);
+    // Keep only last 50 entries to stay well under the 500KB total limit.
+    // TODO: Consider migrating to Drive-based logging (e.g. append to a
+    // Sheets log or Drive text file) if retention history must grow beyond
+    // 50 entries without loss.
+    if (log.length > 50) {
+      log = log.slice(-50);
+    }
+
+    const serialized = JSON.stringify(log);
+
+    // Guard: if this single property is already > 100KB, aggressively
+    // truncate oldest entries to avoid silent truncation by PropertiesService.
+    if (serialized.length > 100000) {
+      Logger.log(
+        `WARN: RETENTION_ACTIVITY_LOG exceeded 100KB (${serialized.length} bytes). Truncating to last 10 entries.`
+      );
+      log = log.slice(-10);
     }
 
     // Save updated log

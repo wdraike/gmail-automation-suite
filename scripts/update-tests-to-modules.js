@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// NOTE: src-modules/ no longer exists — this script may be obsolete.
+
 /**
  * Update test files to use require() instead of eval()
  *

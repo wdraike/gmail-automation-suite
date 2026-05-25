@@ -403,8 +403,8 @@ The fact that 22 tests pass proves we're using mocks! ✅
 ## 📚 **Related Documentation**
 
 - [VSCODE-TESTING.md](VSCODE-TESTING.md) - Complete testing guide
-- [tests-local/test-utils.js](tests-local/test-utils.js) - Mock utilities
-- [tests-local/setup.js](tests-local/setup.js) - Mock setup (see UrlFetchApp mock on line 98)
+- [tests-local/test-utils.js](../../tests-local/test-utils.js) - Mock utilities
+- [tests-local/setup.js](../../tests-local/setup.js) - Mock setup (see UrlFetchApp mock on line 98)
 
 ---
 

@@ -30,7 +30,7 @@ You now have **TWO complete testing systems** with **THREE levels of testing** a
 - `tests-local/setup.js` - Mock all Google services
 - `tests-local/README.md` - Complete testing guide
 
-**Total VS Code Tests:** 74 (100% passing ✅)
+**Total VS Code Tests:** ~390 (~16 Jest test files)
 
 ### System 2: Apps Script Testing
 
@@ -49,11 +49,11 @@ You now have **TWO complete testing systems** with **THREE levels of testing** a
 - ✅ Full integration tests
 
 **Files Created:**
-- `tests/categorization.test.js` - 50+ tests
-- `tests/retention.test.js` - 30+ tests
-- `tests/cache.test.js` - 40+ tests
-- `tests/api.test.js` - 35+ tests
-- `tests/job-finder.test.js` - 45+ tests
+- `tests/categorization.test.js` - ~21 tests
+- `tests/retention.test.js` - ~19 tests
+- `tests/cache.test.js` - ~27 tests
+- `tests/api.test.js` - ~40 tests
+- `tests/job-finder.test.js` - ~31 tests
 - `tests/test-runner.js` - Test execution engine
 - `tests/README.md` - Apps Script testing guide
 
@@ -69,7 +69,6 @@ You now have **TWO complete testing systems** with **THREE levels of testing** a
 - `VSCODE-TESTING.md` - Complete VS Code testing guide
 - `TESTABLE-CODE-PATTERNS.md` - **NEW!** How to write testable code
 - `QUICK-START.md` - Quick reference
-- `CLEANUP-REPORT.md` - What was changed
 
 ---
 
@@ -323,7 +322,7 @@ const gmail = createGmailService();
 const testGmail = createGmailService(mockGmailApp);
 ```
 
-**See [TESTABLE-CODE-PATTERNS.md](TESTABLE-CODE-PATTERNS.md) for complete guide!**
+**See [TESTABLE-CODE-PATTERNS.md](testing/TESTABLE-CODE-PATTERNS.md) for complete guide!**
 
 ---
 
@@ -396,7 +395,7 @@ it('should handle 500 errors', () => {
 });
 ```
 
-**See [tests-local/api-service.test.js](tests-local/api-service.test.js) for 48 Gemini tests!**
+**See [tests-local/api-service.test.js](../tests-local/api-service.test.js) for 48 Gemini tests!**
 
 ---
 
@@ -404,26 +403,38 @@ it('should handle 500 errors', () => {
 
 ### VS Code Tests (Local)
 
-| File | Tests | Status | Notes |
-|------|-------|--------|-------|
-| config.test.js | 26 | ✅ All pass | Configuration management |
-| api-service.test.js | 48 | ⚠️ 22 pass | Shows what to implement |
-| **Total** | **74** | **48 passing** | More tests = better! |
+| File | Tests | Notes |
+|------|-------|-------|
+| config.test.js | 26 | Configuration management |
+| api-service.test.js | 48 | Gemini API service |
+| cache-service.test.js | 28 | Cache service |
+| csv-handler.test.js | 38 | CSV handling |
+| email-categorizer-cache.test.js | 70 | Categorizer cache |
+| email-retention-manager.test.js | 66 | Retention manager |
+| email-sorter.test.js | 21 | Email sorter |
+| gas-global-scope.test.js | 7 | Global scope |
+| gmail-service.test.js | 27 | Gmail service |
+| label-cache.test.js | 3 | Label cache |
+| service-adapters.test.js | 25 | Service adapters |
+| sheets-handler.test.js | 21 | Sheets handler |
+| csv-handler-integration.test.js | 20 | CSV integration |
+| api-service.integration.test.js | 8 | Real API (skipped by default) |
+| **Total** | **~390** | **~16 Jest test files** |
 
 ### Apps Script Tests (Integration)
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| categorization.test.js | 50+ | ~60% |
-| retention.test.js | 30+ | ~55% |
-| cache.test.js | 40+ | ~50% |
-| api.test.js | 35+ | ~50% |
-| job-finder.test.js | 45+ | ~45% |
-| **Total** | **200+** | **~52%** |
+| categorization.test.js | ~21 | ~60% |
+| retention.test.js | ~19 | ~55% |
+| cache.test.js | ~27 | ~50% |
+| api.test.js | ~40 | ~50% |
+| job-finder.test.js | ~31 | ~45% |
+| **Total** | **~138** | **~52%** |
 
 ### Combined Coverage
 
-- **Total Tests:** 274+
+- **Total Tests:** ~528 (~390 Jest + ~138 Apps Script)
 - **Average Coverage:** ~55%
 - **Goal:** 65%+ (very achievable!)
 
@@ -548,13 +559,12 @@ Must show:
 
 | Guide | Purpose | When to Read |
 |-------|---------|--------------|
-| [QUICK-START.md](QUICK-START.md) | Quick reference | Right now! |
-| [VSCODE-TESTING.md](VSCODE-TESTING.md) | VS Code testing complete guide | Before writing tests |
-| [TESTABLE-CODE-PATTERNS.md](TESTABLE-CODE-PATTERNS.md) | How to write testable code | Before refactoring |
-| [tests-local/README.md](tests-local/README.md) | Jest testing details | When writing local tests |
-| [tests/README.md](tests/README.md) | Apps Script testing | Before deployment |
+| [QUICK-START.md](guides/QUICK-START.md) | Quick reference | Right now! |
+| [VSCODE-TESTING.md](testing/VSCODE-TESTING.md) | VS Code testing complete guide | Before writing tests |
+| [TESTABLE-CODE-PATTERNS.md](testing/TESTABLE-CODE-PATTERNS.md) | How to write testable code | Before refactoring |
+| [tests-local/README.md](../tests-local/README.md) | Jest testing details | When writing local tests |
+| [tests/README.md](../tests/README.md) | Apps Script testing | Before deployment |
 | [README.md](README.md) | Main project documentation | For overall understanding |
-| [CLEANUP-REPORT.md](CLEANUP-REPORT.md) | What was cleaned up | To see changes made |
 
 ---
 
@@ -624,7 +634,7 @@ Must show:
 | Metric | Before | After | Goal |
 |--------|--------|-------|------|
 | Test frameworks | 0 | 2 | ✅ |
-| Total tests | 0 | 274+ | ✅ |
+| Total tests | 0 | ~528 | ✅ |
 | Coverage | 0% | ~55% | 🎯 65% |
 | Deployment safety | ❌ | ✅ | ✅ |
 | Can test Gemini | ❌ | ✅ | ✅ |

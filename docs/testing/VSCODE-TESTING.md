@@ -512,10 +512,10 @@ clasp push
 
 ## 🆘 Need Help?
 
-- **VS Code testing basics**: See [tests-local/README.md](tests-local/README.md)
-- **Apps Script testing**: See [tests/README.md](tests/README.md)
-- **General docs**: See [README.md](README.md)
-- **Quick start**: See [QUICK-START.md](QUICK-START.md)
+- **VS Code testing basics**: See [tests-local/README.md](../../tests-local/README.md)
+- **Apps Script testing**: See [tests/README.md](../../tests/README.md)
+- **General docs**: See [README.md](../../README.md)
+- **Quick start**: See [QUICK-START.md](../guides/QUICK-START.md)
 
 ---
 

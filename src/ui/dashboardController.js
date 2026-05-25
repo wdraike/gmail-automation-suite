@@ -1,4 +1,28 @@
 /**
+ * ==============================================================================
+ * SERVER-SIDE vs CLIENT-SIDE FUNCTION DOCUMENTATION (ARCH-BLOCK-02)
+ * ==============================================================================
+ * This file is consumed by Google Apps Script HtmlService. It contains BOTH
+ * server-side GAS API functions and client-side DOM event handlers.
+ *
+ * SERVER-SIDE functions (GmailApp, PropertiesService, DriveApp, etc.):
+ *   getAllLabelsAndCategories, createLabel, saveSettings,
+ *   forceClearLabelCategoryMappings, moveGmailLabel, createLabelHierarchy,
+ *   createLabelHierarchyForMove, renameGmailLabel, getNestedLabelsHierarchy,
+ *   getThreadCount, moveCategoryBetweenLabels, checkStorageUpdated,
+ *   getCategoryAssignments, moveItemToCategory, removeCategoryAssignment,
+ *   getCategoriesAndAssignments, processBatchedChanges, generateRuleId
+ *
+ * CLIENT-SIDE functions (document.querySelectorAll, e.dataTransfer, DOM):
+ *   setupCategoryDropZones, createCategoryPill
+ *
+ * The client-side functions rely on global HTML/DOM state (allCategories,
+ * labelCategories) and should ideally be extracted into a separate
+ * dashboard-events.html template in the future.
+ * ==============================================================================
+ */
+
+/**
  * Function to retrieve all labels, categories, and their associations
  * @returns {Object} - Object containing labels, categories, and their associations
  */

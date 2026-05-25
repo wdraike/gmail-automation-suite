@@ -615,24 +615,38 @@ function onGmailMessage(e) {
 }
 /**
  * Write a timestamped log entry to the script properties
- * This gives us persistent logging even if the normal logs aren't being shown
+ * This gives us persistent logging even if the normal logs aren't being shown.
+ *
+ * NOTE: PropertiesService has a 500KB total limit across all properties.
+ * This function truncates the ADDON_LOG to 5000 chars to stay well under the
+ * limit, but heavy logging across the project can still cause silent
+ * truncation. TODO: Evaluate Drive-based logging if add-on diagnostics
+ * need to be retained long-term.
  */
 function writeLog(message) {
   try {
     const timestamp = new Date().toISOString();
     const props = PropertiesService.getScriptProperties();
-    
+
     // Get existing log
     let log = props.getProperty("ADDON_LOG") || "";
-    
+
     // Add new entry with timestamp
     log += timestamp + " - " + message + "\n";
-    
-    // Keep log to a reasonable size by truncating if needed
+
+    // Keep log to a reasonable size by truncating if needed.
+    // 5000 chars is a conservative guard against the 500KB total limit.
     if (log.length > 5000) {
       log = log.substring(log.length - 5000);
     }
-    
+
+    // Extra guard: if total properties usage is approaching the 500KB limit,
+    // clear older entries more aggressively before saving.
+    const estimatedSize = (log || "").length + 200; // rough overhead
+    if (estimatedSize > 100000) {
+      log = log.substring(log.length - 2000);
+    }
+
     // Save log
     props.setProperty("ADDON_LOG", log);
   } catch (e) {

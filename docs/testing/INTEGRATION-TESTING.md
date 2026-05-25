@@ -410,4 +410,4 @@ Common issues:
 4. **429 errors** → Wait 60 seconds, try again
 5. **Timeout** → Increase timeout or check internet
 
-For more help, see the [test documentation](tests-local/README.md).
+For more help, see the [test documentation](../../tests-local/README.md).

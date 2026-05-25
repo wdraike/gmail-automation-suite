@@ -9,7 +9,7 @@ validateBeforePush()
 ```
 
 This will:
-- ✅ Run all 200+ unit tests
+- ✅ Run all tests
 - ✅ Verify API configuration
 - ✅ Check data integrity
 - ✅ Validate cache service
@@ -22,7 +22,7 @@ This will:
 ### ✅ Completed
 - **Removed dead code** - Cleaned up unused functions
 - **Eliminated duplicates** - No more duplicate data layers or functions
-- **Added 200+ tests** - Comprehensive test coverage (~52%)
+- **Added ~528 tests** - Comprehensive test coverage (~52%)
 - **Created test runner** - Automated validation before deployment
 - **Improved documentation** - Complete README and guides
 
@@ -61,12 +61,11 @@ runTestsForModule('categorization')  // or 'retention', 'cache', 'api'
 
 | File | Purpose |
 |------|---------|
-| [tests/test-framework.js](tests/test-framework.js) | Testing framework (like Jest) |
-| [tests/test-runner.js](tests/test-runner.js) | Runs and reports tests |
-| [tests/*.test.js](tests/) | 200+ unit tests |
-| [pre-push.js](pre-push.js) | Pre-deployment validation |
-| [README.md](README.md) | Complete project documentation |
-| [CLEANUP-REPORT.md](CLEANUP-REPORT.md) | What was changed and why |
+| [tests/test-framework.js](../../tests/test-framework.js) | Testing framework (like Jest) |
+| [tests/test-runner.js](../../tests/test-runner.js) | Runs and reports tests |
+| [tests/*.test.js](../../tests/) | ~138 Apps Script tests |
+| [pre-push.js](../../scripts/pre-push.js) | Pre-deployment validation |
+| [README.md](../../README.md) | Complete project documentation |
 
 ---
 
@@ -127,12 +126,12 @@ clasp push
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| Categorization | 50+ | ~60% |
-| Retention | 30+ | ~55% |
-| Cache | 40+ | ~50% |
-| API | 35+ | ~50% |
-| Job Finder | 45+ | ~45% |
-| **Total** | **200+** | **~52%** |
+| Categorization | ~21 | ~60% |
+| Retention | ~19 | ~55% |
+| Cache | ~27 | ~50% |
+| API | ~40 | ~50% |
+| Job Finder | ~31 | ~45% |
+| **Total** | **~138** | **~52%** |
 
 **Goal:** Maintain >50% coverage
 
@@ -156,9 +155,8 @@ Logger.log(...)
 4. Review error messages carefully
 
 ### Need Help?
-- Check [README.md](README.md) for full documentation
-- See [tests/README.md](tests/README.md) for testing guide
-- Review [CLEANUP-REPORT.md](CLEANUP-REPORT.md) for what changed
+- Check [README.md](../../README.md) for full documentation
+- See [tests/README.md](../../tests/README.md) for testing guide
 
 ---
 
@@ -210,9 +208,9 @@ Logger.log(...)
 |------------|-------------|
 | Deploy safely | `validateBeforePush()` |
 | Run all tests | `runAllTests()` |
-| Quick check | `runQuickValidation()` |
+| Quick check | `runSmokeTests()` |
 | Test one module | `runTestsForModule('api')` |
-| Get help | Read [README.md](README.md) |
+| Get help | Read [README.md](../../README.md) |
 
 ---
 

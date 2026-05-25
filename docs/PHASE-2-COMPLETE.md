@@ -1,3 +1,5 @@
+> **Historical — Phase 2 completed 2025-10-04.** This document preserves the original milestone snapshot. Numbers and statuses reflect the state at that time, not the current codebase.
+
 # Phase 2 Completion Summary - Job Finder Module Testing
 
 **Date**: 2025-10-04
@@ -26,7 +28,7 @@ Phase 2 focused on creating comprehensive unit and integration tests for the Job
 
 ### 1. CSV Handler Tests ✅
 
-**File**: [`tests-local/csv-handler-integration.test.js`](tests-local/csv-handler-integration.test.js) (391 lines, 20 tests)
+**File**: [`tests-local/csv-handler-integration.test.js`](../tests-local/csv-handler-integration.test.js) (391 lines, 20 tests)
 
 **Test Coverage**:
 - ✅ `findPendingJobCsvs()` - 4/4 tests passing
@@ -46,7 +48,7 @@ Phase 2 focused on creating comprehensive unit and integration tests for the Job
 
 ### 2. Sheets Handler Tests ✅
 
-**File**: [`tests-local/sheets-handler.test.js`](tests-local/sheets-handler.test.js) (285 lines, 21 tests)
+**File**: [`tests-local/sheets-handler.test.js`](../tests-local/sheets-handler.test.js) (285 lines, 21 tests)
 
 **Test Coverage**:
 - ✅ `formatDateTime()` - 2/2 tests passing

@@ -1,3 +1,5 @@
+> **Historical — Phase 1 completed 2025-10-04.** This document preserves the original milestone snapshot. Numbers and statuses reflect the state at that time, not the current codebase.
+
 # Phase 1 Completion Summary - Test Infrastructure
 
 **Date**: 2025-10-04
@@ -27,36 +29,36 @@ Installed additional npm packages for advanced testing capabilities:
 Created comprehensive mock implementations for all Google Apps Script services:
 
 #### Files Created:
-- [`tests-local/mocks/gmail.mock.js`](tests-local/mocks/gmail.mock.js) (250 lines)
+- [`tests-local/mocks/gmail.mock.js`](../tests-local/mocks/gmail.mock.js) (250 lines)
   - `MockGmailApp` - Full Gmail service simulation
   - `MockGmailThread` - Thread operations
   - `MockGmailMessage` - Message handling
   - `MockGmailLabel` - Label management
 
-- [`tests-local/mocks/spreadsheet.mock.js`](tests-local/mocks/spreadsheet.mock.js) (230 lines)
+- [`tests-local/mocks/spreadsheet.mock.js`](../tests-local/mocks/spreadsheet.mock.js) (230 lines)
   - `MockSpreadsheetApp` - Spreadsheet service
   - `MockSpreadsheet` - Spreadsheet operations
   - `MockSheet` - Sheet manipulation
   - `MockRange` - Range operations
 
-- [`tests-local/mocks/drive.mock.js`](tests-local/mocks/drive.mock.js) (295 lines)
+- [`tests-local/mocks/drive.mock.js`](../tests-local/mocks/drive.mock.js) (295 lines)
   - `MockDriveApp` - Drive service
   - `MockFolder` - Folder operations
   - `MockFile` - File handling
   - Mock file/folder iterators
 
-- [`tests-local/mocks/utilities.mock.js`](tests-local/mocks/utilities.mock.js) (140 lines)
+- [`tests-local/mocks/utilities.mock.js`](../tests-local/mocks/utilities.mock.js) (140 lines)
   - `MockUtilities` - Utilities service
   - Date formatting, encoding, hashing, CSV parsing
 
-- [`tests-local/mocks/properties.mock.js`](tests-local/mocks/properties.mock.js) (65 lines)
+- [`tests-local/mocks/properties.mock.js`](../tests-local/mocks/properties.mock.js) (65 lines)
   - `MockPropertiesService` - Properties storage
   - Script, user, and document properties
 
-- [`tests-local/mocks/logger.mock.js`](tests-local/mocks/logger.mock.js) (75 lines)
+- [`tests-local/mocks/logger.mock.js`](../tests-local/mocks/logger.mock.js) (75 lines)
   - `MockLogger` - Logging with verification utilities
 
-- [`tests-local/mocks/index.js`](tests-local/mocks/index.js) (95 lines)
+- [`tests-local/mocks/index.js`](../tests-local/mocks/index.js) (95 lines)
   - Central export with setup/reset functions
   - `setupGoogleMocks()` - Initialize all mocks
   - `resetAllMocks()` - Clean state between tests
@@ -72,7 +74,7 @@ Created comprehensive mock implementations for all Google Apps Script services:
 Created reusable test data generators for consistent, realistic test scenarios:
 
 #### Files Created:
-- [`tests-local/fixtures/email-factory.js`](tests-local/fixtures/email-factory.js) (200 lines)
+- [`tests-local/fixtures/email-factory.js`](../tests-local/fixtures/email-factory.js) (200 lines)
   - `createMockMessage()` - Generic email creation
   - `createJobAlertMessage()` - Job alert emails
   - `createLinkedInJobAlert()` - LinkedIn-specific jobs
@@ -84,7 +86,7 @@ Created reusable test data generators for consistent, realistic test scenarios:
   - `createJobAlertBatch()` - Batch job alerts
   - `createMixedEmailBatch()` - Mixed email types
 
-- [`tests-local/fixtures/job-factory.js`](tests-local/fixtures/job-factory.js) (250 lines)
+- [`tests-local/fixtures/job-factory.js`](../tests-local/fixtures/job-factory.js) (250 lines)
   - `createJobData()` - Complete job objects
   - `createMinimalJobData()` - Required fields only
   - `createJobWithSalary()` - Jobs with salary info
@@ -95,7 +97,7 @@ Created reusable test data generators for consistent, realistic test scenarios:
   - `jobDataToCsv()` - CSV conversion
   - `jobDataToSheetRow()` - Spreadsheet row conversion
 
-- [`tests-local/fixtures/index.js`](tests-local/fixtures/index.js) - Central export
+- [`tests-local/fixtures/index.js`](../tests-local/fixtures/index.js) - Central export
 
 **Key Features**:
 - Consistent, realistic test data
@@ -108,24 +110,24 @@ Created reusable test data generators for consistent, realistic test scenarios:
 Implemented dependency injection pattern for testability:
 
 #### Files Created:
-- [`src/core/services/gmail-adapter.js`](src/core/services/gmail-adapter.js) (100 lines)
+- [`src/core/services/gmail-adapter.js`](../src/core/services/gmail-adapter.js) (100 lines)
   - `GmailAdapter` - Wraps GmailApp
   - Batch processing with rate limiting
   - Label management helpers
 
-- [`src/core/services/spreadsheet-adapter.js`](src/core/services/spreadsheet-adapter.js) (125 lines)
+- [`src/core/services/spreadsheet-adapter.js`](../src/core/services/spreadsheet-adapter.js) (125 lines)
   - `SpreadsheetAdapter` - Wraps SpreadsheetApp
   - Sheet CRUD operations
   - Header setup, data reading/writing
   - Row finding and cell updates
 
-- [`src/core/services/drive-adapter.js`](src/core/services/drive-adapter.js) (130 lines)
+- [`src/core/services/drive-adapter.js`](../src/core/services/drive-adapter.js) (130 lines)
   - `DriveAdapter` - Wraps DriveApp
   - File/folder creation and management
   - Search and filtering
   - Text file read/write helpers
 
-- [`src/core/services/index.js`](src/core/services/index.js) (70 lines)
+- [`src/core/services/index.js`](../src/core/services/index.js) (70 lines)
   - `ServiceFactory` - Creates adapter instances
   - Singleton pattern with reset capability
   - Dependency injection support for testing
@@ -141,8 +143,8 @@ Implemented dependency injection pattern for testability:
 Enhanced Jest configuration for new infrastructure:
 
 #### Changes:
-- Added [`tests-local/jest-setup.js`](tests-local/jest-setup.js)
-- Updated [`jest.config.js`](jest.config.js) to load both setup files
+- Added [`tests-local/jest-setup.js`](../tests-local/jest-setup.js)
+- Updated [`jest.config.js`](../jest.config.js) to load both setup files
 - Added global test utilities (`testUtils`)
 - Made mock classes available globally
 
@@ -159,7 +161,7 @@ global.testUtils = {
 
 Created new integration tests for CSV handler:
 
-- [`tests-local/csv-handler-integration.test.js`](tests-local/csv-handler-integration.test.js) (390 lines)
+- [`tests-local/csv-handler-integration.test.js`](../tests-local/csv-handler-integration.test.js) (390 lines)
   - 20 integration tests
   - Tests `findPendingJobCsvs()`, `importCsvToSpreadsheet()`, `importPendingJobCsvs()`, `writeJobsToCsv()`
   - 13/20 tests passing (65%)

@@ -4,7 +4,11 @@
 
 **Phase 1 (Security) + Phase 2 (Runtime bugs): FIXED.** 3 CRITICAL security findings and 6 Critical code bugs resolved by bert. Re-verified by elmo, ernie, bird.
 
-**Remaining BLOCK items:** architecture (3 BLOCK), tests (zoe BLOCK, telly BLOCK), UI/UX (6 BLOCK), docs (21 BLOCK). Safe commit still blocked until these are addressed.
+**Phase 3 (UI/UX): FIXED.** 8 BLOCK items + 18 WARN items resolved by bert. Re-verified by bird. 0 BLOCK, 0 WARN remaining in UI.
+
+**Phase 4 (Docs): PARTIALLY FIXED.** 21 BLOCK items reduced to 5 unresolved after 2 iterations (abby + bert). Remaining: misnamed function references (`categorizeEmail` vs `categorizeEmails`), 43 broken internal links. These are logged below for future fix.
+
+**Architecture + Tests:** Not yet addressed. Remaining BLOCK items: architecture (3), tests (zoe BLOCK, telly BLOCK).
 
 ---
 
@@ -13,6 +17,18 @@
 | Iteration | Agent | Scope | Fixes Applied | Re-verified By | Result |
 |-----------|-------|-------|-------------|----------------|--------|
 | 1 | bert | Phase 1+2: 10 items | CRIT-sec 1-3 + CRIT-code 1-6 | elmo, ernie, bird | PASS (6/6 code), PASS (XSS), WARN (1 dead func remains) |
+| 2 | bert | Phase 3: UI/UX 6 BLOCK + WARNs | cloneNode(true), dedupe nav/CSS, remove nested scripts, aria-labels, dynamic categories | bird | PASS (0 BLOCK, 0 WARN) |
+| 3 | abby | Phase 4: Docs 7 BLOCK items | Removed src-modules/, renumbered steps, fixed test counts, marked historical docs, removed broken links, replaced non-existent funcs | prairie | BLOCK (5 remaining) |
+| 4 | bert | Phase 4: Docs 4 BLOCK + 1 WARN | Fixed addRetentionRule, processJobEmailsMain, writeJobsToCsv, removed sortEmails(), added missing docs to enumeration | prairie | BLOCK (5 remaining — 2 iterations exhausted) |
+
+### Unresolved BLOCKs (exhausted 2 fix iterations)
+
+**Docs:**
+1. `docs/INDEX.md:78` — `categorizeEmail()` should be `categorizeEmails()` (plural)
+2. `README.md` — remaining references to `createRetentionRule(rule)` in sections bert missed
+3. `README.md` — remaining references to `processNewJobAlerts()` in sections bert missed
+4. `README.md` — remaining references to `exportJobListingsToCsv()` in sections bert missed
+5. 43 broken internal relative links across 12 markdown files under `docs/` (missing `../` or subdirectory prefixes)
 
 ### Bert Fixes Detail
 

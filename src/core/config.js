@@ -15,6 +15,11 @@ const PROPERTY_KEYS = {
   ENABLE_DYNAMIC_CATEGORIES: "ENABLE_DYNAMIC_CATEGORIES",
 };
 
+// Global retention rules array. Centralized here to eliminate the dangerous
+// load-order dependency between dashboardController.js and
+// email-retention-manager.js (ARCH-BLOCK-01).
+var RETENTION_RULES = null;
+
 
 // Email Sorter Configuration
 const EMAIL_SORTER_CONFIG = {

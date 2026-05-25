@@ -1,3 +1,5 @@
+> **Historical — Phase 2 in-progress snapshot from 2025-10-04.** This document preserves the original progress report. Numbers and statuses reflect the state at that time, not the current codebase.
+
 # Phase 2 Progress Report - Job Finder Module Testing
 
 **Date**: 2025-10-04
@@ -17,8 +19,8 @@ Phase 2 focuses on achieving 100% test coverage for the Job Finder module. This 
 - **Total Test Suites**: 12 (9 passing, 2 failing, 1 skipped)
 
 ### Files Created:
-1. ✅ [`tests-local/csv-handler-integration.test.js`](tests-local/csv-handler-integration.test.js) - 20 tests (15 passing, 5 failing)
-2. ✅ [`tests-local/sheets-handler.test.js`](tests-local/sheets-handler.test.js) - 18 tests (10 passing, 8 failing)
+1. ✅ [`tests-local/csv-handler-integration.test.js`](../tests-local/csv-handler-integration.test.js) - 20 tests (15 passing, 5 failing)
+2. ✅ [`tests-local/sheets-handler.test.js`](../tests-local/sheets-handler.test.js) - 18 tests (10 passing, 8 failing)
 
 ### Infrastructure Improvements:
 1. ✅ Enhanced `MockDriveApp.searchFiles()` to handle complex Drive queries
