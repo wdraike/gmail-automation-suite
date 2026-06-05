@@ -30,20 +30,21 @@ beforeEach(() => {
     getScriptTimeZone: jest.fn(() => 'America/New_York')
   };
 
-  // Mock config
+  // Mock config — final 18-column set (Careers URL columns removed in Phase 1)
   global.JOB_FINDER_CONFIG = {
     ACTIVE_SHEET_NAME: 'Job Listings',
-    BACKUP_SHEET_NAME: 'Duplicates',
     SHEET_COLUMNS: [
-      'Company', 'Company Description', 'Job Title', 'Location',
+      'Company', 'Company Description', 'Job Title', 'Employment Type',
+      'Work Arrangement', 'Experience Level', 'Location',
       'Minimum Salary', 'Maximum Salary', 'Salary Period',
-      'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+      'Job URL', 'URL Status',
       'Email Received Date', 'Email Source', 'Date Added',
       'Interest', 'Email Title', 'Jobs Found In Email'
     ]
   };
 
-  global.getSpreadsheetId = jest.fn(() => 'test-spreadsheet-id');
+  // Production code resolves the spreadsheet id via getJobFinderSpreadsheetId
+  global.getJobFinderSpreadsheetId = jest.fn(() => 'test-spreadsheet-id');
 });
 
 // Mock setColumnWidths and formatJobRow before loading the module
@@ -55,9 +56,6 @@ const {
   setupSheetHeaders,
   formatDateTime,
   sanitizeString,
-  createJobSignature,
-  isDuplicateJob,
-  getExistingJobs,
   getJobStatistics
 } = require('../src/features/job-finder/sheets-handler');
 
@@ -100,34 +98,6 @@ describe('Sheets Handler - Unit Tests', () => {
     });
   });
 
-  describe('createJobSignature', () => {
-    it('should create consistent signature for same job', () => {
-      const sig1 = createJobSignature('Acme Corp', 'Engineer', 'NYC');
-      const sig2 = createJobSignature('Acme Corp', 'Engineer', 'NYC');
-
-      expect(sig1).toBe(sig2);
-    });
-
-    it('should create different signatures for different jobs', () => {
-      const sig1 = createJobSignature('Acme', 'Engineer', 'NYC');
-      const sig2 = createJobSignature('TechCo', 'Developer', 'SF');
-
-      expect(sig1).not.toBe(sig2);
-    });
-
-    it('should normalize whitespace and case', () => {
-      const sig1 = createJobSignature('ACME  CORP', 'engineer', 'New York');
-      const sig2 = createJobSignature('acme corp', 'Engineer', 'new york');
-
-      expect(sig1).toBe(sig2);
-    });
-
-    it('should handle null/undefined values', () => {
-      const sig = createJobSignature(null, undefined, '');
-      expect(sig).toBe('--');
-    });
-  });
-
   describe('setupSheetHeaders', () => {
     it('should set up headers with formatting', () => {
       const spreadsheet = new MockSpreadsheet('Test', 'test-id');
@@ -135,11 +105,13 @@ describe('Sheets Handler - Unit Tests', () => {
 
       setupSheetHeaders(sheet);
 
-      // Check headers were set
-      const headerRow = sheet.getRange(1, 1, 1, 17).getValues()[0];
+      // Check headers were set (18 columns, no Careers URL)
+      const headerRow = sheet.getRange(1, 1, 1, 18).getValues()[0];
       expect(headerRow[0]).toBe('Company');
       expect(headerRow[2]).toBe('Job Title');
-      expect(headerRow.length).toBe(17);
+      expect(headerRow.length).toBe(18);
+      expect(headerRow).not.toContain('Careers URL');
+      expect(headerRow).not.toContain('Careers URL Status');
 
       // Check frozen rows
       expect(sheet.getFrozenRows()).toBe(1);
@@ -160,7 +132,7 @@ describe('Sheets Handler - Unit Tests', () => {
       const sheet = spreadsheet.insertSheet('Job Listings');
       setupSheetHeaders(sheet);
 
-      const result = addJobToSpreadsheet(job, false);
+      const result = addJobToSpreadsheet(job);
 
       expect(result).toBe(true);
       expect(sheet.getLastRow()).toBe(2); // Header + 1 job
@@ -170,22 +142,41 @@ describe('Sheets Handler - Unit Tests', () => {
       expect(data[2]).toBe('Developer');
     });
 
-    it('should add duplicate to backup sheet', () => {
+    it('should write exactly 18 columns with no Careers URL data', () => {
+      const job = createJobData({ company: 'Test Corp', jobTitle: 'Developer' });
+
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+
+      addJobToSpreadsheet(job);
+
+      const row = sheet.getRange(2, 1, 1, 18).getValues()[0];
+      expect(row.length).toBe(18);
+      // careersUrl value from the fixture must NOT appear anywhere in the row
+      expect(row).not.toContain('https://example.com/careers');
+    });
+
+    it('should always write to the active sheet (no backup/duplicate routing)', () => {
       const job = createJobData({ company: 'Acme' });
 
       const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
       global.SpreadsheetApp.addSpreadsheet(spreadsheet);
 
-      const result = addJobToSpreadsheet(job, true);
+      const result = addJobToSpreadsheet(job);
 
       expect(result).toBe(true);
-      const duplicateSheet = spreadsheet.getSheetByName('Duplicates');
-      expect(duplicateSheet).toBeTruthy();
-      expect(duplicateSheet.getLastRow()).toBeGreaterThan(0);
+      const activeSheet = spreadsheet.getSheetByName('Job Listings');
+      expect(activeSheet).toBeTruthy();
+      expect(activeSheet.getLastRow()).toBeGreaterThan(0);
+      // No backup/duplicate sheet should ever be created
+      expect(spreadsheet.getSheetByName('Duplicates')).toBeFalsy();
+      expect(spreadsheet.getSheetByName('Duplicate Listings')).toBeFalsy();
     });
 
     it('should return false when no spreadsheet ID', () => {
-      global.getSpreadsheetId.mockReturnValue('');
+      global.getJobFinderSpreadsheetId.mockReturnValue('');
 
       const job = createJobData();
       const result = addJobToSpreadsheet(job);
@@ -203,70 +194,6 @@ describe('Sheets Handler - Unit Tests', () => {
 
       expect(result).toBe(false);
       expect(Logger.log).toHaveBeenCalledWith(expect.stringContaining('Error'));
-    });
-  });
-
-  describe('getExistingJobs', () => {
-    it('should retrieve all jobs from spreadsheet', () => {
-      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
-      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
-
-      const sheet = spreadsheet.insertSheet('Job Listings');
-      setupSheetHeaders(sheet);
-
-      // Add some jobs
-      const jobs = createJobBatch(3);
-      jobs.forEach(job => addJobToSpreadsheet(job));
-
-      const existingJobs = getExistingJobs();
-
-      expect(existingJobs.length).toBe(3);
-    });
-
-    it('should return empty array when sheet is empty', () => {
-      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
-      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
-      spreadsheet.insertSheet('Job Listings');
-
-      const existingJobs = getExistingJobs();
-
-      expect(Array.isArray(existingJobs)).toBe(true);
-      expect(existingJobs.length).toBe(0);
-    });
-  });
-
-  describe('isDuplicateJob', () => {
-    it('should detect duplicate jobs', () => {
-      const job1 = createJobData({ company: 'Acme', jobTitle: 'Engineer', location: 'NYC' });
-      const job2 = createJobData({ company: 'Acme', jobTitle: 'Engineer', location: 'NYC' });
-
-      const existingJobs = [
-        { signature: createJobSignature('Acme', 'Engineer', 'NYC') }
-      ];
-
-      const isDupe = isDuplicateJob(job2, existingJobs);
-
-      expect(isDupe).toBe(true);
-    });
-
-    it('should not flag unique jobs as duplicates', () => {
-      const job1 = createJobData({ company: 'Acme', jobTitle: 'Engineer', location: 'NYC' });
-      const job2 = createJobData({ company: 'TechCo', jobTitle: 'Developer', location: 'SF' });
-
-      const existingJobs = [
-        { signature: createJobSignature('Acme', 'Engineer', 'NYC') }
-      ];
-
-      const isDupe = isDuplicateJob(job2, existingJobs);
-
-      expect(isDupe).toBe(false);
-    });
-
-    it('should handle empty existing jobs list', () => {
-      const job = createJobData({ company: 'Acme', jobTitle: 'Engineer' });
-      const isDupe = isDuplicateJob(job, []);
-
-      expect(isDupe).toBe(false);
     });
   });
 

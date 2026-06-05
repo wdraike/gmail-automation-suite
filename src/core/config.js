@@ -55,7 +55,6 @@ const JOB_FINDER_CONFIG = {
 
   // Google Sheet details
   ACTIVE_SHEET_NAME: "Job Listings",
-  BACKUP_SHEET_NAME: "Duplicate Listings",
 
   // API rate limiting
   MAX_CALLS_PER_MINUTE: 15,
@@ -77,8 +76,6 @@ const JOB_FINDER_CONFIG = {
     "Salary Period",
     "Job URL",
     "URL Status",
-    "Careers URL",
-    "Careers URL Status",
     "Email Received Date",
     "Email Source",
     "Date Added",

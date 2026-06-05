@@ -6,14 +6,13 @@
 /**
  * Add a job to the spreadsheet
  * @param {Object} job - Job object with all details
- * @param {boolean} isDuplicate - Whether this is a duplicate
  * @param {Date} emailDate - Date the email was received
  * @param {string} emailSource - Source of the email
  * @param {string} emailTitle - Email subject line
  * @param {number} jobsInEmail - Total jobs found in the email
  * @returns {boolean} Success status
  */
-function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSource = '', emailTitle = '', jobsInEmail = 1) {
+function addJobToSpreadsheet(job, emailDate = null, emailSource = '', emailTitle = '', jobsInEmail = 1) {
   try {
     // Get the spreadsheet
     const spreadsheetId = getJobFinderSpreadsheetId();
@@ -21,9 +20,9 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
       Logger.log("No spreadsheet ID found");
       return false;
     }
-    
+
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    const sheetName = isDuplicate ? JOB_FINDER_CONFIG.BACKUP_SHEET_NAME : JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME;
+    const sheetName = JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME;
 
     Logger.log(`addJobToSpreadsheet: writing to spreadsheetId=${spreadsheetId} url=${spreadsheet.getUrl()} tab="${sheetName}"`);
 
@@ -62,10 +61,6 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
           return job["Job URL"] || "";
         case "URL Status":
           return job["URL Status"] || "";
-        case "Careers URL":
-          return job["Careers URL"] || "";
-        case "Careers URL Status":
-          return job["Careers URL Status"] || "";
         case "Email Received Date":
           return job["Email Received Date"] || (emailDate ? formatDateTime(emailDate) : "");
         case "Email Source":
@@ -89,8 +84,7 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
     // Format the new row
     const lastRow = sheet.getLastRow();
     Logger.log(`addJobToSpreadsheet: appended "${job["Job Title"] || ""}" @ "${job["Company"] || ""}" -> row ${lastRow} of tab "${sheetName}"`);
-    const range = sheet.getRange(lastRow, 1, 1, rowData.length);
-    
+
     // Apply formatting
     formatJobRow(sheet, lastRow);
     
@@ -148,8 +142,6 @@ function setColumnWidths(sheet, headers) {
     "Salary Period": 80,
     "Job URL": 200,
     "URL Status": 80,
-    "Careers URL": 200,
-    "Careers URL Status": 80,
     "Email Received Date": 120,
     "Email Source": 100,
     "Date Added": 120,
@@ -200,10 +192,9 @@ function formatJobRow(sheet, row) {
       }
     }
     
-    // Format URLs as hyperlinks
+    // Format Job URL as hyperlink
     const jobUrlCol = headers.indexOf("Job URL") + 1;
-    const careersUrlCol = headers.indexOf("Careers URL") + 1;
-    
+
     if (jobUrlCol > 0) {
       const urlCell = sheet.getRange(row, jobUrlCol);
       const url = urlCell.getValue();
@@ -211,89 +202,10 @@ function formatJobRow(sheet, row) {
         urlCell.setFormula(`=HYPERLINK("${url}","View Job")`);
       }
     }
-    
-    if (careersUrlCol > 0) {
-      const urlCell = sheet.getRange(row, careersUrlCol);
-      const url = urlCell.getValue();
-      if (url && url.startsWith("http")) {
-        urlCell.setFormula(`=HYPERLINK("${url}","Careers Page")`);
-      }
-    }
-    
+
   } catch (error) {
     Logger.log(`Error formatting job row: ${error}`);
   }
-}
-
-/**
- * Get existing jobs from spreadsheet for duplicate checking
- * @returns {Array} Array of existing job signatures
- */
-function getExistingJobs() {
-  try {
-    const spreadsheetId = getJobFinderSpreadsheetId();
-    if (!spreadsheetId) {
-      return [];
-    }
-    
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
-    
-    if (!sheet || sheet.getLastRow() <= 1) {
-      return [];
-    }
-    
-    // Get all data except headers
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    
-    // Find column indices
-    const companyCol = headers.indexOf("Company");
-    const titleCol = headers.indexOf("Job Title");
-    const locationCol = headers.indexOf("Location");
-    
-    // Create signatures for existing jobs
-    const existingJobs = data.map(row => ({
-      company: row[companyCol] || "",
-      title: row[titleCol] || "",
-      location: row[locationCol] || "",
-      signature: createJobSignature(row[companyCol], row[titleCol], row[locationCol])
-    }));
-    
-    return existingJobs;
-    
-  } catch (error) {
-    Logger.log(`Error getting existing jobs: ${error}`);
-    return [];
-  }
-}
-
-/**
- * Create a signature for a job for duplicate detection
- * @param {string} company - Company name
- * @param {string} title - Job title
- * @param {string} location - Location
- * @returns {string} Job signature
- */
-function createJobSignature(company, title, location) {
-  const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return `${normalize(company)}-${normalize(title)}-${normalize(location)}`;
-}
-
-/**
- * Check if a job already exists
- * @param {Object} job - Job to check
- * @param {Array} existingJobs - Array of existing jobs
- * @returns {boolean} True if duplicate
- */
-function isDuplicateJob(job, existingJobs) {
-  const jobSignature = createJobSignature(
-    job["Company"],
-    job["Job Title"],
-    job["Location"]
-  );
-  
-  return existingJobs.some(existing => existing.signature === jobSignature);
 }
 
 /**
@@ -360,66 +272,6 @@ function getJobStatistics() {
 }
 
 /**
- * Clean up duplicate entries in the spreadsheet
- * @returns {Object} Cleanup results
- */
-function cleanupDuplicates() {
-  try {
-    const spreadsheetId = getJobFinderSpreadsheetId();
-    if (!spreadsheetId) {
-      return { error: "No spreadsheet configured" };
-    }
-    
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
-    
-    if (!sheet || sheet.getLastRow() <= 1) {
-      return { duplicatesFound: 0, duplicatesRemoved: 0 };
-    }
-    
-    // Get all data
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    
-    // Find duplicates
-    const seen = new Set();
-    const duplicateRows = [];
-    
-    const companyCol = headers.indexOf("Company");
-    const titleCol = headers.indexOf("Job Title");
-    const locationCol = headers.indexOf("Location");
-    
-    data.forEach((row, index) => {
-      const signature = createJobSignature(
-        row[companyCol],
-        row[titleCol],
-        row[locationCol]
-      );
-      
-      if (seen.has(signature)) {
-        duplicateRows.push(index + 2); // +2 for header and 0-index
-      } else {
-        seen.add(signature);
-      }
-    });
-    
-    // Remove duplicates (from bottom to top to maintain indices)
-    duplicateRows.reverse().forEach(rowNum => {
-      sheet.deleteRow(rowNum);
-    });
-    
-    return {
-      duplicatesFound: duplicateRows.length,
-      duplicatesRemoved: duplicateRows.length
-    };
-    
-  } catch (error) {
-    Logger.log(`Error cleaning up duplicates: ${error}`);
-    return { error: error.toString() };
-  }
-}
-
-/**
  * Format date time for spreadsheet
  * @param {Date} date - Date to format
  * @returns {string} Formatted date string
@@ -459,11 +311,7 @@ if (typeof module !== 'undefined' && module.exports) {
     setupSheetHeaders,
     setColumnWidths,
     formatJobRow,
-    getExistingJobs,
-    createJobSignature,
-    isDuplicateJob,
     getJobStatistics,
-    cleanupDuplicates,
     formatDateTime,
     sanitizeString
   };

@@ -117,6 +117,30 @@ describe('Config Module - Local Tests', () => {
       expect(typeof API_SERVICE_CONFIG).toBe('object');
       expect(API_SERVICE_CONFIG.GEMINI_API_ENDPOINT).toContain('generativelanguage');
     });
+
+    // Regression lock for leg1-sheet-cleanup (Phase 1): the production sheet schema
+    // must be exactly 18 columns with the Careers URL columns removed, and the
+    // BACKUP_SHEET_NAME constant must no longer exist. This asserts the REAL config
+    // (config.test.js requires the actual module), not a test-local mock.
+    it('SHEET_COLUMNS is the final 18-column set with no Careers URL columns', () => {
+      const cols = JOB_FINDER_CONFIG.SHEET_COLUMNS;
+      expect(cols.length).toBe(18);
+      expect(cols).not.toContain('Careers URL');
+      expect(cols).not.toContain('Careers URL Status');
+      expect(cols).toEqual([
+        'Company', 'Company Description', 'Job Title', 'Employment Type',
+        'Work Arrangement', 'Experience Level', 'Location',
+        'Minimum Salary', 'Maximum Salary', 'Salary Period',
+        'Job URL', 'URL Status',
+        'Email Received Date', 'Email Source', 'Date Added',
+        'Interest', 'Email Title', 'Jobs Found In Email'
+      ]);
+    });
+
+    it('no longer defines BACKUP_SHEET_NAME (dedup/backup routing removed)', () => {
+      expect(JOB_FINDER_CONFIG.BACKUP_SHEET_NAME).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(JOB_FINDER_CONFIG, 'BACKUP_SHEET_NAME')).toBe(false);
+    });
   });
 
   describe('getSpreadsheetId', () => {

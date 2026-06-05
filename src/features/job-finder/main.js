@@ -347,7 +347,6 @@ function processOneEmail(thread, threadIndex, totalThreads) {
     for (const job of validJobs) {
       const added = addJobToSpreadsheet(
         job,
-        false,
         emailContent.date,
         emailContent.source,
         emailContent.subject,
@@ -477,18 +476,8 @@ function initializeJobFinder() {
       const sheet = spreadsheet.getActiveSheet();
       sheet.setName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
 
-      // Set up headers
-      const headers = [...JOB_FINDER_CONFIG.SHEET_COLUMNS];
-      if (!headers.includes("Email Title")) {
-        headers.push("Email Title");
-      }
-      if (!headers.includes("Jobs Found In Email")) {
-        headers.push("Jobs Found In Email");
-      }
-
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
-      sheet.setFrozenRows(1);
+      // Set up headers (single source of truth in sheets-handler.js)
+      setupSheetHeaders(sheet);
     }
 
     // Create required labels

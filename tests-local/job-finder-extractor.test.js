@@ -351,13 +351,14 @@ describe("extractor", () => {
       expect(result[0]["URL Status"]).toBe("Found");
     });
 
-    it("sets Careers URL Status to empty string when careersUrl is absent", () => {
+    it("does not emit Careers URL keys in validJobs", () => {
       global.callGeminiApi = jest.fn(() => ({
-        response: '[{"company":"Acme","jobTitle":"Engineer","careersUrl":""}]',
+        response: '[{"company":"Acme","jobTitle":"Engineer","careersUrl":"https://acme.com/careers"}]',
       }));
       const state = { processedJobs: [], isPartiallyProcessed: false };
       const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
-      expect(result[0]["Careers URL Status"]).toBe("");
+      expect(result[0]).not.toHaveProperty("Careers URL");
+      expect(result[0]).not.toHaveProperty("Careers URL Status");
     });
 
     it("location prompt instruction uses City/State or City/Country or Remote format", () => {
@@ -373,13 +374,12 @@ describe("extractor", () => {
       expect(promptArg).toMatch(/City, State.*City, Country.*Remote|City, Country.*City, State.*Remote/s);
     });
 
-    it("sets Careers URL Status to Found when careersUrl is present", () => {
-      global.callGeminiApi = jest.fn(() => ({
-        response: '[{"company":"Acme","jobTitle":"Engineer","careersUrl":"https://acme.com/careers"}]',
-      }));
+    it("does not include careersUrl in the prompt JSON shape", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
       const state = { processedJobs: [], isPartiallyProcessed: false };
-      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
-      expect(result[0]["Careers URL Status"]).toBe("Found");
+      extractor.extractJobDetailsSimple("We are hiring", [], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("careersUrl");
     });
   });
 

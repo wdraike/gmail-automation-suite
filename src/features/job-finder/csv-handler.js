@@ -284,7 +284,6 @@ function importCsvToSpreadsheet(csvFileId, testMode = false) {
           // Add to spreadsheet - use job object values
           const added = addJobToSpreadsheet(
             job,
-            false,
             job["Email Received Date"] ? new Date(job["Email Received Date"]) : new Date(),
             job["Email Source"] || "",
             job["Email Title"] || "",
