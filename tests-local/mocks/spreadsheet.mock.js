@@ -81,6 +81,21 @@ class MockRange {
     return this;
   }
 
+  /**
+   * Apply a row banding to this range. Records the banding on the owning sheet
+   * so tests can assert it was applied (mirrors Range.applyRowBanding in GAS).
+   * @param {string} theme - BandingTheme value
+   * @param {boolean} showHeader
+   * @param {boolean} showFooter
+   * @returns {MockBanding} the created banding
+   */
+  applyRowBanding(theme, showHeader = false, showFooter = false) {
+    const banding = new MockBanding(this, theme, showHeader, showFooter);
+    if (!this.sheet.bandings) this.sheet.bandings = [];
+    this.sheet.bandings.push(banding);
+    return banding;
+  }
+
   getRow() {
     return this.row;
   }
@@ -98,12 +113,51 @@ class MockRange {
   }
 }
 
+/**
+ * Mock of a Spreadsheet Banding object (Range.applyRowBanding return value).
+ */
+class MockBanding {
+  constructor(range, theme, showHeader, showFooter) {
+    this.range = range;
+    this.theme = theme;
+    this.showHeader = showHeader;
+    this.showFooter = showFooter;
+    this.removed = false;
+  }
+
+  getRange() {
+    return this.range;
+  }
+
+  /**
+   * Remove this banding from its owning sheet (mirrors Banding.remove in GAS).
+   */
+  remove() {
+    this.removed = true;
+    const sheet = this.range && this.range.sheet;
+    if (sheet && Array.isArray(sheet.bandings)) {
+      const idx = sheet.bandings.indexOf(this);
+      if (idx > -1) sheet.bandings.splice(idx, 1);
+    }
+    return this;
+  }
+}
+
 class MockSheet {
   constructor(name, spreadsheet) {
     this.name = name;
     this.spreadsheet = spreadsheet;
     this.data = [[]]; // 2D array of cell values
     this.frozen = { rows: 0, cols: 0 };
+    this.bandings = []; // recorded row bandings (see MockRange.applyRowBanding)
+  }
+
+  /**
+   * Return the bandings currently applied to this sheet (mirrors Sheet.getBandings).
+   * @returns {MockBanding[]}
+   */
+  getBandings() {
+    return this.bandings || [];
   }
 
   getName() {
@@ -113,17 +167,22 @@ class MockSheet {
   getRange(row, col, numRows = 1, numCols = 1) {
     const range = new MockRange(this, row, col, numRows, numCols);
 
-    // Get values from data grid
+    // Get values from data grid WITHOUT mutating it. Reading a range that
+    // extends beyond existing data (e.g. a full-grid getMaxRows() range) must
+    // not materialize phantom rows into this.data, otherwise getLastRow()/
+    // getLastColumn() would be inflated — real GAS getRange does not grow the grid.
     const values = [];
     for (let r = row - 1; r < row - 1 + numRows; r++) {
       const rowData = [];
+      const existingRow = this.data[r];
       for (let c = col - 1; c < col - 1 + numCols; c++) {
-        if (!this.data[r]) this.data[r] = [];
-        rowData.push(this.data[r][c] || '');
+        rowData.push((existingRow && existingRow[c]) || '');
       }
       values.push(rowData);
     }
-    range.setValues(values);
+    // Seed the range's own values snapshot WITHOUT writing back to the grid
+    // (range.setValues would re-materialize phantom rows for an over-wide read).
+    range.values = values;
 
     return range;
   }
@@ -161,6 +220,15 @@ class MockSheet {
       }
     });
     return maxCols;
+  }
+
+  /**
+   * Total number of rows in the sheet grid (mirrors Sheet.getMaxRows).
+   * Real GAS sheets default to ~1000 rows; the mock reports at least that many
+   * so banding/full-grid ranges behave like the live sheet.
+   */
+  getMaxRows() {
+    return Math.max(1000, this.data.length);
   }
 
   clear() {
@@ -343,9 +411,16 @@ class MockSpreadsheetApp {
   }
 }
 
+// Mirror of SpreadsheetApp.BandingTheme enum (only the value we use).
+const BandingTheme = {
+  LIGHT_GREY: 'LIGHT_GREY'
+};
+
 module.exports = {
   MockSpreadsheetApp,
   MockSpreadsheet,
   MockSheet,
-  MockRange
+  MockRange,
+  MockBanding,
+  BandingTheme
 };

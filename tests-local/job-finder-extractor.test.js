@@ -407,17 +407,70 @@ describe("extractor", () => {
   });
 
   describe("cleanSalaryValue", () => {
-    it("removes currency symbols and commas", () => {
-      expect(extractor.cleanSalaryValue("$120,000")).toBe("120000");
+    it("returns a Number (not a string) for currency-formatted input", () => {
+      const result = extractor.cleanSalaryValue("$120,000.00");
+      expect(result).toBe(120000);
+      expect(typeof result).toBe("number");
     });
 
-    it("trims .00 suffix", () => {
-      expect(extractor.cleanSalaryValue("100000.00")).toBe("100000");
+    it("returns a Number for plain comma-separated input", () => {
+      const result = extractor.cleanSalaryValue("120,000");
+      expect(result).toBe(120000);
+      expect(typeof result).toBe("number");
+    });
+
+    it("returns a Number when .00 suffix is present", () => {
+      const result = extractor.cleanSalaryValue("100000.00");
+      expect(result).toBe(100000);
+      expect(typeof result).toBe("number");
+    });
+
+    it("returns empty string for non-numeric text", () => {
+      expect(extractor.cleanSalaryValue("DOE")).toBe("");
+      expect(extractor.cleanSalaryValue("Competitive")).toBe("");
     });
 
     it("returns empty string for falsy input", () => {
       expect(extractor.cleanSalaryValue(null)).toBe("");
+      expect(extractor.cleanSalaryValue(undefined)).toBe("");
       expect(extractor.cleanSalaryValue("")).toBe("");
+    });
+
+    it("accepts a numeric Number input and returns it as a Number", () => {
+      const result = extractor.cleanSalaryValue(95000);
+      expect(result).toBe(95000);
+      expect(typeof result).toBe("number");
+    });
+  });
+
+  describe("normalizeLocation", () => {
+    it("returns empty string for falsy input", () => {
+      expect(extractor.normalizeLocation(null)).toBe("");
+      expect(extractor.normalizeLocation(undefined)).toBe("");
+      expect(extractor.normalizeLocation("")).toBe("");
+    });
+
+    it("trims surrounding whitespace", () => {
+      expect(extractor.normalizeLocation("Remote ")).toBe("Remote");
+      expect(extractor.normalizeLocation("  New York, NY  ")).toBe("New York, NY");
+    });
+
+    it("collapses internal whitespace to single spaces", () => {
+      expect(extractor.normalizeLocation("New    York,   NY")).toBe("New York, NY");
+    });
+
+    it("normalizes comma separators to ', '", () => {
+      expect(extractor.normalizeLocation("New York,NY")).toBe("New York, NY");
+      expect(extractor.normalizeLocation("San Francisco ,CA")).toBe("San Francisco, CA");
+    });
+
+    it("leaves an already-clean value unchanged", () => {
+      expect(extractor.normalizeLocation("Austin, TX")).toBe("Austin, TX");
+      expect(extractor.normalizeLocation("Remote")).toBe("Remote");
+    });
+
+    it("does not invent a location when none is given", () => {
+      expect(extractor.normalizeLocation("   ")).toBe("");
     });
   });
 

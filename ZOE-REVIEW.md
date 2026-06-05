@@ -1,32 +1,34 @@
-# Zoe Review — fix-gemini-429-pipeline — 2026-06-05
+# Zoe Review — 2026-06-05 (leg3 formatting cleanup — adversarial audit of Telly)
 
 ## Summary
-Tests are sound. No false passes. The assertions genuinely distinguish the new
-RATE_LIMIT_REACHED behavior from the old generic-error behavior, the "greedy
-branch" guard is real, and the masked-failure claim checks out. One minor
-coverage gap (WARN) for the `{success:true, response:undefined}` branch — does
-NOT block; it is not on the email-loss regression path.
+4 challenges probed empirically. Found + FIXED 1 false pass (no-striping test asserted only a single colour literal). 1 WARN backlog (normalizeLocation trailing/double-comma untested). cleanSalaryValue and the native-banding tests are robust and load-bearing. No remaining false passes.
 
 ## Telly Audit
 
 ### BLOCK Findings
-| # | Finding | Evidence | File | Remediation |
-|---|---------|----------|------|-------------|
-| — | None | — | — | — |
+| # | Finding | Evidence | Status |
+|---|---------|----------|--------|
+| — | None remaining after fix | — | — |
+
+### Fixed During Audit
+| # | Finding | Evidence | Fix |
+|---|---------|----------|-----|
+| 1 | FALSE PASS: "formatJobRow does NOT stripe" only asserted `'#f8f9fa'` absent. Mutation injecting `setBackground("#abcdef")` striping still PASSED. | sheets-handler.test.js no-striping test | Tightened to assert `bgColors.toHaveLength(0)` — ANY per-row background fails. Re-verified: passes on correct code, FAILS under different-colour striping mutation. |
 
 ### WARN Findings
-| # | Finding | Evidence | File | Remediation |
-|---|---------|----------|------|-------------|
-| 1 | The `{success:true, response:undefined/empty}` branch (extractor.js:60 `if (!result.response) return false`) has no dedicated test. It returns false (-> NoJobs), which is legitimate, not the loss bug — but it is an untested conditional. | extractor.js:60 | Backlog: add a test asserting `{success:true}` with no `response` returns false (not throw). Low priority. |
+| # | Finding | Evidence | Remediation |
+|---|---------|----------|-------------|
+| 1 | normalizeLocation trailing-comma ("Austin, " -> "Austin,") and double-comma ("A,,B" -> "A, , B") behavior is unspecified and untested. Not wrong per the conservative spec (separator standardization only, no dangling-comma stripping), and real Gemini output rarely has these. | direct node probe | Backlog: add edge tests or decide whether to strip dangling commas. |
 
-### PASS Verifications (adversarial points answered)
-| # | Challenge | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Does `toThrow('RATE_LIMIT_REACHED')` pass for the wrong reason? | PASS | Substring match. The OLD 429 path threw `"API returned status 429: ..."` which does NOT contain "RATE_LIMIT_REACHED". RED phase confirmed the prior `.toThrow('429')` assertion had to change. The assertion genuinely separates new from old. |
-| 2 | Is the generic-error test a real guard against an over-greedy branch? | PASS | api-service.test.js:446-449 uses `expect(err.message).not.toBe('RATE_LIMIT_REACHED')` (exact) AND `toContain('Bad request')`. If a future change made callGemini throw the sentinel for a 400, BOTH assertions fail. Real guard. |
-| 3 | Extractor non-RL test — does the double-call assertion hold? | PASS | extractor.test.js:46-60. Mock is a stable `jest.fn(() => ({success:false, error:'...Unexpected...'}))` returning the same object on both calls. `toThrow()` proves it throws; the second invocation captures `e.message` and asserts `not.toBe('RATE_LIMIT_REACHED')`. Meaningful. |
-| 4 | Did Telly mask a real failure as "pre-existing"? | PASS | Re-ran the 3 suites. All 10 failures are: Sheets Handler addJobToSpreadsheet/getExistingJobs/getJobStatistics, CSV Handler importPendingJobCsvs (5), Gmail Add-on createDashboardCard. NONE reference callGemini, isJobListingEmail, rate limiting, or 429. Unrelated to this change. Stash-verification trustworthy. |
-| 5 | Missing edge case enabling regression? | PARTIAL (see WARN-1) | The loss-bug regression paths (thrown RL, {success:false} RL, {success:false} non-RL, null) are all covered and assert throw-not-false. The only uncovered branch is the benign `{success:true, response:undefined}` -> returns false, which is correct legacy behavior, not the bug. |
+### PASS Verifications
+| # | Check | Evidence |
+|---|-------|----------|
+| 1 | cleanSalaryValue rejects partial-numeric | "120k","$120,000/yr","100000 USD","1.2.3","1e5","-50000" all -> "". Regex `/^\d+(\.\d+)?$/` is strict. |
+| 2 | cleanSalaryValue Number tests load-bearing | string-return mutation fails 4 typeof tests |
+| 3 | Native banding tests NOT mock artifacts | removing production applyRowBanding call fails both banding tests |
+| 4 | Banding idempotency load-bearing | removing the getBandings().remove() dedup fails the idempotency test |
+| 5 | normalizeLocation collapses tab/newline whitespace | "New\tYork,\nNY" -> "New York, NY" |
+| 6 | Full suite no new failures | 590p / 6f (pre-existing) / 9s |
 
 ## Status: PASS
 

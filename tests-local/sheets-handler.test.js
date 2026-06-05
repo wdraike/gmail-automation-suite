@@ -3,12 +3,13 @@
  * Tests spreadsheet operations for job listings
  */
 
-const { MockSpreadsheetApp, MockSpreadsheet, MockSheet, MockRange } = require('./mocks/spreadsheet.mock');
+const { MockSpreadsheetApp, MockSpreadsheet, MockSheet, MockRange, BandingTheme } = require('./mocks/spreadsheet.mock');
 const { createJobData, createJobBatch } = require('./fixtures/job-factory');
 
 // Setup mocks
 beforeEach(() => {
   global.SpreadsheetApp = new MockSpreadsheetApp();
+  global.SpreadsheetApp.BandingTheme = BandingTheme;
   global.Logger = { log: jest.fn() };
 
   // Mock Utilities
@@ -51,6 +52,7 @@ beforeEach(() => {
 global.setColumnWidths = jest.fn();
 global.formatJobRow = jest.fn();
 
+const sheetsHandler = require('../src/features/job-finder/sheets-handler');
 const {
   addJobToSpreadsheet,
   setupSheetHeaders,
@@ -58,7 +60,10 @@ const {
   sanitizeString,
   getJobStatistics,
   auditAndRepairSheetHeaders
-} = require('../src/features/job-finder/sheets-handler');
+} = sheetsHandler;
+// The real formatJobRow (the module-level global.formatJobRow above is only a stub
+// used to shadow addJobToSpreadsheet's internal call). Test the exported real fn.
+const realFormatJobRow = sheetsHandler.formatJobRow;
 
 // Final 18-column target (mirrors JOB_FINDER_CONFIG.SHEET_COLUMNS in beforeEach)
 const FINAL_COLUMNS = [
@@ -400,6 +405,67 @@ describe('Sheets Handler - Unit Tests', () => {
       const sheet = makeSheetWith(headersWithBlank, [row]);
 
       expect(() => auditAndRepairSheetHeaders(sheet)).toThrow(/cannot reconcile/i);
+    });
+  });
+
+  describe('row banding (native, applied once at header setup)', () => {
+    it('applies a single LIGHT_GREY row banding when headers are set up', () => {
+      const spreadsheet = new MockSpreadsheet('Test', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+
+      setupSheetHeaders(sheet);
+
+      const bandings = sheet.getBandings();
+      expect(bandings.length).toBe(1);
+      expect(bandings[0].theme).toBe(BandingTheme.LIGHT_GREY);
+      // header=true (banding aware of header row), footer=false
+      expect(bandings[0].showHeader).toBe(true);
+      expect(bandings[0].showFooter).toBe(false);
+    });
+
+    it('is idempotent — re-running setupSheetHeaders does not stack multiple bandings', () => {
+      const spreadsheet = new MockSpreadsheet('Test', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+
+      setupSheetHeaders(sheet);
+      setupSheetHeaders(sheet);
+      setupSheetHeaders(sheet);
+
+      expect(sheet.getBandings().length).toBe(1);
+    });
+  });
+
+  describe('formatJobRow — no per-row striping', () => {
+    it('does NOT set ANY per-row background (striping handled by native banding)', () => {
+      const spreadsheet = new MockSpreadsheet('Test', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+      // Append an even-numbered data row (the old code striped row % 2 === 0)
+      sheet.appendRow(FINAL_COLUMNS.map((h) => `v:${h}`)); // row 2 (even)
+
+      // Spy on every setBackground call across any range formatJobRow touches.
+      // Asserting on the COUNT (not a specific color literal) prevents a false
+      // pass where striping merely switched to a different colour.
+      const bgColors = [];
+      const origGetRange = sheet.getRange.bind(sheet);
+      jest.spyOn(sheet, 'getRange').mockImplementation((...args) => {
+        const r = origGetRange(...args);
+        const origSetBackground = r.setBackground.bind(r);
+        r.setBackground = jest.fn((color) => {
+          bgColors.push(color);
+          return origSetBackground(color);
+        });
+        return r;
+      });
+
+      realFormatJobRow(sheet, 2);
+
+      // formatJobRow must apply NO row background at all (any colour would be striping).
+      expect(bgColors).toHaveLength(0);
+      // And specifically not the old striping colour.
+      expect(bgColors).not.toContain('#f8f9fa');
+
+      sheet.getRange.mockRestore();
     });
   });
 });

@@ -346,8 +346,6 @@ function createCsvColumnMap(headers) {
     salaryPeriod: ["salary period", "pay period", "salary type"],
     jobUrl: ["job url", "url", "link", "job link", "apply link"],
     urlStatus: ["url status"],
-    careersUrl: ["careers url", "career url", "careers page"],
-    careersUrlStatus: ["careers url status"],
     emailReceivedDate: ["email received date", "received date", "email date"],
     emailSource: ["email source", "source", "from"],
     dateAdded: ["date added", "added date", "created date"],
@@ -393,8 +391,6 @@ function createJobFromCsvRow(row, columnMap) {
     "Salary Period": getValue("salaryPeriod") || "",
     "Job URL": getValue("jobUrl") || "",
     "URL Status": getValue("urlStatus") || (getValue("jobUrl") ? "Found" : "Not found"),
-    "Careers URL": getValue("careersUrl") || "",
-    "Careers URL Status": getValue("careersUrlStatus") || (getValue("careersUrl") ? "Found" : "Not found"),
     "Email Received Date": getValue("emailReceivedDate") || "",
     "Email Source": getValue("emailSource") || "",
     "Date Added": getValue("dateAdded") || "",
@@ -414,7 +410,10 @@ function convertJobsToCsv(jobs) {
     return "";
   }
 
-  // Define CSV columns - MUST match spreadsheet columns exactly
+  // Define CSV columns. Careers URL / Careers URL Status were removed to match
+  // the 18-column sheet shape (JOB_FINDER_CONFIG.SHEET_COLUMNS). Note: the CSV
+  // shape still omits Employment Type / Work Arrangement / Experience Level,
+  // which the sheet carries — that is a separate pre-existing divergence.
   const columns = [
     "Company",
     "Company Description",
@@ -425,8 +424,6 @@ function convertJobsToCsv(jobs) {
     "Salary Period",
     "Job URL",
     "URL Status",
-    "Careers URL",
-    "Careers URL Status",
     "Email Received Date",
     "Email Source",
     "Date Added",

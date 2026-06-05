@@ -1,9 +1,17 @@
 {
-  "leg_id": "fix-gemini-429-pipeline",
-  "intent": "Fix Gemini 429 handling: callGemini must throw RATE_LIMIT_REACHED on 429/503; isJobListingEmail precheck must not archive emails as no-jobs on API failure — queue them instead",
-  "scope": "src/core/api-service.js, src/features/job-finder/extractor.js, tests-local/",
+  "leg_id": "leg3-formatting-cleanup",
+  "intent": "Phase 3 formatting normalization (salary as Number, native row banding, location normalization) + carried-forward Leg 1 alignment cleanup (remove Careers URL cols from csv-handler.js, test-csv-parsing.js)",
+  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/sheets-handler.js, src/features/job-finder/csv-handler.js, src/dev/test-csv-parsing.js, tests-local/",
   "status": "complete",
   "verdict": "WARN",
+  "plan_file": ".planning/PLAN-sheet-alignment-cleanup.md",
+  "test_gate": "jest suite GREEN for touched files before commit; baseline 577 pass / 6 fail / 9 skip — no new failures",
+  "jest_before": "577 passed / 6 failed / 9 skipped",
+  "jest_after": "590 passed / 6 failed / 9 skipped",
+  "backlog_items": [
+    "addJobToSpreadsheet rowData `|| \"\"` coerces numeric 0 salary to \"\" (sheets-handler.js:54-57)",
+    "normalizeLocation trailing/double-comma behavior untested (extractor.js)"
+  ],
   "opened": "2026-06-05T00:00:00Z",
   "last_update": "2026-06-05T00:00:00Z"
 }

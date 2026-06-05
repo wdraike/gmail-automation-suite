@@ -114,10 +114,20 @@ function setupSheetHeaders(sheet) {
     
     // Freeze header row
     sheet.setFrozenRows(1);
-    
+
+    // Apply native row banding ONCE (idempotent). Native banding auto-maintains
+    // the alternating stripes after row inserts/deletes, unlike a per-row
+    // row % 2 background which desyncs once any row is removed. Remove any
+    // existing banding first to avoid "range already has banding" errors and to
+    // keep this call idempotent across re-runs.
+    const fullRange = sheet.getRange(1, 1, sheet.getMaxRows(), headers.length);
+    const existingBandings = sheet.getBandings();
+    existingBandings.forEach(banding => banding.remove());
+    fullRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+
     // Set column widths
     setColumnWidths(sheet, headers);
-    
+
   } catch (error) {
     Logger.log(`Error setting up sheet headers: ${error}`);
   }
@@ -271,13 +281,11 @@ function setColumnWidths(sheet, headers) {
 function formatJobRow(sheet, row) {
   try {
     const lastColumn = sheet.getLastColumn();
-    const range = sheet.getRange(row, 1, 1, lastColumn);
-    
-    // Alternate row colors
-    if (row % 2 === 0) {
-      range.setBackground("#f8f9fa");
-    }
-    
+
+    // Row striping is handled once by native row banding in setupSheetHeaders
+    // (SpreadsheetApp.BandingTheme.LIGHT_GREY). A per-row row % 2 background was
+    // removed here because it desyncs after any row is deleted.
+
     // Format salary columns
     const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
     const minSalaryCol = headers.indexOf("Minimum Salary") + 1;

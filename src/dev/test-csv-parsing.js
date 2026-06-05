@@ -3,8 +3,8 @@
  */
 function testCsvParsingWithQuotes() {
   // Test case with quoted commas (exactly like our real CSV)
-  const testCsv = 'Company,Company Description,Job Title,Location,Minimum Salary,Maximum Salary,Salary Period,Job URL,URL Status,Careers URL,Careers URL Status,Email Received Date,Email Source,Date Added,Interest,Email Title,Jobs Found In Email\n' +
-    'Capital One,,"Director, Technical Program Manager (Integrations)","Richmond, VA",,,,,Not found,,Inferred,2025-10-02 21:58:52,indeed,2025-10-04 10:22:31,,"Capital One is hiring for Director, Technical Program Manager. 5 more jobs in Richmond, VA.",6';
+  const testCsv = 'Company,Company Description,Job Title,Location,Minimum Salary,Maximum Salary,Salary Period,Job URL,URL Status,Email Received Date,Email Source,Date Added,Interest,Email Title,Jobs Found In Email\n' +
+    'Capital One,,"Director, Technical Program Manager (Integrations)","Richmond, VA",,,,,Not found,2025-10-02 21:58:52,indeed,2025-10-04 10:22:31,,"Capital One is hiring for Director, Technical Program Manager. 5 more jobs in Richmond, VA.",6';
 
   Logger.log('=== Testing Utilities.parseCsv() ===');
   Logger.log('Test CSV:');
@@ -18,7 +18,7 @@ function testCsvParsingWithQuotes() {
   Logger.log(`Data row has ${rows[1].length} columns`);
   Logger.log('');
 
-  Logger.log('Expected: 17 columns per row');
+  Logger.log('Expected: 15 columns per row');
   Logger.log('');
 
   Logger.log('Data row values:');
@@ -31,8 +31,8 @@ function testCsvParsingWithQuotes() {
   Logger.log(`  Company (col 0): "${rows[1][0]}"`);
   Logger.log(`  Job Title (col 2): "${rows[1][2]}"`);
   Logger.log(`  Location (col 3): "${rows[1][3]}"`);
-  Logger.log(`  Email Title (col 15): "${rows[1][15]}"`);
-  Logger.log(`  Jobs Found (col 16): "${rows[1][16]}"`);
+  Logger.log(`  Email Title (col 13): "${rows[1][13]}"`);
+  Logger.log(`  Jobs Found (col 14): "${rows[1][14]}"`);
 }
 
 /**

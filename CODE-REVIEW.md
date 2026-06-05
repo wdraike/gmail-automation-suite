@@ -1,10 +1,7 @@
-# Code Review — fix-gemini-429-pipeline — 2026-06-05
+# Code Review — job-finder Phase 3 formatting cleanup (leg3) — 2026-06-05
 
 ## Summary
-Ship-ready. The 429/503 handling is correct and the precheck no longer swallows
-API failures into a false "no jobs" (the root cause of silent email loss). No
-unapproved fallbacks were introduced — both functions FAIL LOUDLY or surface
-RATE_LIMIT_REACHED for the caller to queue. No Critical or Warning findings.
+Ship-ready. cleanSalaryValue now returns a typed Number (regex-gated) or "" with no fallback masking; normalizeLocation is conservative and never invents data; native row banding replaces the desync-prone per-row row%2 background and is applied idempotently; Careers URL columns removed cleanly from the CSV path. No Critical findings. One Warning (latent 0-salary coercion) deferred to backlog.
 
 ## Critical Findings (must fix before merge)
 | # | Finding | File:Line | Remediation |
@@ -14,33 +11,22 @@ RATE_LIMIT_REACHED for the caller to queue. No Critical or Warning findings.
 ## Warning Findings (fix this sprint)
 | # | Finding | File:Line | Remediation |
 |---|---------|-----------|-------------|
-| — | None | — | — |
+| 1 | `addJobToSpreadsheet` rowData uses `job["Minimum Salary"] || ""` / `job["Maximum Salary"] || ""`. Now that cleanSalaryValue returns a Number, a salary of `0` would coerce to "". Real salaries are >0 so not a live bug, but it is a latent type-coercion edge introduced by the string→Number change. | sheets-handler.js:54-57 | Backlog. Consider an explicit `=== "" ? "" : Number` guard rather than `||`. NOT fixed here — changing the coercion is an unapproved logic change outside this leg's scope. |
 
 ## Info / Suggestions
 | # | Finding | File:Line | Suggestion |
 |---|---------|-----------|------------|
-| 1 | `isRateLimitSignal` regex uses `\b429\b`/`\b503\b`, which could match a non-rate-limit error message that happens to contain those bare numbers, causing it to be treated as rate-limited (queued/retried). | extractor.js:26 | Acceptable: on the `{success:false}` path the alternative is a genuine API failure, and queue-for-retry is the safe, non-data-losing choice. No action required. |
-| 2 | callGemini throws RATE_LIMIT_REACHED for 503 (server overload) which is technically "unavailable" not "rate limit", but is routed through the same backoff path. | api-service.js:433 | Intentional and correct — 503 is transient and benefits from the same exponential backoff. Comment documents this. |
-| 3 | The `{success:false}` non-rate-limit branch throws a descriptive error; processOneEmail's generic catch marks the thread processed (no retry loop) without marking NoJobs. | extractor.js:52 | Confirmed correct against main.js:369-386 — thrown non-RL error does NOT archive as NoJobs. |
-
-## Trace Verification
-- callGemini (429/503) throws RATE_LIMIT_REACHED -> callGeminiWithRateLimiting
-  catch (api-service.js:235) sets backoff and re-throws -> callGeminiApi catch
-  (api-service.js:157) returns `{success:false, error:"Error: RATE_LIMIT_REACHED"}`.
-- isJobListingEmail `{success:false}` branch matches isRateLimitSignal
-  -> throws RATE_LIMIT_REACHED -> processOneEmail catch (main.js:373) calls
-  markEmailAsRateLimited + re-throws to stop the batch. Email is QUEUED, not lost.
-- Genuine "NO" -> `{success:true, response:"NO"}` -> returns false -> markEmailAsNoJobs
-  (legitimate). Behavior preserved.
+| 1 | CSV column shape (15) still omits Employment Type / Work Arrangement / Experience Level that the 18-col sheet carries. Documented inline. | csv-handler.js:413 | Separate pre-existing divergence; out of leg3 scope. |
+| 2 | Native banding range uses getMaxRows() (full grid) — correct for GAS so future appended rows are striped. Mock getMaxRows returns max(1000, data.length) to mirror live default. | sheets-handler.js:123 | No change. |
 
 ## Checklist Status
-- [x] Complexity — PASS (small, localized changes)
-- [x] Error handling — PASS (fails loudly / queues; no swallowed errors)
-- [x] Test coverage — PASS (RED-first tests added for all new branches)
-- [x] Observability — PASS (Logger.log retained on the re-throw path)
-- [x] Scalability — PASS (no I/O / loop changes)
-- [x] No unapproved fallbacks — PASS (no `|| false` / `?? default` added)
-- [x] Dead code — PASS
+- [x] Complexity — PASS (small pure helpers; setupSheetHeaders still single-responsibility)
+- [x] Error handling — PASS (setupSheetHeaders banding inside existing try/catch; helpers guard null/undefined/"")
+- [x] Test coverage — PASS (13 net-new tests: salary type, normalizeLocation, banding once+idempotent, no-striping, csv careers-drop)
+- [x] Observability — PASS (existing Logger.log paths unchanged)
+- [x] Scalability — PASS (banding applied once, not per row)
+- [x] No-fallback discipline — PASS (no new fallbacks; one pre-existing latent `||` coercion flagged WARN, not papered over)
+- [x] Dead code — PASS (careers columns fully removed across map, row builder, exporter, dev script)
 
 ## Status: PASS
 

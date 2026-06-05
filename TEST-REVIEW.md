@@ -1,55 +1,35 @@
-# Test Review — fix-gemini-429-pipeline — 2026-06-05
+# Test Review — job-finder Phase 3 formatting cleanup (leg3) — 2026-06-05
 
 ## Summary
-129 passed, 1 skipped, 0 failed across the 3 in-scope suites. RED-first TDD
-confirmed (8 tests failed against pre-fix code, all green after). New tests
-exercise every changed branch and assert the correct sentinel (RATE_LIMIT_REACHED)
-vs. genuine NO behavior. No tests were deleted that should remain.
+590 passed / 6 failed / 9 skipped (full suite). Baseline was 577/6/9 → +13 net-new passing tests, ZERO new failures. The 6 failures are pre-existing (gmail-addon createDashboardCard ×1; csv-handler-integration importPendingJobCsvs ×5 — props.setProperty mock gap), unrelated to leg3. New tests confirmed load-bearing via mutation checks.
 
-## Test Results (in-scope)
+## Test Results
 
 | Suite | Tests | Passed | Failed | Skipped |
 |-------|-------|--------|--------|---------|
-| tests-local/api-service.test.js | — | all | 0 | 1 |
-| tests-local/job-finder-extractor.test.js | — | all | 0 | 0 |
-| tests-local/job-finder-main.test.js | — | all | 0 | 0 |
-| **Total** | **130** | **129** | **0** | **1** |
+| job-finder-extractor.test.js + sheets-handler.test.js + csv-handler.test.js | 121 | 121 | 0 | — |
+| Full suite | 605 | 590 | 6 (pre-existing) | 9 |
 
-## New Tests Verified
+## New / Changed Tests (13 net new)
+- cleanSalaryValue (6): Number for "$120,000.00", "120,000", "100000.00", 95000; "" for "DOE"/"Competitive"/null/undefined/""; typeof===number asserted.
+- normalizeLocation (6): falsy→""; whitespace-only→""; trim; collapse internal whitespace; ", " separator normalization; already-clean unchanged.
+- setupSheetHeaders banding (2): exactly 1 LIGHT_GREY banding (header=true, footer=false); idempotent across 3 calls.
+- formatJobRow (1): does NOT apply '#f8f9fa' per-row striping background.
+- csv-handler updates: createCsvColumnMap drops careers (+explicit "does NOT map Careers URL" test); convertJobsToCsv 15-col no-careers header; createJobFromCsvRow asserts no Careers URL/Status props.
 
-### api-service.test.js — callGemini error cases
-| Test | Exercises | Asserts |
-|------|-----------|---------|
-| 429 -> RATE_LIMIT_REACHED | responseCode 429 branch | throws "RATE_LIMIT_REACHED" |
-| 503 -> RATE_LIMIT_REACHED | responseCode 503 branch | throws "RATE_LIMIT_REACHED" |
-| body code 429 (200 status) | jsonResponse.error.code===429 | throws "RATE_LIMIT_REACHED" |
-| RESOURCE_EXHAUSTED (200) | jsonResponse.error.status branch | throws "RATE_LIMIT_REACHED" |
-| generic non-RL error body | error.code 400 / INVALID_ARGUMENT | throws, message != RATE_LIMIT_REACHED, contains "Bad request" |
+## Load-Bearing Verification (mutation checks)
+| Mutation | Result |
+|----------|--------|
+| cleanSalaryValue returns string instead of Number | 4 typeof tests FAIL (as required) |
+| setupSheetHeaders skips removing existing bandings | idempotency test FAILS (as required) |
 
-### job-finder-extractor.test.js — isJobListingEmail
-| Test | Exercises | Asserts |
-|------|-----------|---------|
-| thrown RATE_LIMIT_REACHED | catch + isRateLimitSignal | throws "RATE_LIMIT_REACHED" |
-| {success:false, error:'...429...'} | failure branch + isRateLimitSignal | throws "RATE_LIMIT_REACHED" |
-| non-RL {success:false} | failure branch fall-through | throws, message != RATE_LIMIT_REACHED |
-| null result | `!result` branch | throws |
-| {success:true,response:'NO'} | success branch | returns false |
-| (retained) YES / whitespace YES / NO / 2000-char truncation | success branch | unchanged behavior |
+Both reverted cleanly; suites green after restore. Tests are not tautological.
 
-### job-finder-main.test.js (end-to-end path, retained)
-- "throws RATE_LIMIT_REACHED on 429 error" confirms processOneEmail queues the
-  thread (markEmailAsRateLimited) and re-throws to stop the batch — i.e. the
-  email is NOT archived as no-jobs.
-
-## Out-of-Scope Pre-Existing Failures (NOT introduced by this change)
-| Suite | Status | Note |
-|-------|--------|------|
-| gmail-addon.test.js | 10 failures total across these 3 | Verified pre-existing on baseline via `git stash` — identical failures with the fix removed. Out of scope for this bugfix. |
-| sheets-handler.test.js | (included above) | Pre-existing |
-| csv-handler-integration.test.js | (included above) | Pre-existing |
-
-## Coverage Gaps
-None for the changed code — every new conditional branch has a dedicated test.
+## Failed Tests (pre-existing, NOT introduced)
+| Test | File | Note |
+|------|------|------|
+| createDashboardCard | gmail-addon.test.js | baseline failure |
+| importPendingJobCsvs ×5 | csv-handler-integration.test.js | baseline failure (props.setProperty mock) |
 
 ## Status: PASS
 

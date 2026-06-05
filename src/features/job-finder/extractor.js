@@ -305,7 +305,7 @@ JSON ARRAY:`;
           "Company": job.company || job.Company || "Unknown",
           "Company Description": job.companyDescription || job["Company Description"] || "",
           "Job Title": job.jobTitle || job["Job Title"] || "Unknown Position",
-          "Location": job.location || job.Location || "",
+          "Location": normalizeLocation(job.location || job.Location || ""),
           "Minimum Salary": cleanSalaryValue(job.minSalary || job["Minimum Salary"]),
           "Maximum Salary": cleanSalaryValue(job.maxSalary || job["Maximum Salary"]),
           "Salary Period": job.salaryPeriod || job["Salary Period"] || "",
@@ -480,21 +480,57 @@ function isValidJobListing(job) {
 }
 
 /**
- * Clean salary value
+ * Clean salary value.
+ *
+ * Returns a JavaScript Number when the cleaned value is fully numeric (so the
+ * $#,##0 cell number-format applies and numeric sort works), or "" (empty
+ * string) when the value is missing or non-numeric (e.g. "DOE", "Competitive").
+ *
  * @param {*} salary - Raw salary value
- * @returns {string} Cleaned salary value
+ * @returns {number|string} A Number for numeric salaries, otherwise ""
  */
 function cleanSalaryValue(salary) {
-  if (!salary) return "";
-  
-  // Convert to string and clean
-  const salaryStr = salary.toString().trim();
-  
-  // Remove currency symbols and clean up
-  return salaryStr
+  if (salary === null || salary === undefined || salary === "") return "";
+
+  // Convert to string and strip currency symbols / thousands separators.
+  const cleaned = salary
+    .toString()
+    .trim()
     .replace(/[$,]/g, '')
-    .replace(/\.00$/, '')
     .trim();
+
+  if (cleaned === "") return "";
+
+  // Only treat as a salary if the whole string is a number (optionally decimal).
+  if (!/^\d+(\.\d+)?$/.test(cleaned)) return "";
+
+  return Number(cleaned);
+}
+
+/**
+ * Normalize a location string conservatively.
+ *
+ * Trims, collapses runs of internal whitespace to a single space, and
+ * standardizes comma separators to ", " (e.g. "New York,NY" -> "New York, NY").
+ * Does NOT invent or guess a location: an empty / whitespace-only input
+ * returns "".
+ *
+ * @param {*} str - Raw location value
+ * @returns {string} Normalized location, or "" when none
+ */
+function normalizeLocation(str) {
+  if (str === null || str === undefined) return "";
+
+  let s = str.toString().trim();
+  if (s === "") return "";
+
+  // Collapse any internal whitespace runs to a single space.
+  s = s.replace(/\s+/g, ' ');
+
+  // Standardize comma separators to ", " (handles "A,B", "A ,B", "A , B").
+  s = s.replace(/\s*,\s*/g, ', ');
+
+  return s.trim();
 }
 
 /**
@@ -576,6 +612,7 @@ if (typeof module !== 'undefined' && module.exports) {
     extractTextFromHtml,
     isValidJobListing,
     cleanSalaryValue,
+    normalizeLocation,
     extractEmailSource,
     logJobFinderGeminiInteraction
   };

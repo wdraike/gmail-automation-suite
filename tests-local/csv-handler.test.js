@@ -111,7 +111,7 @@ describe('CSV Column Mapping', () => {
       expect(map.jobsFoundInEmail).toBe(2);
     });
 
-    it('should correctly map all 17 standard columns', () => {
+    it('should correctly map all 15 standard columns (no Careers URL)', () => {
       const headers = [
         'Company',
         'Company Description',
@@ -122,8 +122,6 @@ describe('CSV Column Mapping', () => {
         'Salary Period',
         'Job URL',
         'URL Status',
-        'Careers URL',
-        'Careers URL Status',
         'Email Received Date',
         'Email Source',
         'Date Added',
@@ -144,14 +142,20 @@ describe('CSV Column Mapping', () => {
       expect(map.salaryPeriod).toBe(6);
       expect(map.jobUrl).toBe(7);
       expect(map.urlStatus).toBe(8);
-      expect(map.careersUrl).toBe(9);
-      expect(map.careersUrlStatus).toBe(10);
-      expect(map.emailReceivedDate).toBe(11);
-      expect(map.emailSource).toBe(12);
-      expect(map.dateAdded).toBe(13);
-      expect(map.interest).toBe(14);
-      expect(map.emailTitle).toBe(15);
-      expect(map.jobsFoundInEmail).toBe(16);
+      expect(map.emailReceivedDate).toBe(9);
+      expect(map.emailSource).toBe(10);
+      expect(map.dateAdded).toBe(11);
+      expect(map.interest).toBe(12);
+      expect(map.emailTitle).toBe(13);
+      expect(map.jobsFoundInEmail).toBe(14);
+    });
+
+    it('should NOT map Careers URL columns (dropped from the 18-col sheet shape)', () => {
+      const headers = ['Careers URL', 'Careers URL Status'];
+      const map = createCsvColumnMap(headers);
+
+      expect(map.careersUrl).toBeUndefined();
+      expect(map.careersUrlStatus).toBeUndefined();
     });
 
     it('should handle missing headers gracefully', () => {
@@ -193,7 +197,7 @@ describe('CSV Generation', () => {
       expect(csv).toBe('');
     });
 
-    it('should generate header row with 17 columns', () => {
+    it('should generate header row with 15 columns (no Careers URL)', () => {
       const jobs = [{
         'Company': 'Test Corp',
         'Job Title': 'Engineer'
@@ -203,11 +207,13 @@ describe('CSV Generation', () => {
       const lines = csv.split('\n');
       const headers = lines[0].split(',');
 
-      expect(headers.length).toBe(17);
+      expect(headers.length).toBe(15);
       expect(headers[0]).toBe('Company');
       expect(headers[2]).toBe('Job Title');
-      expect(headers[15]).toBe('Email Title');
-      expect(headers[16]).toBe('Jobs Found In Email');
+      expect(headers[13]).toBe('Email Title');
+      expect(headers[14]).toBe('Jobs Found In Email');
+      expect(headers).not.toContain('Careers URL');
+      expect(headers).not.toContain('Careers URL Status');
     });
 
     it('should properly quote fields with commas', () => {
@@ -279,8 +285,8 @@ describe('CSV Generation', () => {
       // Verify order matches config, not job object property order
       expect(headers[0]).toBe('Company');
       expect(headers[2]).toBe('Job Title');
-      expect(headers[15]).toBe('Email Title');
-      expect(headers[16]).toBe('Jobs Found In Email');
+      expect(headers[13]).toBe('Email Title');
+      expect(headers[14]).toBe('Jobs Found In Email');
     });
   });
 });
@@ -342,18 +348,18 @@ describe('CSV Parsing', () => {
       expect(job['Job Title']).toBe('Engineer');
     });
 
-    it('should create all 17 fields for complete row', () => {
+    it('should create all 15 fields for complete row (no Careers URL)', () => {
       const headers = [
         'Company', 'Company Description', 'Job Title', 'Location',
         'Minimum Salary', 'Maximum Salary', 'Salary Period',
-        'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+        'Job URL', 'URL Status',
         'Email Received Date', 'Email Source', 'Date Added',
         'Interest', 'Email Title', 'Jobs Found In Email'
       ];
       const map = createCsvColumnMap(headers);
       const row = [
         'Capital One', '', 'Director', 'Richmond, VA',
-        '', '', '', '', 'Not found', '', 'Inferred',
+        '', '', '', '', 'Not found',
         '2025-10-02 21:58:52', 'indeed', '2025-10-04 10:22:31',
         '', 'Capital One is hiring', '6'
       ];
@@ -368,6 +374,9 @@ describe('CSV Parsing', () => {
       expect(job['Email Source']).toBe('indeed');
       expect(job['Email Title']).toBe('Capital One is hiring');
       expect(job['Jobs Found In Email']).toBe('6');
+      // Careers URL fields must NOT be produced
+      expect(job).not.toHaveProperty('Careers URL');
+      expect(job).not.toHaveProperty('Careers URL Status');
     });
   });
 });
@@ -384,8 +393,6 @@ describe('CSV Round-trip Integration', () => {
       'Salary Period': '',
       'Job URL': '',
       'URL Status': 'Not found',
-      'Careers URL': '',
-      'Careers URL Status': 'Inferred',
       'Email Received Date': '2025-10-02 21:58:52',
       'Email Source': 'indeed',
       'Date Added': '2025-10-04 10:22:31',
@@ -447,11 +454,11 @@ describe('CSV Format Validation', () => {
       expect(missingColumns).toContain('Email Source');
     });
 
-    it('should identify new format CSV (17 columns)', () => {
+    it('should identify new format CSV (15 columns, no Careers URL)', () => {
       const newHeaders = [
         'Company', 'Company Description', 'Job Title', 'Location',
         'Minimum Salary', 'Maximum Salary', 'Salary Period',
-        'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+        'Job URL', 'URL Status',
         'Email Received Date', 'Email Source', 'Date Added',
         'Interest', 'Email Title', 'Jobs Found In Email'
       ];
@@ -471,13 +478,13 @@ describe('Regression Tests - Bug Scenarios', () => {
     const headers = [
       'Company', 'Company Description', 'Job Title', 'Location',
       'Minimum Salary', 'Maximum Salary', 'Salary Period',
-      'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+      'Job URL', 'URL Status',
       'Email Received Date', 'Email Source', 'Date Added',
       'Interest', 'Email Title', 'Jobs Found In Email'
     ];
     const row = [
       'Capital One', '', 'Director', 'Richmond, VA',
-      '', '', '', '', 'Not found', '', 'Inferred',
+      '', '', '', '', 'Not found',
       '2025-10-02 21:58:52', 'indeed', '2025-10-04 10:22:31',
       '', 'Email title here', '6'
     ];
@@ -495,13 +502,13 @@ describe('Regression Tests - Bug Scenarios', () => {
     const headers = [
       'Company', 'Company Description', 'Job Title', 'Location',
       'Minimum Salary', 'Maximum Salary', 'Salary Period',
-      'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+      'Job URL', 'URL Status',
       'Email Received Date', 'Email Source', 'Date Added',
       'Interest', 'Email Title', 'Jobs Found In Email'
     ];
     const row = [
       'Capital One', '', 'Director', 'Richmond, VA',
-      '', '', '', '', 'Not found', '', 'Inferred',
+      '', '', '', '', 'Not found',
       '2025-10-02 21:58:52', 'indeed', '2025-10-04 10:22:31',
       '', 'Email title here', '6'
     ];
