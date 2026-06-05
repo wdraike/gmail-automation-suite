@@ -19,6 +19,7 @@ global.JOB_FINDER_CONFIG = {
 global.getJobFinderSourceLabel = jest.fn(() => "📬 JobAlerts");
 global.getJobFinderProcessedLabel = jest.fn(() => "📬 JobAlerts/Processed");
 global.getJobFinderRateLimitLabel = jest.fn(() => "📬 JobAlerts/RateLimited");
+global.getJobFinderNoJobsLabel = jest.fn(() => "📬 JobAlerts/NoJobs");
 
 global.GmailService = {
   labels: {
@@ -215,6 +216,76 @@ describe("job-finder main", () => {
       const result = main.processJobEmailsMain();
       expect(result.success).toBe(false);
       expect(result.message).toContain("rate limit");
+    });
+  });
+
+  describe("processOneEmail zero-job routing", () => {
+    function makeThread() {
+      return {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Jobs"),
+          getBody: jest.fn(() => "<p>No jobs here</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+    }
+
+    it("applies no-jobs label (not processed label) when extraction returns zero valid jobs", () => {
+      const thread = makeThread();
+      global.extractJobDetailsSimple = jest.fn(() => []);
+      global.isValidJobListing = jest.fn(() => false);
+
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
+      const processedLabelObj = { getName: jest.fn(() => "📬 JobAlerts/Processed") };
+
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        if (name === "📬 JobAlerts/Processed") return processedLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") return sourceLabelObj;
+        return null;
+      });
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(thread.addLabel).toHaveBeenCalledWith(noJobsLabelObj);
+      expect(thread.addLabel).not.toHaveBeenCalledWith(processedLabelObj);
+      expect(thread.moveToArchive).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.jobCount).toBe(0);
+      expect(global.addJobToSpreadsheet).not.toHaveBeenCalled();
+    });
+
+    it("markEmailAsNoJobs applies no-jobs label, removes source label, archives", () => {
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") return sourceLabelObj;
+        return null;
+      });
+
+      const thread = {
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+
+      main.markEmailAsNoJobs(thread);
+
+      expect(thread.addLabel).toHaveBeenCalledWith(noJobsLabelObj);
+      expect(thread.removeLabel).toHaveBeenCalledWith(sourceLabelObj);
+      expect(thread.moveToArchive).toHaveBeenCalled();
     });
   });
 

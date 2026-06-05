@@ -25,7 +25,9 @@ const {
   getJobFinderProcessedLabel,
   setJobFinderProcessedLabel,
   getJobFinderRateLimitLabel,
-  setJobFinderRateLimitLabel
+  setJobFinderRateLimitLabel,
+  getJobFinderNoJobsLabel,
+  setJobFinderNoJobsLabel
 } = require('../src/core/config.js');
 
 describe('Config Module - Local Tests', () => {
@@ -214,6 +216,7 @@ describe('Config Module - Local Tests', () => {
       PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_SOURCE_LABEL');
       PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_PROCESSED_LABEL');
       PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_RATE_LIMIT_LABEL');
+      PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_NO_JOBS_LABEL');
     });
 
     it('getJobFinderSourceLabel returns default when not set', () => {
@@ -264,6 +267,29 @@ describe('Config Module - Local Tests', () => {
       expect(setJobFinderSourceLabel('x')).toBe(false);
       expect(setJobFinderProcessedLabel('x')).toBe(false);
       expect(setJobFinderRateLimitLabel('x')).toBe(false);
+      PropertiesService.getScriptProperties = orig;
+    });
+
+    it('getJobFinderNoJobsLabel returns default when not set', () => {
+      expect(getJobFinderNoJobsLabel()).toBe('📬 JobAlerts/NoJobs');
+    });
+
+    it('getJobFinderNoJobsLabel returns stored value when set', () => {
+      setJobFinderNoJobsLabel('MyJobs/NoJobs');
+      expect(getJobFinderNoJobsLabel()).toBe('MyJobs/NoJobs');
+    });
+
+    it('setJobFinderNoJobsLabel returns true on success', () => {
+      expect(setJobFinderNoJobsLabel('MyJobs/NoJobs')).toBe(true);
+    });
+
+    it('setJobFinderNoJobsLabel returns false when properties storage throws', () => {
+      const orig = PropertiesService.getScriptProperties;
+      PropertiesService.getScriptProperties = jest.fn(() => ({
+        setProperty: jest.fn(() => { throw new Error('storage error'); }),
+        getProperty: jest.fn(() => null)
+      }));
+      expect(setJobFinderNoJobsLabel('x')).toBe(false);
       PropertiesService.getScriptProperties = orig;
     });
   });

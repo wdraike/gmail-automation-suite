@@ -16,6 +16,7 @@ const PROPERTY_KEYS = {
   JOB_FINDER_SOURCE_LABEL: "JOB_FINDER_SOURCE_LABEL",
   JOB_FINDER_PROCESSED_LABEL: "JOB_FINDER_PROCESSED_LABEL",
   JOB_FINDER_RATE_LIMIT_LABEL: "JOB_FINDER_RATE_LIMIT_LABEL",
+  JOB_FINDER_NO_JOBS_LABEL: "JOB_FINDER_NO_JOBS_LABEL",
 };
 
 // Global retention rules array. Centralized here to eliminate the dangerous
@@ -50,6 +51,7 @@ const JOB_FINDER_CONFIG = {
   SOURCE_LABEL: "📬 JobAlerts",
   PROCESSED_LABEL: "📬 JobAlerts/Processed",
   RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimitQueue",
+  NO_JOBS_LABEL: "📬 JobAlerts/NoJobs",
 
   // Google Sheet details
   ACTIVE_SHEET_NAME: "Job Listings",
@@ -528,6 +530,36 @@ function setJobFinderRateLimitLabel(label) {
   }
 }
 
+/**
+ * Gets the Gmail label applied to emails where no jobs were found.
+ * @returns {string} The label name.
+ */
+function getJobFinderNoJobsLabel() {
+  return (
+    PropertiesService.getScriptProperties().getProperty(
+      PROPERTY_KEYS.JOB_FINDER_NO_JOBS_LABEL
+    ) || JOB_FINDER_CONFIG.NO_JOBS_LABEL
+  );
+}
+
+/**
+ * Sets the Gmail label applied to emails where no jobs were found.
+ * @param {string} label - The label name to store.
+ * @returns {boolean} True if successful, false otherwise.
+ */
+function setJobFinderNoJobsLabel(label) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      PROPERTY_KEYS.JOB_FINDER_NO_JOBS_LABEL,
+      label
+    );
+    return true;
+  } catch (error) {
+    Logger.log(`Error setting job finder no-jobs label: ${error}`);
+    return false;
+  }
+}
+
 // Conditional exports for testing (works in both Node.js and Apps Script)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -553,6 +585,8 @@ if (typeof module !== 'undefined' && module.exports) {
     setJobFinderProcessedLabel,
     getJobFinderRateLimitLabel,
     setJobFinderRateLimitLabel,
+    getJobFinderNoJobsLabel,
+    setJobFinderNoJobsLabel,
     PROPERTY_KEYS,
     EMAIL_SORTER_CONFIG,
     JOB_FINDER_CONFIG,

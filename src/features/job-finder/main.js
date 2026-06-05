@@ -240,6 +240,27 @@ function markEmailAsProcessed(thread) {
 }
 
 /**
+ * Mark email thread as containing no valid jobs
+ * Adds no-jobs label, removes source label, archives thread
+ * @param {GmailThread} thread - Thread to mark
+ */
+function markEmailAsNoJobs(thread) {
+  try {
+    const noJobsLabel = GmailService.labels.getOrCreateLabel(getJobFinderNoJobsLabel());
+    const sourceLabel = GmailService.labels.getLabelSafe(getJobFinderSourceLabel());
+
+    thread.addLabel(noJobsLabel);
+    if (sourceLabel) thread.removeLabel(sourceLabel);
+    thread.moveToArchive();
+
+    Logger.log(`Marked thread as no-jobs`);
+
+  } catch (error) {
+    Logger.log(`Error marking thread as no-jobs: ${error}`);
+  }
+}
+
+/**
  * Mark email thread as rate-limited for later processing
  * @param {GmailThread} thread - Thread to mark
  */
@@ -290,6 +311,17 @@ function processOneEmail(thread, threadIndex, totalThreads) {
 
     // Write valid jobs directly to spreadsheet
     const validJobs = extractionResult.jobs.filter(job => isValidJobListing(job));
+
+    if (validJobs.length === 0) {
+      markEmailAsNoJobs(thread);
+      return {
+        success: true,
+        jobCount: 0,
+        jobs: [],
+        wasRateLimited: false
+      };
+    }
+
     let savedCount = 0;
     for (const job of validJobs) {
       const added = addJobToSpreadsheet(
@@ -538,6 +570,7 @@ if (typeof module !== 'undefined' && module.exports) {
     extractEmailContent,
     extractJobsFromEmail,
     markEmailAsProcessed,
+    markEmailAsNoJobs,
     markEmailAsRateLimited,
     processOneEmail,
     processEmailBatch,
