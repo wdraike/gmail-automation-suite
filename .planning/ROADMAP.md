@@ -58,3 +58,13 @@ Two sub-changes:
 | ID | Item |
 |----|------|
 | WARN-20 | Add regression test: assetsolutions.com URL NOT filtered (assets. fix false-positive guard) |
+| WARN-21 | Add test: isJobListingEmail `{success:true, response:undefined}` returns false (not throw) — extractor.js:60 benign branch (from fix-gemini-429-pipeline) |
+
+---
+
+## Phase 5 — Gemini 429 Pipeline Fix (Small)
+**Status:** Complete — fix-gemini-429-pipeline
+
+Gemini 429/503 errors were breaking the job-finder pipeline: empty Sheet + silently archived/lost emails. callGemini now throws RATE_LIMIT_REACHED on 429/503 and on RESOURCE_EXHAUSTED/error.code 429; isJobListingEmail precheck re-throws RATE_LIMIT_REACHED (and other API failures) instead of returning false, so emails are queued (markEmailAsRateLimited) rather than archived as no-jobs.
+
+**Files:** `src/core/api-service.js`, `src/features/job-finder/extractor.js`

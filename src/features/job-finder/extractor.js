@@ -20,14 +20,45 @@ const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
 function isJobListingEmail(emailBody) {
   const snippet = (emailBody || "").substring(0, 2000);
   const prompt = `Does this email contain job listings or job alerts? Reply with only YES or NO.\n\n${snippet}`;
+
+  // Matches rate-limit / quota / overload signals in an error string.
+  const isRateLimitSignal = (text) =>
+    /RATE_LIMIT_REACHED|RESOURCE_EXHAUSTED|rate limit|quota|\b429\b|\b503\b/i.test(
+      String(text)
+    );
+
+  let result;
   try {
-    const result = callGeminiApi(prompt, "precheck");
-    if (!result || !result.response) return false;
-    return result.response.trim().toUpperCase().startsWith("YES");
+    result = callGeminiApi(prompt, "precheck");
   } catch (e) {
+    // A thrown rate-limit signal must propagate as RATE_LIMIT_REACHED so the
+    // caller queues the email (markEmailAsRateLimited) instead of archiving it.
+    if (isRateLimitSignal(e && e.message)) {
+      throw new Error("RATE_LIMIT_REACHED");
+    }
+    // Any other thrown error must NOT be swallowed into a false "no jobs"
+    // (which would archive and lose the email). Re-throw and let the caller decide.
     Logger.log(`isJobListingEmail error: ${e}`);
-    return false;
+    throw e;
   }
+
+  // callGeminiApi returns {success:false, error} instead of throwing.
+  if (!result || result.success === false) {
+    if (result && isRateLimitSignal(result.error)) {
+      throw new Error("RATE_LIMIT_REACHED");
+    }
+    // Non-rate-limit failure (or a missing result): fail loudly rather than
+    // silently marking the email as no-jobs.
+    throw new Error(
+      `isJobListingEmail: precheck API call failed: ${
+        result ? result.error : "no result returned"
+      }`
+    );
+  }
+
+  // Genuine successful response: a missing/empty YES means NO.
+  if (!result.response) return false;
+  return result.response.trim().toUpperCase().startsWith("YES");
 }
 
 /**

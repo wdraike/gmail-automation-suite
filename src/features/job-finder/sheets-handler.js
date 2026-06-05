@@ -24,7 +24,9 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
     
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     const sheetName = isDuplicate ? JOB_FINDER_CONFIG.BACKUP_SHEET_NAME : JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME;
-    
+
+    Logger.log(`addJobToSpreadsheet: writing to spreadsheetId=${spreadsheetId} url=${spreadsheet.getUrl()} tab="${sheetName}"`);
+
     let sheet = spreadsheet.getSheetByName(sheetName);
     if (!sheet) {
       // Create the sheet if it doesn't exist
@@ -83,9 +85,10 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
     
     // Append the row
     sheet.appendRow(rowData);
-    
+
     // Format the new row
     const lastRow = sheet.getLastRow();
+    Logger.log(`addJobToSpreadsheet: appended "${job["Job Title"] || ""}" @ "${job["Company"] || ""}" -> row ${lastRow} of tab "${sheetName}"`);
     const range = sheet.getRange(lastRow, 1, 1, rowData.length);
     
     // Apply formatting

@@ -3,52 +3,52 @@
 ## Verdict: WARN
 
 ## Summary
-All WARN-16 through WARN-19 items resolved. 46/46 extractor tests pass, no regressions.
-One deferred backlog item: no regression test for `assetsolutions.com` false-positive from WARN-16 fix.
+Work complete and correct. The Gemini 429/503 pipeline fix is sound: rate-limit
+signals now surface as RATE_LIMIT_REACHED and the precheck queues emails instead
+of silently archiving them. 1 item deferred to backlog (minor untested benign
+branch). Ready to commit.
+
+## Work Type
+Bugfix — localized changes to two existing logic files (api-service.js,
+extractor.js) + their test files. Rubric dispatched: ernie -> telly -> zoe.
 
 ## Agent Findings
 
-### Ernie — PASS
-No critical or warning findings in this diff. WARN-16 (hostname-anchored regex for assets./phenom.)
-and WARN-17 (module-level constant hoisting) are correct and clean. Scalability win: constants
-no longer re-instantiated per call.
+### Ernie (code quality) — PASS
+- 0 Critical, 0 Warning. 3 Info notes (regex `\b429\b`/`\b503\b` queue-on-ambiguity
+  is the safe non-data-losing choice; 503 routed through backoff intentionally;
+  non-RL throw confirmed not to archive as NoJobs).
+- Confirmed no unapproved fallbacks: both functions FAIL LOUDLY / queue.
 
-### Telly — PASS
-46/46 tests pass (+4 new tests vs prior baseline). 4 new tests cover WARN-18 (go./email. anchor
-filter) and WARN-19 (go. URL filter) with regression guards. Pre-existing suite failures
-(10 tests in 3 unrelated suites) unchanged.
+### Telly (tests) — PASS
+- 129 passed, 1 skipped, 0 failed across api-service + extractor + job-finder-main.
+- RED-first confirmed (8 failing pre-fix). Every new branch has a dedicated test.
 
-| # | Check | Result |
-|---|-------|--------|
-| 1 | 46/46 extractor tests pass | PASS |
-| 2 | extractor.js statement coverage: 76.3%, branch: 78.2% | PASS |
-| 3 | All WARN-16 through WARN-19 changed lines covered by new tests | PASS |
-| 4 | No regressions vs baseline (560 passing pre-change → 564 passing post-change) | PASS |
-
-### Zoe — PASS (1 WARN)
-No false passes, no shallow assertions. All new test assertions check real prompt content.
-
-| # | Severity | Finding | File | Remediation |
-|---|----------|---------|------|-------------|
-| 1 | Warning | No regression test: `assetsolutions.com` URL NOT filtered by WARN-16 assets. fix (analogous to the WARN-14 `career.com` regression pattern) | tests-local/job-finder-extractor.test.js | Add: `it("does NOT filter assetsolutions.com URLs (WARN-16 regression)")` |
+### Zoe (adversarial test audit) — PASS (1 WARN)
+- Verified the RATE_LIMIT_REACHED assertions distinguish new from old behavior.
+- Verified the generic-error test is a real guard against an over-greedy branch.
+- Verified the 10 pre-existing failures (Sheets/CSV/Gmail-addon) are unrelated to
+  rate limiting — Telly did not mask a real failure.
+- WARN-1: `{success:true, response:undefined}` -> returns false branch is untested
+  (benign, not on the loss-bug path). Backlog.
 
 ## Fix Loop
-Not run — no blocking findings from any agent.
+- No fix iterations needed (no BLOCK findings).
 
 ## Completeness
-
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
-| Tests passing | PASS |
-| Docs updated (if API changed) | PASS (no API change) |
-| Security review run (if auth/payment) | PASS (N/A) |
+| Tests passing (in-scope) | PASS (129/130, 1 skipped, 0 fail) |
+| Docs updated (if API changed) | N/A (no external API/route change) |
+| Security review run (if auth/payment) | N/A (no security-sensitive files) |
+| No unapproved fallbacks | PASS |
+| Pre-existing failures unrelated | PASS (verified via stash) |
 
-## Backlog Items
-
+## Backlog Items (WARN)
 | Finding | File |
 |---------|------|
-| Add regression test: `assetsolutions.com` URL NOT filtered by WARN-16 assets. fix | tests-local/job-finder-extractor.test.js |
+| Add test: isJobListingEmail `{success:true, response:undefined}` returns false (not throw) | extractor.js:60 |
 
 ## Kermit Report
 Verdict: WARN

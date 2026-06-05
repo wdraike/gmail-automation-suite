@@ -1,41 +1,32 @@
-# Zoe Review — WARN-16 through WARN-19 Fixes — 2026-06-05
+# Zoe Review — fix-gemini-429-pipeline — 2026-06-05
 
 ## Summary
-46/46 tests pass. No false passes, no shallow assertions found. All 4 new tests assert real
-behavioral outcomes (URL presence/absence in Gemini prompt string), not just `toBeDefined()`.
-WARN-16 fix (assets./phenom. hostname anchoring) was probed manually across 8 boundary cases —
-all correct. One WARN finding: no test for `assets.` subdomain false-positive regression (the
-analogous gap to WARN-16 for the URL filter). Deferred — not a blocker.
+Tests are sound. No false passes. The assertions genuinely distinguish the new
+RATE_LIMIT_REACHED behavior from the old generic-error behavior, the "greedy
+branch" guard is real, and the masked-failure claim checks out. One minor
+coverage gap (WARN) for the `{success:true, response:undefined}` branch — does
+NOT block; it is not on the email-loss regression path.
 
 ## Telly Audit
 
 ### BLOCK Findings
-_None._
-
-### WARN Findings
-
 | # | Finding | Evidence | File | Remediation |
 |---|---------|----------|------|-------------|
-| 1 | No test for `assets.` subdomain filter regression (WARN-16 analog). The old `lower.includes('assets.')` would have filtered `assetsolutions.com` or `assets-cdn.jobs.com`. The new `/^assets\./i` regex fixes this, but there is no test asserting `https://assetsolutions.com/careers` passes through. Mirrors the WARN-14 regression test pattern. | tests-local/job-finder-extractor.test.js (missing) | extractor.js:117 | Add: `it("does NOT filter assetsolutions.com URLs (WARN-16 regression)")` |
+| — | None | — | — | — |
 
-### PASS Verifications
+### WARN Findings
+| # | Finding | Evidence | File | Remediation |
+|---|---------|----------|------|-------------|
+| 1 | The `{success:true, response:undefined/empty}` branch (extractor.js:60 `if (!result.response) return false`) has no dedicated test. It returns false (-> NoJobs), which is legitimate, not the loss bug — but it is an untested conditional. | extractor.js:60 | Backlog: add a test asserting `{success:true}` with no `response` returns false (not throw). Low priority. |
 
-| # | Check | Status |
-|---|-------|--------|
-| 1 | WARN-18: `go.example.com` anchor filtered — negative assertion on prompt string | PASS |
-| 2 | WARN-18: `email.example.com` anchor filtered — negative assertion on prompt string | PASS |
-| 3 | WARN-18 regression: `https://jobs.com/email-marketing` anchor KEPT — positive assertion verified | PASS |
-| 4 | WARN-19: `go.example.com` URL filtered — negative assertion on prompt string | PASS |
-| 5 | No `toBeDefined()`-only assertions — all 4 new tests check real prompt content | PASS |
-| 6 | No mock leakage — each test uses fresh `jest.fn()` with `beforeEach clearAllMocks` | PASS |
-| 7 | `assets.example.com/style.css` filtered; `myassets.com` kept; `jobs.com/assets/style.css` kept — manually probed | PASS |
-| 8 | `phenom.example.com` filtered; `myphenom.com` kept; `jobs.com/phenom-people/apply` kept — manually probed | PASS |
-| 9 | `google.com` NOT filtered by `go.` regex (go. not a subdomain of google.com) — probed | PASS |
-| 10 | `goodjobs.com` NOT filtered by `go.` regex — probed | PASS |
-| 11 | `go.greenhouse.io` filtered; `email.lever.co` filtered — probed both filter paths | PASS |
-| 12 | `company.com/careers/email-specialist` anchor KEPT (email in path, not subdomain) — probed | PASS |
-| 13 | `go.indeed.com` anchor filtered — probed | PASS |
-| 14 | All 46 tests pass on actual execution | PASS |
+### PASS Verifications (adversarial points answered)
+| # | Challenge | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Does `toThrow('RATE_LIMIT_REACHED')` pass for the wrong reason? | PASS | Substring match. The OLD 429 path threw `"API returned status 429: ..."` which does NOT contain "RATE_LIMIT_REACHED". RED phase confirmed the prior `.toThrow('429')` assertion had to change. The assertion genuinely separates new from old. |
+| 2 | Is the generic-error test a real guard against an over-greedy branch? | PASS | api-service.test.js:446-449 uses `expect(err.message).not.toBe('RATE_LIMIT_REACHED')` (exact) AND `toContain('Bad request')`. If a future change made callGemini throw the sentinel for a 400, BOTH assertions fail. Real guard. |
+| 3 | Extractor non-RL test — does the double-call assertion hold? | PASS | extractor.test.js:46-60. Mock is a stable `jest.fn(() => ({success:false, error:'...Unexpected...'}))` returning the same object on both calls. `toThrow()` proves it throws; the second invocation captures `e.message` and asserts `not.toBe('RATE_LIMIT_REACHED')`. Meaningful. |
+| 4 | Did Telly mask a real failure as "pre-existing"? | PASS | Re-ran the 3 suites. All 10 failures are: Sheets Handler addJobToSpreadsheet/getExistingJobs/getJobStatistics, CSV Handler importPendingJobCsvs (5), Gmail Add-on createDashboardCard. NONE reference callGemini, isJobListingEmail, rate limiting, or 429. Unrelated to this change. Stash-verification trustworthy. |
+| 5 | Missing edge case enabling regression? | PARTIAL (see WARN-1) | The loss-bug regression paths (thrown RL, {success:false} RL, {success:false} non-RL, null) are all covered and assert throw-not-false. The only uncovered branch is the benign `{success:true, response:undefined}` -> returns false, which is correct legacy behavior, not the bug. |
 
 ## Status: PASS
 

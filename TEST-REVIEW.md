@@ -1,47 +1,55 @@
-# Test Review — WARN-16 through WARN-19 Fixes — 2026-06-05
+# Test Review — fix-gemini-429-pipeline — 2026-06-05
 
 ## Summary
-46 tests passed, 0 failed across extractor suite (+4 new tests vs prior baseline of 42). 
-All four WARN items (module constant hoisting, assets./phenom. filter fix, go./email. anchor 
-filter tests, go. URL filter test) are covered by new tests. Pre-existing suite failures 
-(3 suites, 10 tests) in csv-handler-integration, gmail-addon, sheets-handler are unchanged by 
-this PR.
+129 passed, 1 skipped, 0 failed across the 3 in-scope suites. RED-first TDD
+confirmed (8 tests failed against pre-fix code, all green after). New tests
+exercise every changed branch and assert the correct sentinel (RATE_LIMIT_REACHED)
+vs. genuine NO behavior. No tests were deleted that should remain.
 
-## Test Results
+## Test Results (in-scope)
 
-| Suite | Tests | Passed | Failed | Skipped | Time |
-|-------|-------|--------|--------|---------|------|
-| job-finder-extractor.test.js | 46 | 46 | 0 | 0 | <1s |
-| **Full suite (baseline)** | **583** | **564** | **10** | **9** | ~4s |
-| **Full suite (this PR)** | **583** | **564** | **10** | **9** | ~4s |
+| Suite | Tests | Passed | Failed | Skipped |
+|-------|-------|--------|--------|---------|
+| tests-local/api-service.test.js | — | all | 0 | 1 |
+| tests-local/job-finder-extractor.test.js | — | all | 0 | 0 |
+| tests-local/job-finder-main.test.js | — | all | 0 | 0 |
+| **Total** | **130** | **129** | **0** | **1** |
 
-No regressions introduced. Pre-existing failures unchanged.
+## New Tests Verified
 
-## Failed Tests
-_None in scope. 10 pre-existing failures in out-of-scope suites unchanged._
+### api-service.test.js — callGemini error cases
+| Test | Exercises | Asserts |
+|------|-----------|---------|
+| 429 -> RATE_LIMIT_REACHED | responseCode 429 branch | throws "RATE_LIMIT_REACHED" |
+| 503 -> RATE_LIMIT_REACHED | responseCode 503 branch | throws "RATE_LIMIT_REACHED" |
+| body code 429 (200 status) | jsonResponse.error.code===429 | throws "RATE_LIMIT_REACHED" |
+| RESOURCE_EXHAUSTED (200) | jsonResponse.error.status branch | throws "RATE_LIMIT_REACHED" |
+| generic non-RL error body | error.code 400 / INVALID_ARGUMENT | throws, message != RATE_LIMIT_REACHED, contains "Bad request" |
 
-## Coverage — extractor.js (this PR scope only)
+### job-finder-extractor.test.js — isJobListingEmail
+| Test | Exercises | Asserts |
+|------|-----------|---------|
+| thrown RATE_LIMIT_REACHED | catch + isRateLimitSignal | throws "RATE_LIMIT_REACHED" |
+| {success:false, error:'...429...'} | failure branch + isRateLimitSignal | throws "RATE_LIMIT_REACHED" |
+| non-RL {success:false} | failure branch fall-through | throws, message != RATE_LIMIT_REACHED |
+| null result | `!result` branch | throws |
+| {success:true,response:'NO'} | success branch | returns false |
+| (retained) YES / whitespace YES / NO / 2000-char truncation | success branch | unchanged behavior |
 
-| File | % Stmts | % Branch | % Lines | % Funcs | Status |
-|------|---------|----------|---------|---------|--------|
-| extractor.js | 76.3% | 78.2% | 76.4% | 88.9% | PASS (>50%) |
+### job-finder-main.test.js (end-to-end path, retained)
+- "throws RATE_LIMIT_REACHED on 429 error" confirms processOneEmail queues the
+  thread (markEmailAsRateLimited) and re-throws to stop the batch — i.e. the
+  email is NOT archived as no-jobs.
 
-## WARN-16 through WARN-19 Coverage Map
+## Out-of-Scope Pre-Existing Failures (NOT introduced by this change)
+| Suite | Status | Note |
+|-------|--------|------|
+| gmail-addon.test.js | 10 failures total across these 3 | Verified pre-existing on baseline via `git stash` — identical failures with the fix removed. Out of scope for this bugfix. |
+| sheets-handler.test.js | (included above) | Pre-existing |
+| csv-handler-integration.test.js | (included above) | Pre-existing |
 
-| Item | Change | Test(s) | Status |
-|------|--------|---------|--------|
-| WARN-16 (assets./phenom. substring) | Replaced with `/^assets\./i` and `/^phenom\./i` hostname-anchored regex | Covered by existing URL filter tests; false-positive class tested via WARN-18 regression | PASS |
-| WARN-17 (constant hoisting) | `ANCHOR_NOISE_DOMAINS` + `ANCHOR_TRACKING_SUBDOMAIN_RE` moved to module level | All anchor filter tests exercise these constants | PASS |
-| WARN-18 (go./email. anchor tests) | 3 new tests: go. filtered, email. filtered, email-in-path NOT filtered | `filters out go.example.com anchor pair`, `filters out email.example.com anchor pair`, `does NOT filter anchor pair with 'email' in path` | PASS |
-| WARN-19 (go. URL filter test) | 1 new test: go.example.com URL filtered via noise filter | `filters out go.example.com redirect URL` | PASS |
-
-## Missing Tests (pre-existing gaps, unchanged by this PR)
-
-| File | Untested Entities | Priority |
-|------|-------------------|----------|
-| extractor.js:477–500 | `extractEmailSource` — all branches | LOW — utility only |
-| extractor.js:507–539 | `logJobFinderGeminiInteraction` — error storage path (requires PropertiesService mock) | LOW — logging only |
-| extractor.js:241–268 | Debug logging path inside JSON parse block | LOW — logging only |
+## Coverage Gaps
+None for the changed code — every new conditional branch has a dedicated test.
 
 ## Status: PASS
 

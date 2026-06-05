@@ -331,6 +331,8 @@ function processOneEmail(thread, threadIndex, totalThreads) {
       .filter(job => (job._confidence === undefined || job._confidence >= 0.5))
       .filter(job => !(job["Company"] === "Unknown" && job["Job Title"] === "Unknown Position"));
 
+    Logger.log(`Filters: ${extractionResult.jobs.length} extracted -> ${validJobs.length} valid (after validity/confidence/Unknown filters)`);
+
     if (validJobs.length === 0) {
       markEmailAsNoJobs(thread);
       return {

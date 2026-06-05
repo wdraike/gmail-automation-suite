@@ -1,10 +1,11 @@
 {
-  "last_leg": "warn-16-19-filter-cleanup",
+  "last_leg": "fix-gemini-429-pipeline",
   "verdict": "WARN",
   "completed": "2026-06-05",
-  "summary": "Hoisted noise constants to module level, converted assets./phenom. filters to hostname-anchored regex, added 4 new tests for go./email. subdomain filtering. 46/46 extractor tests pass.",
-  "next": "One minor deferred item (WARN-20 — regression test for assetsolutions.com false-positive). All else clean. clasp push 7 commits ahead.",
+  "summary": "Fixed Gemini 429/503 pipeline bug. callGemini now throws RATE_LIMIT_REACHED on 429/503 and on RESOURCE_EXHAUSTED/error.code 429; isJobListingEmail precheck re-throws RATE_LIMIT_REACHED (and other API failures) instead of returning false, so emails are queued via markEmailAsRateLimited instead of silently archived as no-jobs. Root cause of empty-sheet + lost-emails resolved. TDD RED-first; 10 new tests. Oscar WARN (ernie/telly/zoe all PASS).",
+  "next": "WARN-21 deferred (test {success:true,response:undefined} returns false). WARN-20 still open. NOT yet clasp pushed — Kermit/user handles deploy.",
   "backlog_items": [
-    "WARN-20: add regression test assetsolutions.com not filtered"
+    "WARN-20: add regression test assetsolutions.com not filtered",
+    "WARN-21: test isJobListingEmail {success:true, response:undefined} returns false (not throw)"
   ]
 }

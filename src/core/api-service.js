@@ -426,6 +426,13 @@ function callGemini(prompt) {
   Logger.log(`Response Code: ${responseCode}`);
 
   if (responseCode !== 200) {
+    // 429 (rate limit) and 503 (overloaded/unavailable) are transient throttling
+    // signals. Surface them as RATE_LIMIT_REACHED so the backoff tracker in
+    // callGeminiWithRateLimiting fires and callers queue the email for retry
+    // instead of treating it as a hard failure (which silently drops emails).
+    if (responseCode === 429 || responseCode === 503) {
+      throw new Error("RATE_LIMIT_REACHED");
+    }
     throw new Error(`API returned status ${responseCode}: ${responseText.substring(0, 200)}`);
   }
 
@@ -442,6 +449,15 @@ function callGemini(prompt) {
     const text = jsonResponse.candidates[0].content.parts[0].text;
     return text; // Return raw text, let caller parse
   } else if (jsonResponse.error) {
+    // A 200 status can still carry a quota/rate-limit error in the body.
+    // Detect it and surface RATE_LIMIT_REACHED so backoff fires and the
+    // email is queued for retry rather than silently dropped.
+    if (
+      jsonResponse.error.code === 429 ||
+      jsonResponse.error.status === "RESOURCE_EXHAUSTED"
+    ) {
+      throw new Error("RATE_LIMIT_REACHED");
+    }
     throw new Error(`Gemini API Error - ${jsonResponse.error.message}`);
   } else {
     throw new Error("Unexpected response format from Gemini API");

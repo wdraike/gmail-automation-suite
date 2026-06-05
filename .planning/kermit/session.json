@@ -1,10 +1,9 @@
 {
-  "leg_id": "backlog-warn-fix",
-  "intent": "Fix all WARN-1 through WARN-13 backlog items",
-  "scope": "src/features/job-finder/, src/core/config.js, tests-local/",
+  "leg_id": "fix-gemini-429-pipeline",
+  "intent": "Fix Gemini 429 handling: callGemini must throw RATE_LIMIT_REACHED on 429/503; isJobListingEmail precheck must not archive emails as no-jobs on API failure — queue them instead",
+  "scope": "src/core/api-service.js, src/features/job-finder/extractor.js, tests-local/",
   "status": "complete",
-  "opened": "2026-06-05T00:00:00Z",
-  "last_update": "2026-06-05T00:00:00Z",
   "verdict": "WARN",
-  "commit_sha": "15243e9"
+  "opened": "2026-06-05T00:00:00Z",
+  "last_update": "2026-06-05T00:00:00Z"
 }

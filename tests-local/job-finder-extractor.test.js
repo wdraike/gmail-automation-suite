@@ -28,9 +28,45 @@ describe("isJobListingEmail", () => {
     expect(extractor.isJobListingEmail("Newsletter content")).toBe(false);
   });
 
-  it("returns false when Gemini returns null response", () => {
+  it("re-throws RATE_LIMIT_REACHED when callGeminiApi throws it", () => {
+    global.callGeminiApi = jest.fn(() => {
+      throw new Error("RATE_LIMIT_REACHED");
+    });
+    expect(() => extractor.isJobListingEmail("some body")).toThrow("RATE_LIMIT_REACHED");
+  });
+
+  it("throws RATE_LIMIT_REACHED when callGeminiApi returns a rate-limit failure result", () => {
+    global.callGeminiApi = jest.fn(() => ({
+      success: false,
+      error: "Error: API returned status 429: Rate limit exceeded",
+    }));
+    expect(() => extractor.isJobListingEmail("some body")).toThrow("RATE_LIMIT_REACHED");
+  });
+
+  it("re-throws (does NOT return false) on a non-rate-limit API failure", () => {
+    global.callGeminiApi = jest.fn(() => ({
+      success: false,
+      error: "Error: Unexpected response format from Gemini API",
+    }));
+    expect(() => extractor.isJobListingEmail("some body")).toThrow();
+    // and the thrown error is NOT the rate-limit sentinel
+    let msg = "";
+    try {
+      extractor.isJobListingEmail("some body");
+    } catch (e) {
+      msg = e.message;
+    }
+    expect(msg).not.toBe("RATE_LIMIT_REACHED");
+  });
+
+  it("re-throws (does NOT return false) when result is null/undefined", () => {
     global.callGeminiApi = jest.fn(() => null);
-    expect(extractor.isJobListingEmail("some body")).toBe(false);
+    expect(() => extractor.isJobListingEmail("some body")).toThrow();
+  });
+
+  it("returns false on a genuine successful NO with no response text quirk", () => {
+    global.callGeminiApi = jest.fn(() => ({ success: true, response: "NO" }));
+    expect(extractor.isJobListingEmail("Newsletter content")).toBe(false);
   });
 
   it("truncates body to 2000 chars before sending", () => {

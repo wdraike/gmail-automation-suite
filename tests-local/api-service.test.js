@@ -391,7 +391,7 @@ describe('Gemini API Service - Complete Test Suite', () => {
         expect(() => callGemini('Test prompt')).toThrow('500');
       });
 
-      it('should throw on rate limit errors (429)', () => {
+      it('should throw RATE_LIMIT_REACHED on rate limit errors (429)', () => {
         UrlFetchApp.fetch = jest.fn(() => ({
           getResponseCode: jest.fn(() => 429),
           getContentText: jest.fn(() => JSON.stringify({
@@ -399,7 +399,54 @@ describe('Gemini API Service - Complete Test Suite', () => {
           }))
         }));
 
-        expect(() => callGemini('Test prompt')).toThrow('429');
+        expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
+      });
+
+      it('should throw RATE_LIMIT_REACHED on service unavailable (503)', () => {
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 503),
+          getContentText: jest.fn(() => JSON.stringify({
+            error: { message: 'Service unavailable' }
+          }))
+        }));
+
+        expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
+      });
+
+      it('should throw RATE_LIMIT_REACHED when error body has code 429 (200 status)', () => {
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 200),
+          getContentText: jest.fn(() => JSON.stringify({
+            error: { code: 429, message: 'Quota exceeded' }
+          }))
+        }));
+
+        expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
+      });
+
+      it('should throw RATE_LIMIT_REACHED when error status is RESOURCE_EXHAUSTED (200 status)', () => {
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 200),
+          getContentText: jest.fn(() => JSON.stringify({
+            error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' }
+          }))
+        }));
+
+        expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
+      });
+
+      it('should throw a generic (non-rate-limit) error for other API error bodies', () => {
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 200),
+          getContentText: jest.fn(() => JSON.stringify({
+            error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Bad request' }
+          }))
+        }));
+
+        const err = (() => { try { callGemini('Test prompt'); return null; } catch (e) { return e; } })();
+        expect(err).not.toBeNull();
+        expect(err.message).not.toBe('RATE_LIMIT_REACHED');
+        expect(err.message).toContain('Bad request');
       });
 
       it('should throw on authentication errors (401)', () => {
