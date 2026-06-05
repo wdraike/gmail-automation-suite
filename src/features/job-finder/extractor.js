@@ -3,6 +3,14 @@
  * Handles extraction of job details from email content using Gemini API
  */
 
+// Module-level constants for anchor/URL noise filtering — hoisted to avoid
+// recreating these on every call to extractJobDetailsSimple.
+const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'instagram.com',
+  'unsubscribe'];
+// Matches tracking/redirect subdomains: click., track., email., go., r.
+// Hostname-anchored so 'clickup.com' or 'career.com' are not falsely caught.
+const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
+
 /**
  * Cheap pre-check: asks Gemini whether the email contains job listings.
  * Uses only the first 2000 chars of the body to keep cost low.
@@ -85,7 +93,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
       let hostname = '';
       try { hostname = new URL(url).hostname.toLowerCase(); } catch (e) { hostname = ''; }
       if (lower.includes('sendgrid.net') ||
-          /^(click|track|email|go|r)\./i.test(hostname) ||
+          ANCHOR_TRACKING_SUBDOMAIN_RE.test(hostname) ||
           lower.includes('tracking') ||
           lower.includes('analytics') ||
           lower.includes('utm_') ||
@@ -98,12 +106,15 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
         return false;
       }
 
-      // Exclude career platform tracking/assets
+      // Exclude career platform tracking/assets.
+      // Use hostname-anchored checks for 'assets.' and 'phenom.' to avoid
+      // false positives on paths like '/assets/' or legitimate domains
+      // that happen to contain these strings elsewhere.
       if (lower.includes('phenompro.com') ||
           lower.includes('phenompeople.com') ||
-          lower.includes('phenom.') ||
+          /^phenom\./i.test(hostname) ||
           lower.includes('careerconnect') ||
-          lower.includes('assets.')) {
+          /^assets\./i.test(hostname)) {
         return false;
       }
 
@@ -167,10 +178,6 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
     // Include anchor text/URL pairs to help match job titles to their apply links
     let anchorSection = '';
     if (anchorPairs && anchorPairs.length > 0) {
-      // Exact-domain noise list; tracking subdomains checked separately via regex
-      const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'instagram.com',
-        'unsubscribe'];
-      const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
       const filteredPairs = anchorPairs
         .filter(p => {
           const href = (p.url || '').toLowerCase();

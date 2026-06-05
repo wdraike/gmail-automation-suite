@@ -252,6 +252,43 @@ describe("extractor", () => {
       expect(promptArg).not.toContain("r.example.com");
     });
 
+    // WARN-18: go. and email. subdomain anchor filter
+    it("filters out go.example.com anchor pair (tracking subdomain)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [{ text: "Apply Here", url: "https://go.example.com/link" }];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("go.example.com");
+    });
+
+    it("filters out email.example.com anchor pair (tracking subdomain)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [{ text: "View Job", url: "https://email.example.com/track" }];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("email.example.com");
+    });
+
+    it("does NOT filter anchor pair with 'email' in path (WARN-18 regression)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [{ text: "Email Marketing Manager", url: "https://jobs.com/email-marketing" }];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("https://jobs.com/email-marketing");
+    });
+
+    // WARN-19: go. URL noise filter
+    it("filters out go.example.com redirect URL (WARN-19)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("Apply now", ["https://go.example.com/redirect"], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("go.example.com");
+    });
+
     it("throws RATE_LIMIT_REACHED on 429 error", () => {
       global.callGeminiApi = jest.fn(() => {
         throw new Error("429 Too Many Requests");

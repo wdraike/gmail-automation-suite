@@ -1,11 +1,11 @@
-# Zoe Review — WARN-14 + WARN-15 URL Filter Fixes — 2026-06-05
+# Zoe Review — WARN-16 through WARN-19 Fixes — 2026-06-05
 
 ## Summary
-42/42 tests pass. No false passes, no shallow assertions. The regex logic is provably correct
-across 17 manually probed edge cases. Two WARN findings: Telly missed tests for the broader
-false-positive class this PR also fixes (go.chicago.com, email.acme.com as false-positives in
-the OLD anchor filter — now also fixed by the new regex). Not BLOCK because the implementation
-is correct; the tests just don't document this wider win. Both deferrable.
+46/46 tests pass. No false passes, no shallow assertions found. All 4 new tests assert real
+behavioral outcomes (URL presence/absence in Gemini prompt string), not just `toBeDefined()`.
+WARN-16 fix (assets./phenom. hostname anchoring) was probed manually across 8 boundary cases —
+all correct. One WARN finding: no test for `assets.` subdomain false-positive regression (the
+analogous gap to WARN-16 for the URL filter). Deferred — not a blocker.
 
 ## Telly Audit
 
@@ -16,26 +16,26 @@ _None._
 
 | # | Finding | Evidence | File | Remediation |
 |---|---------|----------|------|-------------|
-| 1 | No test for `go.` and `email.` subdomain false-positives in the anchor filter. The old `ANCHOR_NOISE_DOMAINS` substring filter `'go.'` would have filtered `chicago.com` and `mango.com` anchors; `'email.'` would have filtered `email-solutions.com`. The new hostname-anchored regex fixes these, but there are zero tests exercising those corrections. The WARN-14/15 fix is broader than the four cases Telly tested. | tests-local/job-finder-extractor.test.js (missing) | extractor.js:173 | Add tests: `chicago.com/jobs` anchor kept; `go.jobvite.com` anchor filtered; `email.acme.com` URL filtered; `my-email-tools.com` URL NOT filtered |
-| 2 | No test for `go.` subdomain in the URL filter. The old code had `click.` and `track.` but NOT `go.` — so `go.jobvite.com` tracking URLs were never filtered before. The new regex adds `go.` to the URL filter. This is new behavior with no test documenting the before/after. | tests-local/job-finder-extractor.test.js (missing) | extractor.js:88 | Add: `it("filters out go.jobvite.com URLs")` |
+| 1 | No test for `assets.` subdomain filter regression (WARN-16 analog). The old `lower.includes('assets.')` would have filtered `assetsolutions.com` or `assets-cdn.jobs.com`. The new `/^assets\./i` regex fixes this, but there is no test asserting `https://assetsolutions.com/careers` passes through. Mirrors the WARN-14 regression test pattern. | tests-local/job-finder-extractor.test.js (missing) | extractor.js:117 | Add: `it("does NOT filter assetsolutions.com URLs (WARN-16 regression)")` |
 
 ### PASS Verifications
 
 | # | Check | Status |
 |---|-------|--------|
-| 1 | Regression test for `career.com` URL not filtered — asserts exact URL appears in prompt | PASS |
-| 2 | Regression test for `director.jobs` URL not filtered — asserts exact URL appears in prompt | PASS |
-| 3 | `click.example.com` filtered — asserts URL does NOT appear in prompt | PASS |
-| 4 | `r.example.com` redirect filtered (URL filter path) — negative assertion verified | PASS |
-| 5 | `career.com` anchor pair kept (WARN-14 anchor path) — asserts URL in prompt | PASS |
-| 6 | `r.example.com` anchor filtered, `jobs.acme.com` kept — both directions verified | PASS |
-| 7 | `track.foobar.com` still filtered after regex change — existing test covers this | PASS |
-| 8 | Malformed anchor URL (no scheme) is silently kept — verified manually via node probe | PASS |
-| 9 | `recruiter-email.acme.com` NOT filtered (email. anchored to start) — verified via probe | PASS |
-| 10 | `gojobs.com` NOT filtered (go. not at hostname start) — verified via probe | PASS |
-| 11 | No `toBeDefined()`-only assertions — all new tests assert content in/out of prompt string | PASS |
-| 12 | No mock leakage — each new test uses fresh `jest.fn()` with `beforeEach clearAllMocks` | PASS |
-| 13 | All 42 tests pass on actual execution | PASS |
+| 1 | WARN-18: `go.example.com` anchor filtered — negative assertion on prompt string | PASS |
+| 2 | WARN-18: `email.example.com` anchor filtered — negative assertion on prompt string | PASS |
+| 3 | WARN-18 regression: `https://jobs.com/email-marketing` anchor KEPT — positive assertion verified | PASS |
+| 4 | WARN-19: `go.example.com` URL filtered — negative assertion on prompt string | PASS |
+| 5 | No `toBeDefined()`-only assertions — all 4 new tests check real prompt content | PASS |
+| 6 | No mock leakage — each test uses fresh `jest.fn()` with `beforeEach clearAllMocks` | PASS |
+| 7 | `assets.example.com/style.css` filtered; `myassets.com` kept; `jobs.com/assets/style.css` kept — manually probed | PASS |
+| 8 | `phenom.example.com` filtered; `myphenom.com` kept; `jobs.com/phenom-people/apply` kept — manually probed | PASS |
+| 9 | `google.com` NOT filtered by `go.` regex (go. not a subdomain of google.com) — probed | PASS |
+| 10 | `goodjobs.com` NOT filtered by `go.` regex — probed | PASS |
+| 11 | `go.greenhouse.io` filtered; `email.lever.co` filtered — probed both filter paths | PASS |
+| 12 | `company.com/careers/email-specialist` anchor KEPT (email in path, not subdomain) — probed | PASS |
+| 13 | `go.indeed.com` anchor filtered — probed | PASS |
+| 14 | All 46 tests pass on actual execution | PASS |
 
 ## Status: PASS
 
