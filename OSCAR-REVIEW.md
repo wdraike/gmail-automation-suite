@@ -1,6 +1,51 @@
-# Oscar Full Review — Gmail Automation Suite — 2026-05-25
+# Oscar Review — Job Finder Label Config — 2026-06-05
 
-## Decision: PASS with deferred items (2026-05-25)
+## Verdict: WARN
+
+## Summary
+Work complete. All tests pass (49/49). Two WARN backlog items — both test quality improvements, no functional gaps.
+
+## Agent Findings
+
+### Ernie — PASS
+No critical or warning findings. Two info suggestions logged (undocumented overlap between `updateJobFinderConfig` and new getters; minor style inconsistency in label variable caching). Neither blocks commit.
+
+### Telly — PASS
+49 tests pass. All 6 new getter/setter functions covered including error paths and default fallback behavior.
+
+### Zoe — WARN
+1. `getEmailThreadsToProcess` tests use "JobAlerts" in both getter mock and getLabelSafe — passes whether getter or config is called. Code inspection confirms getters are used; not a functional regression.
+2. Getter mocks set at module scope rather than `beforeEach` — future test isolation risk.
+
+## Fix Loop
+None — no BLOCK findings.
+
+## Completeness
+| Check | Result |
+|-------|--------|
+| Tests exist for changed code | PASS |
+| Tests passing | PASS |
+| Docs updated (if API changed) | PASS (internal change, no public API surface changed) |
+| Security review run | PASS (no auth/payment paths touched) |
+
+## Backlog Items
+| Finding | File |
+|---------|------|
+| Add test proving custom label flows through getEmailThreadsToProcess | tests-local/job-finder-main.test.js |
+| Move getter mock assignments into beforeEach | tests-local/job-finder-main.test.js |
+
+## Kermit Report
+Verdict: WARN
+Completeness gaps: none
+Backlog items: 2
+Ready to commit: yes
+
+## Status: PASS
+_Signed: Oscar — 2026-06-05T12:40:00Z_
+
+---
+
+# Prior Review — 2026-05-25
 
 **Phase 1 (Security): FIXED.** 3 CRITICAL resolved. Re-verified PASS by elmo.
 

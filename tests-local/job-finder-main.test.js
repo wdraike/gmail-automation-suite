@@ -5,9 +5,9 @@
 
 // Mock globals before requiring the module
 global.JOB_FINDER_CONFIG = {
-  SOURCE_LABEL: "JobAlerts",
-  PROCESSED_LABEL: "JobAlerts/Processed",
-  RATE_LIMIT_LABEL: "JobAlerts/RateLimited",
+  SOURCE_LABEL: "📬 JobAlerts",
+  PROCESSED_LABEL: "📬 JobAlerts/Processed",
+  RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimited",
   ACTIVE_SHEET_NAME: "Jobs",
   SHEET_COLUMNS: [
     "Company", "Company Description", "Job Title", "Location",
@@ -15,6 +15,10 @@ global.JOB_FINDER_CONFIG = {
     "URL Status", "Careers URL", "Careers URL Status",
   ],
 };
+
+global.getJobFinderSourceLabel = jest.fn(() => "📬 JobAlerts");
+global.getJobFinderProcessedLabel = jest.fn(() => "📬 JobAlerts/Processed");
+global.getJobFinderRateLimitLabel = jest.fn(() => "📬 JobAlerts/RateLimited");
 
 global.GmailService = {
   labels: {
@@ -88,7 +92,7 @@ describe("job-finder main", () => {
     it("returns threads from source label", () => {
       const threads = [{ id: "t1" }];
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "JobAlerts") {
+        if (name === "📬 JobAlerts") {
           return { getThreads: jest.fn(() => threads) };
         }
         return null;
@@ -100,8 +104,8 @@ describe("job-finder main", () => {
 
     it("prepends rate-limited threads when available", () => {
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "JobAlerts") return { getThreads: jest.fn(() => [{ id: "new1" }]) };
-        if (name === "JobAlerts/RateLimited") return { getThreads: jest.fn(() => [{ id: "rl1" }]) };
+        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [{ id: "new1" }]) };
+        if (name === "📬 JobAlerts/RateLimited") return { getThreads: jest.fn(() => [{ id: "rl1" }]) };
         return null;
       });
       const result = main.getEmailThreadsToProcess();
@@ -170,7 +174,7 @@ describe("job-finder main", () => {
         }]),
       };
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "JobAlerts") return { getThreads: jest.fn(() => [thread]) };
+        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [thread]) };
         return null;
       });
       global.extractJobDetailsSimple = jest.fn(() => [
@@ -184,7 +188,7 @@ describe("job-finder main", () => {
 
     it("returns no-threads message when no threads found", () => {
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "JobAlerts") return { getThreads: jest.fn(() => []) };
+        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => []) };
         return null;
       });
       const result = main.processJobEmailsMain();
@@ -202,7 +206,7 @@ describe("job-finder main", () => {
         }]),
       };
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "JobAlerts") return { getThreads: jest.fn(() => [thread]) };
+        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [thread]) };
         return null;
       });
       global.extractJobDetailsSimple = jest.fn(() => {

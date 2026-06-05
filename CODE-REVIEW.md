@@ -1,8 +1,35 @@
-# Code Quality Review — Gmail Automation (Google Apps Script)
+# Code Review — Job Finder Label Config — 2026-06-05
 
-**Review Date:** 2026-05-25  
-**Scope:** `src/`, `tests/`, `tests-local/`, `scripts/`  
-**Reviewer:** Ernie (FAANG Tech Lead)
+## Summary
+New label getter/setter pattern is clean, consistent, and well-tested. One info note about an existing `updateJobFinderConfig` function that now silently overlaps with the new getters — functionally correct, not a blocker.
+
+## Critical Findings (must fix before merge)
+_None._
+
+## Warning Findings (fix this sprint)
+_None._
+
+## Info / Suggestions
+| # | Finding | File:Line | Suggestion |
+|---|---------|-----------|------------|
+| 1 | `updateJobFinderConfig({SOURCE_LABEL: "x"})` writes `JOB_FINDER_SOURCE_LABEL` — the same key the new getters read. Functionally correct but undocumented overlap. | main.js:543 | Add a comment linking the two, or deprecate `updateJobFinderConfig` in favor of typed setters. No code change required to ship. |
+| 2 | `getJobFinderRateLimitLabel()` called inline at line 117 vs the `sourceLabelName` variable pattern at line 101. Minor style inconsistency. | main.js:117 | Cache into `const rateLimitLabelName` for symmetry. |
+
+## Checklist Status
+- [x] Complexity — PASS (no deep nesting added)
+- [x] Error handling — PASS (setters log + return false on throw)
+- [x] Test coverage — PASS (11 new tests cover all 6 functions incl error path)
+- [x] Observability — PASS (existing Logger.log calls preserved)
+- [x] Scalability — PASS (no loops or N+1 added)
+- [x] API design — PASS (pattern matches established codebase convention)
+- [x] Dead code — PASS (no TODOs, no commented blocks)
+
+## Status: PASS
+_Signed: Ernie — 2026-06-05T12:25:00Z_
+
+---
+
+# Prior Review (2026-05-25)
 
 ---
 

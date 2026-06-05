@@ -1,8 +1,48 @@
-# Test Coverage Review — Gmail Automation Dashboard
+# Test Review — Job Finder Label Config — 2026-06-05
 
-**Review Date:** 2026-05-25
-**Reviewer:** Telly (Testing Expert)
-**Scope:** `tests/`, `tests-local/`, `jest.config.js`, `coverage/`
+## Summary
+49 tests passed, 0 failed. All 6 new getter/setter functions covered including error paths.
+
+## Test Results
+
+| Suite | Tests | Passed | Failed | Skipped |
+|-------|-------|--------|--------|---------|
+| config.test.js | 35 | 35 | 0 | 0 |
+| job-finder-main.test.js | 14 | 14 | 0 | 0 |
+
+## New Tests Added (11)
+
+| Test | File | Coverage Target |
+|------|------|-----------------|
+| getJobFinderSourceLabel returns default when not set | config.test.js | getter default fallback |
+| getJobFinderSourceLabel returns stored value when set | config.test.js | getter happy path |
+| setJobFinderSourceLabel returns true on success | config.test.js | setter happy path |
+| getJobFinderProcessedLabel returns default when not set | config.test.js | getter default fallback |
+| getJobFinderProcessedLabel returns stored value when set | config.test.js | getter happy path |
+| setJobFinderProcessedLabel returns true on success | config.test.js | setter happy path |
+| getJobFinderRateLimitLabel returns default when not set | config.test.js | getter default fallback |
+| getJobFinderRateLimitLabel returns stored value when set | config.test.js | getter happy path |
+| setJobFinderRateLimitLabel returns true on success | config.test.js | setter happy path |
+| setter returns false when properties storage throws (×3) | config.test.js | error path all 3 setters |
+
+## Coverage
+
+| File | % Stmts | % Branch | % Funcs | Status |
+|------|---------|----------|---------|--------|
+| src/core/config.js | 53.77% | 47.36% | 77.27% | WARN (Apps Script-only funcs excluded) |
+| src/features/job-finder/main.js | 72.10% | 57.89% | 81.25% | PASS |
+
+_Note: config.js uncovered lines 278–434 are Apps Script-runtime functions (UrlFetchApp, CardService) that cannot run under Jest. New getter/setter functions are fully covered._
+
+## Missing Tests
+_None for the changed scope._
+
+## Status: PASS
+_Signed: Telly — 2026-06-05T12:30:00Z_
+
+---
+
+# Prior Review (2026-05-25)
 **Project:** `/Users/david/Library/Mobile Documents/com~apple~CloudDocs/Documents/07_Software_Development/Google Scripts/email Tools`
 
 ---

@@ -98,11 +98,12 @@ function processJobEmailsMain() {
 function getEmailThreadsToProcess() {
   try {
     // Get the source label (e.g., "JobAlerts")
-    const sourceLabel = GmailService.labels.getLabelSafe(JOB_FINDER_CONFIG.SOURCE_LABEL);
+    const sourceLabelName = getJobFinderSourceLabel();
+    const sourceLabel = GmailService.labels.getLabelSafe(sourceLabelName);
     if (!sourceLabel) {
       return {
         success: false,
-        message: `Source label "${JOB_FINDER_CONFIG.SOURCE_LABEL}" not found. Please create this label.`,
+        message: `Source label "${sourceLabelName}" not found. Please create this label.`,
         threads: []
       };
     }
@@ -110,10 +111,10 @@ function getEmailThreadsToProcess() {
     // Get new threads from source label (limit to 5 to avoid long execution times)
     const MAX_EMAILS_PER_RUN = 5;
     const threads = sourceLabel.getThreads(0, MAX_EMAILS_PER_RUN);
-    Logger.log(`Found ${threads.length} new thread(s) in "${JOB_FINDER_CONFIG.SOURCE_LABEL}" (max ${MAX_EMAILS_PER_RUN} per run)`);
+    Logger.log(`Found ${threads.length} new thread(s) in "${sourceLabelName}" (max ${MAX_EMAILS_PER_RUN} per run)`);
 
     // Check for rate-limited threads from previous runs (prioritize these)
-    const rateLimitLabel = GmailService.labels.getLabelSafe(JOB_FINDER_CONFIG.RATE_LIMIT_LABEL);
+    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
     if (rateLimitLabel) {
       const rateLimitedThreads = rateLimitLabel.getThreads(0, 3);
       if (rateLimitedThreads.length > 0) {
@@ -291,9 +292,9 @@ function saveJobsToCsv(jobs, metadata) {
  */
 function markEmailAsProcessed(thread) {
   try {
-    const processedLabel = GmailService.labels.getOrCreateLabel(JOB_FINDER_CONFIG.PROCESSED_LABEL);
-    const sourceLabel = GmailService.labels.getLabelSafe(JOB_FINDER_CONFIG.SOURCE_LABEL);
-    const rateLimitLabel = GmailService.labels.getLabelSafe(JOB_FINDER_CONFIG.RATE_LIMIT_LABEL);
+    const processedLabel = GmailService.labels.getOrCreateLabel(getJobFinderProcessedLabel());
+    const sourceLabel = GmailService.labels.getLabelSafe(getJobFinderSourceLabel());
+    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
 
     thread.addLabel(processedLabel);
     if (sourceLabel) thread.removeLabel(sourceLabel);
@@ -313,7 +314,7 @@ function markEmailAsProcessed(thread) {
  */
 function markEmailAsRateLimited(thread) {
   try {
-    const rateLimitLabel = GmailService.labels.getOrCreateLabel(JOB_FINDER_CONFIG.RATE_LIMIT_LABEL);
+    const rateLimitLabel = GmailService.labels.getOrCreateLabel(getJobFinderRateLimitLabel());
     thread.addLabel(rateLimitLabel);
     Logger.log(`Marked thread as rate-limited for later processing`);
 
@@ -500,9 +501,9 @@ function initializeJobFinder() {
 
     // Create required labels
     const requiredLabels = [
-      JOB_FINDER_CONFIG.SOURCE_LABEL,
-      JOB_FINDER_CONFIG.PROCESSED_LABEL,
-      JOB_FINDER_CONFIG.RATE_LIMIT_LABEL
+      getJobFinderSourceLabel(),
+      getJobFinderProcessedLabel(),
+      getJobFinderRateLimitLabel()
     ];
 
     for (const labelName of requiredLabels) {

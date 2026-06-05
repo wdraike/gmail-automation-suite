@@ -1,8 +1,35 @@
-# Adversarial Test Quality Audit — Zoe Review
+# Zoe Review — Job Finder Label Config — 2026-06-05
 
-**Review Date:** 2026-05-25
-**Reviewer:** Zoe (Adversarial Reviewer)
-**Scope:** `tests/`, `tests-local/`, `jest.config.js`, `coverage/`
+## Summary
+2 warn findings. Core getter/setter behavior is well-tested in config.test.js. Main.js integration tests pass but don't prove the getters are called — they'd also pass if code used the hardcoded config values. Not a blocker; code inspection confirms the right calls are in place.
+
+## Telly Audit
+
+### BLOCK Findings
+_None._
+
+### WARN Findings
+| # | Finding | Evidence | File | Remediation |
+|---|---------|----------|------|-------------|
+| 1 | `getEmailThreadsToProcess` tests mock `getLabelSafe` with `"JobAlerts"` — same string as both `JOB_FINDER_CONFIG.SOURCE_LABEL` default and `getJobFinderSourceLabel()` mock. Tests would pass even if `main.js` bypassed the getter and read `JOB_FINDER_CONFIG` directly. | job-finder-main.test.js:94–102 | tests-local/job-finder-main.test.js | Add one test that sets `global.getJobFinderSourceLabel = jest.fn(() => "CustomLabel")` and asserts `getLabelSafe` is called with `"CustomLabel"`. |
+| 2 | Getter mock implementations (`jest.fn(() => "JobAlerts")`) are set once at module scope. `jest.clearAllMocks()` in `beforeEach` clears call history but NOT implementations. Any future test that reassigns a getter globally would silently leak into later tests. | job-finder-main.test.js:19–21, 51 | tests-local/job-finder-main.test.js | Move getter mock assignments into `beforeEach` to re-establish implementations before each test. |
+
+### PASS Verifications
+| # | Check | Status |
+|---|-------|--------|
+| 1 | Default fallback tested for all 3 getters | PASS |
+| 2 | Round-trip set/get tested for all 3 getters | PASS |
+| 3 | Error path (storage throws) tested for all 3 setters | PASS |
+| 4 | `beforeEach` deletes properties for clean isolation | PASS |
+| 5 | Setter return value (true/false) asserted | PASS |
+| 6 | 49 tests pass, 0 fail | PASS |
+
+## Status: ISSUES
+_Signed: Zoe — 2026-06-05T12:35:00Z_
+
+---
+
+# Prior Review (2026-05-25)
 **Project:** `/Users/david/Library/Mobile Documents/com~apple~CloudDocs/Documents/07_Software_Development/Google Scripts/email Tools`
 
 ---

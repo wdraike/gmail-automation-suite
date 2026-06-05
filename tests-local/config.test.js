@@ -19,7 +19,13 @@ const {
   getCacheFileId,
   setCacheFileId,
   getCategoriesFileId,
-  setCategoriesFileId
+  setCategoriesFileId,
+  getJobFinderSourceLabel,
+  setJobFinderSourceLabel,
+  getJobFinderProcessedLabel,
+  setJobFinderProcessedLabel,
+  getJobFinderRateLimitLabel,
+  setJobFinderRateLimitLabel
 } = require('../src/core/config.js');
 
 describe('Config Module - Local Tests', () => {
@@ -102,7 +108,7 @@ describe('Config Module - Local Tests', () => {
 
     it('should have JOB_FINDER_CONFIG defined', () => {
       expect(typeof JOB_FINDER_CONFIG).toBe('object');
-      expect(JOB_FINDER_CONFIG).toHaveProperty('SOURCE_LABEL', 'JobAlerts');
+      expect(JOB_FINDER_CONFIG).toHaveProperty('SOURCE_LABEL', '📬 JobAlerts');
     });
 
     it('should have API_SERVICE_CONFIG defined', () => {
@@ -200,6 +206,65 @@ describe('Config Module - Local Tests', () => {
 
       const result = getCacheFileId();
       expect(result).toBe('');
+    });
+  });
+
+  describe('Job Finder Label Configuration', () => {
+    beforeEach(() => {
+      PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_SOURCE_LABEL');
+      PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_PROCESSED_LABEL');
+      PropertiesService.getScriptProperties().deleteProperty('JOB_FINDER_RATE_LIMIT_LABEL');
+    });
+
+    it('getJobFinderSourceLabel returns default when not set', () => {
+      expect(getJobFinderSourceLabel()).toBe(JOB_FINDER_CONFIG.SOURCE_LABEL);
+    });
+
+    it('getJobFinderSourceLabel returns stored value when set', () => {
+      setJobFinderSourceLabel('MyJobs');
+      expect(getJobFinderSourceLabel()).toBe('MyJobs');
+    });
+
+    it('setJobFinderSourceLabel returns true on success', () => {
+      expect(setJobFinderSourceLabel('MyJobs')).toBe(true);
+    });
+
+    it('getJobFinderProcessedLabel returns default when not set', () => {
+      expect(getJobFinderProcessedLabel()).toBe(JOB_FINDER_CONFIG.PROCESSED_LABEL);
+    });
+
+    it('getJobFinderProcessedLabel returns stored value when set', () => {
+      setJobFinderProcessedLabel('MyJobs/Done');
+      expect(getJobFinderProcessedLabel()).toBe('MyJobs/Done');
+    });
+
+    it('setJobFinderProcessedLabel returns true on success', () => {
+      expect(setJobFinderProcessedLabel('MyJobs/Done')).toBe(true);
+    });
+
+    it('getJobFinderRateLimitLabel returns default when not set', () => {
+      expect(getJobFinderRateLimitLabel()).toBe(JOB_FINDER_CONFIG.RATE_LIMIT_LABEL);
+    });
+
+    it('getJobFinderRateLimitLabel returns stored value when set', () => {
+      setJobFinderRateLimitLabel('MyJobs/Queue');
+      expect(getJobFinderRateLimitLabel()).toBe('MyJobs/Queue');
+    });
+
+    it('setJobFinderRateLimitLabel returns true on success', () => {
+      expect(setJobFinderRateLimitLabel('MyJobs/Queue')).toBe(true);
+    });
+
+    it('setter returns false when properties storage throws', () => {
+      const orig = PropertiesService.getScriptProperties;
+      PropertiesService.getScriptProperties = jest.fn(() => ({
+        setProperty: jest.fn(() => { throw new Error('storage error'); }),
+        getProperty: jest.fn(() => null)
+      }));
+      expect(setJobFinderSourceLabel('x')).toBe(false);
+      expect(setJobFinderProcessedLabel('x')).toBe(false);
+      expect(setJobFinderRateLimitLabel('x')).toBe(false);
+      PropertiesService.getScriptProperties = orig;
     });
   });
 

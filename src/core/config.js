@@ -13,6 +13,9 @@ const PROPERTY_KEYS = {
   CATEGORIES_FILE_ID: "CATEGORIES_FILE_ID",
   RATE_LIMIT_NEXT_RUN: "RATE_LIMIT_NEXT_RUN",
   ENABLE_DYNAMIC_CATEGORIES: "ENABLE_DYNAMIC_CATEGORIES",
+  JOB_FINDER_SOURCE_LABEL: "JOB_FINDER_SOURCE_LABEL",
+  JOB_FINDER_PROCESSED_LABEL: "JOB_FINDER_PROCESSED_LABEL",
+  JOB_FINDER_RATE_LIMIT_LABEL: "JOB_FINDER_RATE_LIMIT_LABEL",
 };
 
 // Global retention rules array. Centralized here to eliminate the dangerous
@@ -44,9 +47,9 @@ const EMAIL_SORTER_CONFIG = {
 // Job Finder Configuration
 const JOB_FINDER_CONFIG = {
   // Gmail labels
-  SOURCE_LABEL: "JobAlerts",
-  PROCESSED_LABEL: "JobAlerts/Processed",
-  RATE_LIMIT_LABEL: "JobAlerts/RateLimitQueue",
+  SOURCE_LABEL: "📬 JobAlerts",
+  PROCESSED_LABEL: "📬 JobAlerts/Processed",
+  RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimitQueue",
 
   // Google Sheet details
   ACTIVE_SHEET_NAME: "Job Listings",
@@ -435,6 +438,96 @@ function testApiKeyFromAddon() {
   }
 }
 
+/**
+ * Gets the Gmail label used as the source for job alert emails.
+ * @returns {string} The label name.
+ */
+function getJobFinderSourceLabel() {
+  return (
+    PropertiesService.getScriptProperties().getProperty(
+      PROPERTY_KEYS.JOB_FINDER_SOURCE_LABEL
+    ) || JOB_FINDER_CONFIG.SOURCE_LABEL
+  );
+}
+
+/**
+ * Sets the Gmail label used as the source for job alert emails.
+ * @param {string} label - The label name to store.
+ * @returns {boolean} True if successful, false otherwise.
+ */
+function setJobFinderSourceLabel(label) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      PROPERTY_KEYS.JOB_FINDER_SOURCE_LABEL,
+      label
+    );
+    return true;
+  } catch (error) {
+    Logger.log(`Error setting job finder source label: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Gets the Gmail label applied to processed job alert emails.
+ * @returns {string} The label name.
+ */
+function getJobFinderProcessedLabel() {
+  return (
+    PropertiesService.getScriptProperties().getProperty(
+      PROPERTY_KEYS.JOB_FINDER_PROCESSED_LABEL
+    ) || JOB_FINDER_CONFIG.PROCESSED_LABEL
+  );
+}
+
+/**
+ * Sets the Gmail label applied to processed job alert emails.
+ * @param {string} label - The label name to store.
+ * @returns {boolean} True if successful, false otherwise.
+ */
+function setJobFinderProcessedLabel(label) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      PROPERTY_KEYS.JOB_FINDER_PROCESSED_LABEL,
+      label
+    );
+    return true;
+  } catch (error) {
+    Logger.log(`Error setting job finder processed label: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Gets the Gmail label used to queue rate-limited job alert emails.
+ * @returns {string} The label name.
+ */
+function getJobFinderRateLimitLabel() {
+  return (
+    PropertiesService.getScriptProperties().getProperty(
+      PROPERTY_KEYS.JOB_FINDER_RATE_LIMIT_LABEL
+    ) || JOB_FINDER_CONFIG.RATE_LIMIT_LABEL
+  );
+}
+
+/**
+ * Sets the Gmail label used to queue rate-limited job alert emails.
+ * @param {string} label - The label name to store.
+ * @returns {boolean} True if successful, false otherwise.
+ */
+function setJobFinderRateLimitLabel(label) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      PROPERTY_KEYS.JOB_FINDER_RATE_LIMIT_LABEL,
+      label
+    );
+    return true;
+  } catch (error) {
+    Logger.log(`Error setting job finder rate limit label: ${error}`);
+    return false;
+  }
+}
+
 // Conditional exports for testing (works in both Node.js and Apps Script)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -454,6 +547,12 @@ if (typeof module !== 'undefined' && module.exports) {
     testApiKeyConnection,
     saveApiKeyFromAddon,
     testApiKeyFromAddon,
+    getJobFinderSourceLabel,
+    setJobFinderSourceLabel,
+    getJobFinderProcessedLabel,
+    setJobFinderProcessedLabel,
+    getJobFinderRateLimitLabel,
+    setJobFinderRateLimitLabel,
     PROPERTY_KEYS,
     EMAIL_SORTER_CONFIG,
     JOB_FINDER_CONFIG,
