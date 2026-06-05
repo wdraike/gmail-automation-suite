@@ -280,7 +280,7 @@ function markEmailAsRateLimited(thread) {
 }
 
 /**
- * Process a single email thread to extract jobs and save to CSV
+ * Process a single email thread to extract jobs and save to the spreadsheet
  * @param {GmailThread} thread - Gmail thread to process
  * @param {number} threadIndex - Index for logging
  * @param {number} totalThreads - Total threads for logging

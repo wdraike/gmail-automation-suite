@@ -509,8 +509,10 @@ function returnToMessageView(e) {
 
 function createDashboardCard() {
   try {
-    // Get the web app URL
-    const webAppUrl = getWebAppUrl();
+    // Get the web app URL. Resolve via globalThis so the call is observable
+    // in tests; in the Apps Script runtime getWebAppUrl is a global function,
+    // so this is behavior-identical to calling getWebAppUrl() directly.
+    const webAppUrl = globalThis.getWebAppUrl();
     
     // Create the card
     const card = CardService.newCardBuilder()
