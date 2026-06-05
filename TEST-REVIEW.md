@@ -1,49 +1,44 @@
-# Test Review — WARN-1–13 Backlog Fixes — 2026-06-05
+# Test Review — WARN-14 + WARN-15 URL Filter Fixes — 2026-06-05
 
 ## Summary
-64 tests passed, 0 failed, 0 skipped across 2 suites (+7 new tests covering WARN-1 through WARN-13 backlog items). `extractor.js` hits 76% statement coverage; `main.js` hits 79%. `processEmailContent` dead code removed, so prior uncovered lines for that function are gone.
+42 tests passed, 0 failed across extractor suite. 6 new regression and behaviour tests added for
+WARN-14 (r. too broad in anchor noise filter) and WARN-15 (imprecise substring URL filter). All
+changed lines in extractor.js are covered by new tests. Two pre-existing uncovered functions
+(extractEmailSource, logJobFinderGeminiInteraction) remain gaps but are unchanged by this PR.
 
 ## Test Results
 
 | Suite | Tests | Passed | Failed | Skipped | Time |
 |-------|-------|--------|--------|---------|------|
-| job-finder-extractor.test.js | 36 | 36 | 0 | 0 | <1s |
-| job-finder-main.test.js | 28 | 28 | 0 | 0 | <1s |
-| **Total** | **64** | **64** | **0** | **0** | **<2s** |
+| job-finder-extractor.test.js | 42 | 42 | 0 | 0 | <1s |
+| **Total** | **42** | **42** | **0** | **0** | **<1s** |
 
 ## Failed Tests
 _None._
 
-## Coverage — job-finder scope
+## Coverage — extractor.js (this PR scope only)
 
-| File | % Stmts | % Branch | % Lines | Status |
-|------|---------|----------|---------|--------|
-| extractor.js | 76.0% | 78.2% | 75.5% | PASS (>50%) |
-| main.js | 78.9% | 66.7% | 79.3% | PASS (>50%) |
+| File | % Stmts | % Branch | % Lines | % Funcs | Status |
+|------|---------|----------|---------|---------|--------|
+| extractor.js | 76.3% | 77.6% | 76.4% | 88.9% | PASS (>50%) |
 
-**Note:** Global coverage thresholds are a pre-existing project issue unrelated to this changeset.
+**Note:** Global coverage threshold failure when running single test suite is a pre-existing
+project configuration issue — thresholds are set for full suite runs, not isolated file runs.
 
-## WARN-1–13 Coverage Map
+## WARN-14 / WARN-15 Coverage Map
 
-| WARN # | Change | Test(s) | Status |
-|--------|--------|---------|--------|
-| WARN-1 | Custom source label used in getEmailThreadsToProcess | `uses custom source label value when set` + `returns not-found error when custom label does not exist in Gmail` | PASS |
-| WARN-2 | Mock bleed prevented via beforeEach mockImplementation reset | All tests isolated (no cross-test pollution) | PASS |
-| WARN-3 | markEmailAsNoJobs removes rate-limit label | `removes rate-limit label when present` + `does not error when rate-limit label is absent` | PASS |
-| WARN-4 | Operator-precedence fix `e.` + `.com/` | Pre-existing URL filter tests cover this path | PASS |
-| WARN-5 | anchorPairs capped at 30, noise filtered | `includes anchor pairs in the prompt when provided` | PASS |
-| WARN-6 | Location fallback blank (not "Not specified") | `location prompt instruction uses City/State or City/Country or Remote format` | PASS |
-| WARN-7 | confidence=null filtered out | `filters out jobs with confidence=null` | PASS |
-| WARN-8 | confidence=0 filtered out | `filters out jobs with confidence=0` | PASS |
-| WARN-9–12 | processEmailContent dead code removed | No export in module.exports; no callers | PASS |
-| WARN-13 | Location prompt positive assertion | `location prompt instruction uses City/State or City/Country or Remote format` (regex match) | PASS |
+| Item | Change | Test(s) | Status |
+|------|--------|---------|--------|
+| WARN-14 (URL filter) | `r.` removed; hostname-anchored regex replaces `click.`/`track.` substring checks | `does NOT filter out career.com URLs`, `does NOT filter out director.jobs URLs`, `filters out r.example.com redirect URLs` | PASS |
+| WARN-14 (anchor filter) | `r.`, `click.`, `track.`, `email.`, `go.` removed from ANCHOR_NOISE_DOMAINS; replaced with `ANCHOR_TRACKING_SUBDOMAIN_RE` regex on hostname | `keeps career.com anchor pairs`, `filters r.example.com anchor pairs` | PASS |
+| WARN-15 | `click.`/`track.` substring → `/^(click\|track\|email\|go\|r)\./i` regex anchored to hostname | `filters out click.example.com tracking URLs`, `filters out tracking and social URLs` (track.foobar.com) | PASS |
 
-## Missing Tests (pre-existing gaps, not introduced this changeset)
+## Missing Tests (pre-existing gaps, unchanged by this PR)
 
 | File | Untested Entities | Priority |
 |------|-------------------|----------|
-| extractor.js:463–522 | `extractEmailSource`, `logJobFinderGeminiInteraction` | LOW — utility/logging functions |
-| main.js:534–580 | `updateJobFinderConfig`, `setupJobFinderTrigger` | LOW — config/trigger helpers |
+| extractor.js:470–493 | `extractEmailSource` — all branches | LOW — utility only |
+| extractor.js:500–532 | `logJobFinderGeminiInteraction` — error storage path (requires PropertiesService mock) | LOW — logging only |
 
 ## Status: PASS
 

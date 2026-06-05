@@ -80,10 +80,12 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
       const lower = url.toLowerCase();
 
       // Exclude email tracking and analytics
+      // Use hostname-anchored regex for subdomain checks to avoid false positives
+      // (e.g. 'click.' substring would wrongly filter clickup.com)
+      let hostname = '';
+      try { hostname = new URL(url).hostname.toLowerCase(); } catch (e) { hostname = ''; }
       if (lower.includes('sendgrid.net') ||
-          lower.includes('ct.sendgrid.net') ||
-          lower.includes('click.') ||
-          lower.includes('track.') ||
+          /^(click|track|email|go|r)\./i.test(hostname) ||
           lower.includes('tracking') ||
           lower.includes('analytics') ||
           lower.includes('utm_') ||
@@ -92,8 +94,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
           lower.includes('_opens') ||
           lower.includes('_clicks') ||
           lower.includes('mailings') ||
-          lower.includes('email-track') ||
-          (lower.includes('e.') && lower.includes('.com/'))) {
+          lower.includes('email-track')) {
         return false;
       }
 
@@ -166,12 +167,19 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
     // Include anchor text/URL pairs to help match job titles to their apply links
     let anchorSection = '';
     if (anchorPairs && anchorPairs.length > 0) {
+      // Exact-domain noise list; tracking subdomains checked separately via regex
       const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'instagram.com',
-        'unsubscribe', 'click.', 'track.', 'r.', 'email.', 'go.'];
+        'unsubscribe'];
+      const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
       const filteredPairs = anchorPairs
         .filter(p => {
           const href = (p.url || '').toLowerCase();
-          return !ANCHOR_NOISE_DOMAINS.some(d => href.includes(d));
+          if (ANCHOR_NOISE_DOMAINS.some(d => href.includes(d))) return false;
+          try {
+            const anchorHost = new URL(p.url).hostname.toLowerCase();
+            if (ANCHOR_TRACKING_SUBDOMAIN_RE.test(anchorHost)) return false;
+          } catch (e) { /* malformed URL — keep it */ }
+          return true;
         })
         .slice(0, 30);
       if (filteredPairs.length > 0) {

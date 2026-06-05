@@ -176,6 +176,29 @@ describe("extractor", () => {
       expect(promptArg).toContain("https://acme.com/jobs/123");
     });
 
+    // WARN-14 regression: anchor filter must not strip career.com or director.jobs anchors
+    it("keeps career.com anchor pairs (WARN-14 anchor regression)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [{ text: "Director of Engineering", url: "https://career.com/jobs/dir-eng" }];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("https://career.com/jobs/dir-eng");
+    });
+
+    it("filters r.example.com anchor pairs (tracking subdomain)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [
+        { text: "Apply Here", url: "https://r.example.com/redirect?url=jobs" },
+        { text: "Real Job", url: "https://jobs.acme.com/123" },
+      ];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("r.example.com");
+      expect(promptArg).toContain("https://jobs.acme.com/123");
+    });
+
     it("filters out tracking and social URLs", () => {
       global.callGeminiApi = jest.fn(() => ({
         response: '[{"company":"X","jobTitle":"Dev"}]',
@@ -193,6 +216,40 @@ describe("extractor", () => {
       expect(promptArg).not.toContain("track.foobar.com");
       expect(promptArg).not.toContain("linkedin.com");
       expect(promptArg).not.toContain("unsubscribe");
+    });
+
+    // WARN-14 regression: 'r.' was too broad and matched career.com, director.jobs etc.
+    it("does NOT filter out career.com URLs (WARN-14 regression)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("Apply now", ["https://career.com/jobs"], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("https://career.com/jobs");
+    });
+
+    it("does NOT filter out director.jobs URLs (WARN-14 regression)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("Apply now", ["https://director.jobs/apply"], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("https://director.jobs/apply");
+    });
+
+    // WARN-15: tracking subdomains must be filtered via hostname-anchored regex
+    it("filters out click.example.com tracking URLs (WARN-15)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("Apply now", ["https://click.example.com/track"], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("click.example.com");
+    });
+
+    it("filters out r.example.com redirect URLs (WARN-14/15 combined)", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("Apply now", ["https://r.example.com/redirect"], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).not.toContain("r.example.com");
     });
 
     it("throws RATE_LIMIT_REACHED on 429 error", () => {
