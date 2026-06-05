@@ -217,75 +217,6 @@ function extractJobsFromEmail(emailContent) {
 }
 
 /**
- * Save extracted jobs to CSV file
- * @param {Array} jobs - Array of job objects
- * @param {Object} metadata - Email metadata {subject, source, date}
- * @returns {Object} {success, fileName, message}
- */
-function saveJobsToCsv(jobs, metadata) {
-  try {
-    if (!jobs || jobs.length === 0) {
-      return {
-        success: true,
-        fileName: null,
-        message: "No jobs to save"
-      };
-    }
-
-    // Filter valid jobs
-    const validJobs = jobs.filter(job => isValidJobListing(job));
-
-    if (validJobs.length === 0) {
-      Logger.log("No valid jobs to save after filtering");
-      return {
-        success: true,
-        fileName: null,
-        message: "No valid jobs after filtering"
-      };
-    }
-
-    // Enrich jobs with email metadata for all spreadsheet columns
-    const enrichedJobs = validJobs.map(job => ({
-      ...job,
-      "Email Received Date": metadata.date ? formatDateTime(metadata.date) : "",
-      "Email Source": metadata.source || "",
-      "Date Added": formatDateTime(new Date()),
-      "Interest": "",  // User fills this in manually
-      "Email Title": metadata.subject || "",
-      "Jobs Found In Email": validJobs.length.toString()
-    }));
-
-    // Write to CSV
-    const csvResult = writeJobsToCsv(enrichedJobs);
-
-    if (csvResult.success) {
-      Logger.log(`Saved ${validJobs.length} job(s) to CSV: ${csvResult.fileName}`);
-      return {
-        success: true,
-        fileName: csvResult.fileName,
-        message: `Saved ${validJobs.length} jobs`,
-        savedJobs: validJobs
-      };
-    } else {
-      Logger.log(`Failed to save jobs to CSV: ${csvResult.message}`);
-      return {
-        success: false,
-        fileName: null,
-        message: csvResult.message
-      };
-    }
-
-  } catch (error) {
-    Logger.log(`Error saving jobs to CSV: ${error}`);
-    return {
-      success: false,
-      fileName: null,
-      message: error.toString()
-    };
-  }
-}
-
-/**
  * Mark email thread as successfully processed
  * Adds processed label, removes source label, archives thread
  * @param {GmailThread} thread - Thread to mark
@@ -357,20 +288,28 @@ function processOneEmail(thread, threadIndex, totalThreads) {
       Logger.log(`Found ${extractionResult.jobs.length} job(s) in "${emailContent.subject}"`);
     }
 
-    // Save jobs to CSV
-    const saveResult = saveJobsToCsv(extractionResult.jobs, {
-      subject: emailContent.subject,
-      source: emailContent.source,
-      date: emailContent.date
-    });
+    // Write valid jobs directly to spreadsheet
+    const validJobs = extractionResult.jobs.filter(job => isValidJobListing(job));
+    let savedCount = 0;
+    for (const job of validJobs) {
+      const added = addJobToSpreadsheet(
+        job,
+        false,
+        emailContent.date,
+        emailContent.source,
+        emailContent.subject,
+        validJobs.length
+      );
+      if (added) savedCount++;
+    }
 
     // Mark email as processed
     markEmailAsProcessed(thread);
 
     return {
       success: true,
-      jobCount: saveResult.savedJobs ? saveResult.savedJobs.length : 0,
-      jobs: saveResult.savedJobs || [],
+      jobCount: savedCount,
+      jobs: validJobs,
       wasRateLimited: false
     };
 
@@ -571,8 +510,7 @@ function setupJobFinderTrigger() {
     // Remove any existing triggers
     const triggers = ScriptApp.getProjectTriggers();
     for (const trigger of triggers) {
-      if (trigger.getHandlerFunction() === "processJobEmailsMain" ||
-          trigger.getHandlerFunction() === "importPendingJobCsvs") {
+      if (trigger.getHandlerFunction() === "processJobEmailsMain") {
         ScriptApp.deleteTrigger(trigger);
       }
     }
@@ -599,7 +537,6 @@ if (typeof module !== 'undefined' && module.exports) {
     getEmailThreadsToProcess,
     extractEmailContent,
     extractJobsFromEmail,
-    saveJobsToCsv,
     markEmailAsProcessed,
     markEmailAsRateLimited,
     processOneEmail,

@@ -43,7 +43,7 @@ global.isValidJobListing = jest.fn(() => true);
 global.extractTextFromHtml = jest.fn(() => ({ plainText: "Email body", extractedUrls: [] }));
 global.extractEmailSource = jest.fn(() => "example");
 global.formatDateTime = jest.fn(() => "2026-01-01");
-global.writeJobsToCsv = jest.fn(() => ({ success: true, fileName: "jobs.csv" }));
+global.addJobToSpreadsheet = jest.fn(() => true);
 
 const main = require("../src/features/job-finder/main.js");
 
@@ -218,25 +218,48 @@ describe("job-finder main", () => {
     });
   });
 
-  describe("saveJobsToCsv", () => {
-    it("returns no-jobs message when jobs array empty", () => {
-      const result = main.saveJobsToCsv([], { subject: "Jobs" });
+  describe("processOneEmail direct-to-sheet", () => {
+    it("calls addJobToSpreadsheet for each valid job", () => {
+      const thread = {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Jobs"),
+          getBody: jest.fn(() => "<p>Apply</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+      };
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev" },
+        { Company: "Beta", "Job Title": "PM" },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+      const result = main.processOneEmail(thread, 1, 1);
       expect(result.success).toBe(true);
-      expect(result.message).toContain("No jobs");
+      expect(result.jobCount).toBe(2);
+      expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(2);
     });
 
-    it("filters invalid jobs before saving", () => {
-      global.isValidJobListing = jest.fn((job) => job && job["Company"] === "Acme");
-      const jobs = [
+    it("filters invalid jobs before writing to sheet", () => {
+      const thread = {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Jobs"),
+          getBody: jest.fn(() => "<p>Apply</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+      };
+      global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev" },
         { Company: "Unknown" },
-      ];
-      const result = main.saveJobsToCsv(jobs, { subject: "Jobs" });
+      ]);
+      global.isValidJobListing = jest.fn((job) => job && job["Company"] === "Acme");
+      global.addJobToSpreadsheet = jest.fn(() => true);
+      const result = main.processOneEmail(thread, 1, 1);
       expect(result.success).toBe(true);
-      expect(global.writeJobsToCsv).toHaveBeenCalled();
-      const callArgs = global.writeJobsToCsv.mock.calls[0][0];
-      expect(callArgs.length).toBe(1);
-      expect(callArgs[0]["Company"]).toBe("Acme");
+      expect(result.jobCount).toBe(1);
+      expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(1);
+      expect(global.addJobToSpreadsheet.mock.calls[0][0]["Company"]).toBe("Acme");
     });
   });
 });
