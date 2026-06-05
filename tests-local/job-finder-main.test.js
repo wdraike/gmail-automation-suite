@@ -20,6 +20,8 @@ global.getJobFinderSourceLabel = jest.fn(() => "📬 JobAlerts");
 global.getJobFinderProcessedLabel = jest.fn(() => "📬 JobAlerts/Processed");
 global.getJobFinderRateLimitLabel = jest.fn(() => "📬 JobAlerts/RateLimited");
 global.getJobFinderNoJobsLabel = jest.fn(() => "📬 JobAlerts/NoJobs");
+// NOTE: getter mocks above are initialized at module-load time (required for require() to work).
+// They are re-assigned to their default implementations in beforeEach (WARN-2 fix).
 
 global.GmailService = {
   labels: {
@@ -52,6 +54,11 @@ const main = require("../src/features/job-finder/main.js");
 describe("job-finder main", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // WARN-2: reset getter mock implementations every test so overrides in one test don't bleed
+    global.getJobFinderSourceLabel.mockImplementation(() => "📬 JobAlerts");
+    global.getJobFinderProcessedLabel.mockImplementation(() => "📬 JobAlerts/Processed");
+    global.getJobFinderRateLimitLabel.mockImplementation(() => "📬 JobAlerts/RateLimited");
+    global.getJobFinderNoJobsLabel.mockImplementation(() => "📬 JobAlerts/NoJobs");
   });
 
   describe("initializeJobFinder", () => {
@@ -513,6 +520,114 @@ describe("job-finder main", () => {
       const result = main.processOneEmail(thread, 1, 1);
 
       expect(result.jobCount).toBe(1);
+    });
+
+    // WARN-7: confidence=null is coerced to 0 by JS comparison (null < 0.5 === true), so filtered out
+    it("filters out jobs with confidence=null (null < 0.5 is true in JS)", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev", _confidence: null },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      // null coerces to 0, so null < 0.5 is true → job is rejected
+      expect(result.jobCount).toBe(0);
+    });
+
+    // WARN-8: confidence=0 is below threshold and must be filtered out
+    it("filters out jobs with confidence=0", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev", _confidence: 0 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(0);
+    });
+  });
+
+  describe("markEmailAsNoJobs rate-limit label cleanup", () => {
+    // WARN-3: markEmailAsNoJobs must remove rate-limit label before archiving
+    it("removes rate-limit label when present", () => {
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
+      const rateLimitLabelObj = { getName: jest.fn(() => "📬 JobAlerts/RateLimited") };
+
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") return sourceLabelObj;
+        if (name === "📬 JobAlerts/RateLimited") return rateLimitLabelObj;
+        return null;
+      });
+
+      const thread = {
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+
+      main.markEmailAsNoJobs(thread);
+
+      expect(thread.removeLabel).toHaveBeenCalledWith(rateLimitLabelObj);
+      expect(thread.removeLabel).toHaveBeenCalledWith(sourceLabelObj);
+      expect(thread.addLabel).toHaveBeenCalledWith(noJobsLabelObj);
+      expect(thread.moveToArchive).toHaveBeenCalled();
+    });
+
+    it("does not error when rate-limit label is absent", () => {
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      global.GmailService.labels.getOrCreateLabel = jest.fn(() => noJobsLabelObj);
+      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+
+      const thread = {
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+
+      expect(() => main.markEmailAsNoJobs(thread)).not.toThrow();
+      expect(thread.removeLabel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getEmailThreadsToProcess custom label (WARN-1)", () => {
+    it("uses custom source label value when set", () => {
+      global.getJobFinderSourceLabel.mockImplementation(() => "MyCustomJobs");
+      global.getJobFinderRateLimitLabel.mockImplementation(() => "MyCustomJobs/Queue");
+
+      const threads = [{ id: "t1" }];
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "MyCustomJobs") return { getThreads: jest.fn(() => threads) };
+        return null;
+      });
+
+      const result = main.getEmailThreadsToProcess();
+
+      expect(result.success).toBe(true);
+      expect(result.threads).toEqual(threads);
+      // Confirm getLabelSafe was called with the custom label, not the default
+      expect(global.GmailService.labels.getLabelSafe).toHaveBeenCalledWith("MyCustomJobs");
+    });
+
+    it("returns not-found error when custom label does not exist in Gmail", () => {
+      global.getJobFinderSourceLabel.mockImplementation(() => "NonExistentLabel");
+      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+
+      const result = main.getEmailThreadsToProcess();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("NonExistentLabel");
     });
   });
 });

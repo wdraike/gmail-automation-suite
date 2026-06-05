@@ -250,9 +250,11 @@ function markEmailAsNoJobs(thread) {
   try {
     const noJobsLabel = GmailService.labels.getOrCreateLabel(getJobFinderNoJobsLabel());
     const sourceLabel = GmailService.labels.getLabelSafe(getJobFinderSourceLabel());
+    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
 
     thread.addLabel(noJobsLabel);
     if (sourceLabel) thread.removeLabel(sourceLabel);
+    if (rateLimitLabel) thread.removeLabel(rateLimitLabel);
     thread.moveToArchive();
 
     Logger.log(`Marked thread as no-jobs`);

@@ -93,7 +93,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
           lower.includes('_clicks') ||
           lower.includes('mailings') ||
           lower.includes('email-track') ||
-          lower.includes('e.') && lower.includes('.com/')) {
+          (lower.includes('e.') && lower.includes('.com/'))) {
         return false;
       }
 
@@ -166,8 +166,18 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
     // Include anchor text/URL pairs to help match job titles to their apply links
     let anchorSection = '';
     if (anchorPairs && anchorPairs.length > 0) {
-      anchorSection = '\nLink Text → URL Mappings (use these to match job titles to apply links):\n' +
-        anchorPairs.slice(0, 100).map(p => `"${p.text}" → ${p.url}`).join('\n');
+      const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'instagram.com',
+        'unsubscribe', 'click.', 'track.', 'r.', 'email.', 'go.'];
+      const filteredPairs = anchorPairs
+        .filter(p => {
+          const href = (p.url || '').toLowerCase();
+          return !ANCHOR_NOISE_DOMAINS.some(d => href.includes(d));
+        })
+        .slice(0, 30);
+      if (filteredPairs.length > 0) {
+        anchorSection = '\nLink Text → URL Mappings (use these to match job titles to apply links):\n' +
+          filteredPairs.map(p => `"${p.text}" → ${p.url}`).join('\n');
+      }
     }
 
     // Prepare the prompt for Gemini
@@ -250,7 +260,7 @@ JSON ARRAY:`;
           "Company": job.company || job.Company || "Unknown",
           "Company Description": job.companyDescription || job["Company Description"] || "",
           "Job Title": job.jobTitle || job["Job Title"] || "Unknown Position",
-          "Location": job.location || job.Location || "Not specified",
+          "Location": job.location || job.Location || "",
           "Minimum Salary": cleanSalaryValue(job.minSalary || job["Minimum Salary"]),
           "Maximum Salary": cleanSalaryValue(job.maxSalary || job["Maximum Salary"]),
           "Salary Period": job.salaryPeriod || job["Salary Period"] || "",
@@ -475,50 +485,6 @@ function extractEmailSource(from) {
 }
 
 /**
- * Process email content with rate limiting awareness
- * @param {string} content - Email content
- * @param {Array} extractedUrls - URLs found in email
- * @param {string} contentId - Unique ID for this content
- * @returns {Object} Processing result
- */
-function processEmailContent(content, extractedUrls, contentId) {
-  try {
-    const processingState = {
-      isPartiallyProcessed: false,
-      processedJobs: []
-    };
-    
-    const jobs = extractJobDetailsSimple(content, extractedUrls, processingState);
-    
-    return {
-      success: true,
-      jobs: jobs,
-      isPartiallyProcessed: processingState.isPartiallyProcessed,
-      contentId: contentId
-    };
-    
-  } catch (error) {
-    if (error.message === "RATE_LIMIT_REACHED") {
-      return {
-        success: false,
-        jobs: [],
-        isPartiallyProcessed: true,
-        error: "RATE_LIMIT_REACHED",
-        contentId: contentId
-      };
-    }
-    
-    return {
-      success: false,
-      jobs: [],
-      isPartiallyProcessed: false,
-      error: error.toString(),
-      contentId: contentId
-    };
-  }
-}
-
-/**
  * Log Gemini API interaction
  * @param {string} type - Type of interaction
  * @param {Object} content - Content to log
@@ -568,7 +534,6 @@ if (typeof module !== 'undefined' && module.exports) {
     isValidJobListing,
     cleanSalaryValue,
     extractEmailSource,
-    processEmailContent,
     logJobFinderGeminiInteraction
   };
 }

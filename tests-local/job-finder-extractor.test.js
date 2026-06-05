@@ -239,7 +239,17 @@ describe("extractor", () => {
       expect(promptArg).toContain("City, Country");
       expect(promptArg).toContain("Remote");
       expect(promptArg).not.toContain("N/A");
-      expect(promptArg).not.toContain("Not specified");
+      // WARN-13: positive assertion — prompt must specify exactly the three allowed formats
+      expect(promptArg).toMatch(/City, State.*City, Country.*Remote|City, Country.*City, State.*Remote/s);
+    });
+
+    it("sets Careers URL Status to Found when careersUrl is present", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Engineer","careersUrl":"https://acme.com/careers"}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["Careers URL Status"]).toBe("Found");
     });
   });
 
