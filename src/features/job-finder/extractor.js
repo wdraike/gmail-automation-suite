@@ -179,7 +179,7 @@ RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
     "company": "Company Name",
     "companyDescription": "Brief description if mentioned, otherwise empty string",
     "jobTitle": "Exact Job Title",
-    "location": "City, State, Country",
+    "location": "City, State (US) or City, Country (international) or Remote — no other values",
     "minSalary": "",
     "maxSalary": "",
     "salaryPeriod": "",
@@ -255,9 +255,9 @@ JSON ARRAY:`;
           "Maximum Salary": cleanSalaryValue(job.maxSalary || job["Maximum Salary"]),
           "Salary Period": job.salaryPeriod || job["Salary Period"] || "",
           "Job URL": job.jobUrl || job["Job URL"] || "",
-          "URL Status": job.jobUrl ? "Found" : "Not found",
-          "Careers URL": job.careersUrl || job["Careers URL"] || inferCareersUrl(job.jobUrl),
-          "Careers URL Status": job.careersUrl ? "Found" : "Inferred",
+          "URL Status": job.jobUrl ? "Found" : "",
+          "Careers URL": job.careersUrl || job["Careers URL"] || "",
+          "Careers URL Status": job.careersUrl ? "Found" : "",
           "Employment Type": job.employmentType || job["Employment Type"] || "Unknown",
           "Work Arrangement": job.workArrangement || job["Work Arrangement"] || "Unknown",
           "Experience Level": job.experienceLevel || job["Experience Level"] || "Unknown",
@@ -445,44 +445,6 @@ function cleanSalaryValue(salary) {
 }
 
 /**
- * Infer careers URL from job URL
- * @param {string} jobUrl - Job posting URL
- * @returns {string} Inferred careers URL
- */
-function inferCareersUrl(jobUrl) {
-  if (!jobUrl) return "";
-  
-  try {
-    const url = new URL(jobUrl);
-    const domain = url.hostname;
-    
-    // Common careers page patterns
-    const patterns = [
-      '/careers',
-      '/jobs',
-      '/opportunities',
-      '/work-with-us',
-      '/join-us',
-      '/employment'
-    ];
-    
-    // Check if URL already contains a careers pattern
-    for (const pattern of patterns) {
-      if (url.pathname.includes(pattern)) {
-        // Return the base careers URL
-        return `${url.protocol}//${domain}${pattern}`;
-      }
-    }
-    
-    // Default to /careers
-    return `${url.protocol}//${domain}/careers`;
-    
-  } catch (error) {
-    return "";
-  }
-}
-
-/**
  * Extract email source from the from field
  * @param {string} from - Email from field
  * @returns {string} Extracted source
@@ -605,7 +567,6 @@ if (typeof module !== 'undefined' && module.exports) {
     extractTextFromHtml,
     isValidJobListing,
     cleanSalaryValue,
-    inferCareersUrl,
     extractEmailSource,
     processEmailContent,
     logJobFinderGeminiInteraction

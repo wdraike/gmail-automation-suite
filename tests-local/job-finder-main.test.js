@@ -399,6 +399,65 @@ describe("job-finder main", () => {
     });
   });
 
+  describe("processOneEmail double-Unknown rejection", () => {
+    function makeThread() {
+      return {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Jobs"),
+          getBody: jest.fn(() => "<p>Apply</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+    }
+
+    it("rejects jobs where company is Unknown AND title is Unknown Position", () => {
+      const thread = makeThread();
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Unknown", "Job Title": "Unknown Position", _confidence: 0.9 },
+        { Company: "Acme", "Job Title": "Unknown Position", _confidence: 0.9 },
+        { Company: "Unknown", "Job Title": "Engineer", _confidence: 0.9 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(2);
+      expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(2);
+      const savedJobs = global.addJobToSpreadsheet.mock.calls.map(c => c[0]);
+      const doubleUnknown = savedJobs.filter(j => j["Company"] === "Unknown" && j["Job Title"] === "Unknown Position");
+      expect(doubleUnknown).toHaveLength(0);
+    });
+
+    it("keeps jobs where only one of company/title is Unknown", () => {
+      const thread = makeThread();
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Unknown Position", _confidence: 0.9 },
+        { Company: "Unknown", "Job Title": "Software Engineer", _confidence: 0.9 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(2);
+    });
+  });
+
   describe("processOneEmail confidence filtering", () => {
     function makeThreadWith(body) {
       return {

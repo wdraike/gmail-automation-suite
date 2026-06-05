@@ -202,6 +202,45 @@ describe("extractor", () => {
       const state = { processedJobs: [], isPartiallyProcessed: false };
       expect(() => extractor.extractJobDetailsSimple("text", [], state)).toThrow("RATE_LIMIT_REACHED");
     });
+
+    it("sets URL Status to empty string when jobUrl is absent", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Engineer","jobUrl":""}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["URL Status"]).toBe("");
+    });
+
+    it("sets URL Status to Found when jobUrl is present", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Engineer","jobUrl":"https://acme.com/jobs/1"}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["URL Status"]).toBe("Found");
+    });
+
+    it("sets Careers URL Status to empty string when careersUrl is absent", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Engineer","careersUrl":""}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["Careers URL Status"]).toBe("");
+    });
+
+    it("location prompt instruction uses City/State or City/Country or Remote format", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      extractor.extractJobDetailsSimple("We are hiring", [], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("City, State");
+      expect(promptArg).toContain("City, Country");
+      expect(promptArg).toContain("Remote");
+      expect(promptArg).not.toContain("N/A");
+      expect(promptArg).not.toContain("Not specified");
+    });
   });
 
   describe("extractJobsFallback", () => {
@@ -239,21 +278,6 @@ describe("extractor", () => {
     it("returns empty string for falsy input", () => {
       expect(extractor.cleanSalaryValue(null)).toBe("");
       expect(extractor.cleanSalaryValue("")).toBe("");
-    });
-  });
-
-  describe("inferCareersUrl", () => {
-    it("returns base careers URL when job URL contains careers path", () => {
-      expect(extractor.inferCareersUrl("https://example.com/careers/job/123")).toBe("https://example.com/careers");
-    });
-
-    it("returns base jobs URL when job URL contains jobs path", () => {
-      expect(extractor.inferCareersUrl("https://example.com/jobs/123")).toBe("https://example.com/jobs");
-    });
-
-    it("returns empty string for falsy input", () => {
-      expect(extractor.inferCareersUrl("")).toBe("");
-      expect(extractor.inferCareersUrl(null)).toBe("");
     });
   });
 

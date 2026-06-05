@@ -1,55 +1,45 @@
-# Test Review — Phase 3: Pre-check Gate + Richer Extraction — 2026-06-05
+# Test Review — Phase 4: Data Quality Cleanup — 2026-06-05
 
 ## Summary
-54 tests passed, 0 failed, 0 skipped across 2 suites. All new Phase 3 functionality is fully covered: `isJobListingEmail` pre-check gate, `extractAnchorPairs`, new extraction fields (`employmentType`, `workArrangement`, `experienceLevel`, `confidence`), anchor pairs in prompt, and confidence-based filtering in `processOneEmail`. Coverage on the two scoped files is at 73% and 76% respectively — gaps are in legacy/utility functions not touched by this phase.
+57 tests passed, 0 failed, 0 skipped across 2 suites. All five Phase 4 changes are directly exercised by dedicated tests. `extractor.js` hits 72.6% statement coverage; `main.js` hits 78.1%. Uncovered lines are in legacy/orphan functions (`processEmailContent`, `logJobFinderGeminiInteraction`, `setupJobFinderTrigger`) not touched by this phase.
 
 ## Test Results
 
 | Suite | Tests | Passed | Failed | Skipped | Time |
 |-------|-------|--------|--------|---------|------|
-| job-finder-extractor.test.js | 39 | 39 | 0 | 0 | <1s |
-| job-finder-main.test.js | 15 | 15 | 0 | 0 | <1s |
+| job-finder-extractor.test.js | 34 | 34 | 0 | 0 | <1s |
+| job-finder-main.test.js | 23 | 23 | 0 | 0 | <1s |
+| **Total** | **57** | **57** | **0** | **0** | **<2s** |
 
-## Coverage (scoped to changed source files)
+## Failed Tests
+_None._
 
-| File | Stmt % | Branch % | Funcs % | Status |
-|------|--------|----------|---------|--------|
-| src/features/job-finder/extractor.js | 73% | 77% | 83% | PASS |
-| src/features/job-finder/main.js | 76% | 60% | 81% | PASS |
+## Coverage — job-finder scope
 
-Coverage gaps are in pre-existing legacy utilities (`logJobFinderGeminiInteraction`, `processEmailContent`, `extractEmailSource`, `setupJobFinderTrigger`) not touched by this phase.
+| File | % Stmts | % Branch | % Lines | Status |
+|------|---------|----------|---------|--------|
+| extractor.js | 72.6% | 77.3% | 72.1% | PASS (>50%) |
+| main.js | 78.1% | 64.3% | 78.5% | PASS (>50%) |
 
-## New Tests Added — Phase 3
+**Note:** Global coverage thresholds (50%) are not met project-wide because the `--testPathPattern=job-finder` run excludes all other source files. Full suite thresholds are a pre-existing project issue unrelated to Phase 4.
 
-| Test | File | Covers |
-|------|------|--------|
-| isJobListingEmail returns true when Gemini responds YES | extractor | Happy path |
-| isJobListingEmail returns true when response is YES with whitespace | extractor | Trim handling |
-| isJobListingEmail returns false when Gemini responds NO | extractor | Reject path |
-| isJobListingEmail returns false when Gemini returns null | extractor | Null-response defence |
-| isJobListingEmail truncates body to 2000 chars before sending | extractor | Cost-control truncation |
-| extractAnchorPairs: extracts text and URL from anchor tags | extractor | Core extraction |
-| extractAnchorPairs: strips inner HTML tags from anchor text | extractor | Nested tag handling |
-| extractAnchorPairs: returns empty array for HTML with no anchors | extractor | No-match case |
-| extractAnchorPairs: returns empty array for null/empty input | extractor | Null defence |
-| extractAnchorPairs: handles multiple anchor tags | extractor | Multi-anchor iteration |
-| extractTextFromHtml: returns anchorPairs in the result | extractor | anchorPairs propagation |
-| extractJobDetailsSimple: includes new fields in extraction result | extractor | employmentType, workArrangement, experienceLevel, _confidence |
-| extractJobDetailsSimple: defaults new fields to Unknown when absent | extractor | Missing-field defaults |
-| extractJobDetailsSimple: defaults _confidence to 1.0 when absent | extractor | Default confidence |
-| extractJobDetailsSimple: includes anchor pairs in the prompt | extractor | Anchor section in prompt |
-| pre-check gate: calls markEmailAsNoJobs and skips extraction when false | main | Gate skip path |
-| pre-check gate: proceeds with extraction when pre-check returns true | main | Gate pass-through path |
-| confidence filtering: filters out jobs with confidence below 0.5 | main | Low-confidence rejection |
-| confidence filtering: keeps jobs where _confidence is exactly 0.5 | main | Boundary (inclusive) |
-| confidence filtering: keeps jobs with no _confidence field | main | Missing-field pass-through |
+## Phase 4 Coverage Map
 
-## Missing Tests
+| Change | Test(s) | Status |
+|--------|---------|--------|
+| 2a: `inferCareersUrl` deleted | Old tests removed; no call sites to test | PASS |
+| 2b: Careers URL Status — blank when no URL | `sets Careers URL Status to empty string when careersUrl is absent` | PASS |
+| 2c: Double-Unknown filter | `rejects jobs where company is Unknown AND title is Unknown Position` + `keeps jobs where only one of company/title is Unknown` | PASS |
+| 2d: Location prompt format | `location prompt instruction uses City/State or City/Country or Remote format` | PASS |
+| 2e: URL Status blank (not "Not found") | `sets URL Status to empty string when jobUrl is absent` + `sets URL Status to Found when jobUrl is present` | PASS |
 
-None for Phase 3 scope. The following edge cases are noted as low-priority for a future sprint:
-- `isJobListingEmail` called when Gemini throws — currently returns `false` silently; a test verifying that behaviour is documented
-- `extractAnchorPairs` with malformed `href` containing no quotes — would silently skip the pair (acceptable)
-- `processEmailContent` with anchor pairs — not tested because `anchorPairs` is not passed in that function (tracked in CODE-REVIEW.md Warning #2)
+## Missing Tests (pre-existing gaps, not introduced this phase)
+
+| File | Untested Entities | Priority |
+|------|-------------------|----------|
+| extractor.js:453–558 | `extractEmailSource`, `processEmailContent`, `logJobFinderGeminiInteraction` | LOW — orphan/utility functions; Ernie flagged `processEmailContent` as dead code |
+| main.js:510–578 | `updateJobFinderConfig`, `setupJobFinderTrigger` | LOW — config/trigger helpers; no logic to test |
 
 ## Status: PASS
+
 _Signed: Telly — 2026-06-05T00:00:00Z_

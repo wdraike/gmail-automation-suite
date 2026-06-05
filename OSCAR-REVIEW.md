@@ -1,54 +1,60 @@
-# Oscar Review — Phase 3: Pre-check Gate + Richer Extraction — 2026-06-05
+# Oscar Review — Phase 4: Data Quality Cleanup — 2026-06-05
 
 ## Verdict: WARN
 
 ## Summary
-Phase 3 complete and correct. 54/54 tests pass. No critical or blocking findings from any agent. Six backlog-level items deferred: anchor pair filtering in prompt, `processEmailContent` missing anchorPairs arg, anchor cap size, truncation assertion loosse bound, `_confidence=null` behavior, and `_confidence=0` boundary test.
+All five Phase 4 changes are correctly implemented and tested. 57/57 job-finder tests pass. No Critical findings from any agent. Three pre-existing code warnings (operator-precedence bug at extractor.js:96, Location fallback mismatch, orphan functions) are not introduced by this PR and are backlogged.
 
 ## Agent Findings
 
 ### Ernie — PASS
-No critical findings. Three warnings deferred to backlog.
 | # | Severity | Finding | File:Line | Remediation |
 |---|----------|---------|-----------|-------------|
-| 1 | WARN | `anchorPairs` injected into prompt without tracking/social filtering — pollutes link-mapping section | extractor.js:168-170 | Apply same filter predicate as `relevantUrls` before building anchorSection |
-| 2 | WARN | `processEmailContent` calls `extractJobDetailsSimple` without `anchorPairs` (4th arg missing) | extractor.js:529 | Pass anchorPairs or document intentionally anchor-free |
-| 3 | WARN | `anchorPairs.slice(0, 100)` can add ~4KB to prompt on large emails | extractor.js:170 | Reduce cap to 30, or filter by job-keyword anchor text first |
-| 4 | Info | `isJobListingEmail` error path silently returns false — Gemini outage routes all emails to NoJobs | extractor.js:19-22 | Track pre-check errors separately from legit NoJobs verdicts |
-| 5 | Info | Operator-precedence ambiguity (pre-existing) in URL filter condition | extractor.js:96 | Add explicit parens |
-| 6 | Info | `_confidence` leading-underscore convention undocumented | extractor.js:264 | Add comment: filter-only, not stored to sheet |
+| 1 | Warning | Pre-existing operator-precedence bug in URL filter: `lower.includes('e.') && lower.includes('.com/')` may over-exclude valid URLs | extractor.js:96 | Wrap compound condition in parentheses |
+| 2 | Warning | `"Location"` fallback is `"Not specified"` (line 253) — contradicts the prompt's "no other values" instruction | extractor.js:253 | Change fallback to `""` |
+| 3 | Warning | `processEmailContent` (lines 484–519) is dead code — not called from main.js | extractor.js:484 | Remove or document |
+| 4 | Info | Double-Unknown filter at line 330 is logically redundant with `isValidJobListing` at line 328 | main.js:328–330 | Add comment or consolidate |
+| 5 | Info | `logJobFinderGeminiInteraction` is never called | extractor.js:526 | Remove or wire to error paths |
 
 ### Telly — PASS
-54/54 tests passing. All new Phase 3 functions fully covered: `isJobListingEmail` (5 cases), `extractAnchorPairs` (5 cases), `extractTextFromHtml` anchorPairs propagation, new extraction fields (present + defaulted), anchor pairs in prompt, pre-check gate (skip + pass-through), confidence filtering (below/boundary/missing).
+| # | Check | Result |
+|---|-------|--------|
+| 1 | 57/57 job-finder tests pass | PASS |
+| 2 | extractor.js statement coverage 72.6% | PASS |
+| 3 | main.js statement coverage 78.1% | PASS |
+| 4 | All five Phase 4 changes have dedicated tests | PASS |
 
 ### Zoe — PASS
-No false passes. Three WARN items (truncation assertion loose bound, `_confidence=null` edge case, `_confidence=0` boundary) — all deferrable.
+| # | Severity | Finding | File:Line | Remediation |
+|---|----------|---------|-----------|-------------|
+| 1 | Warn | Double-Unknown test mocks `isValidJobListing` as always-true; doesn't expose semantic overlap with line 328 | job-finder-main.test.js:425 | Add comment or companion test |
+| 2 | Warn | No test for Careers URL Status = "Found" when careersUrl is present | job-finder-extractor.test.js:224 | Add positive case |
+| 3 | Warn | Negative `not.toContain("Not specified")` assertion tests nothing meaningful since prompt no longer contains that string | job-finder-extractor.test.js:241 | Replace with `toContain("no other values")` |
 
 ## Fix Loop
-No fix loop run — no BLOCK findings.
+None required — no BLOCK findings from any agent.
 
 ## Completeness
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
 | Tests passing | PASS |
-| Docs updated (if API changed) | PASS (no external API change) |
-| Security review run (if auth/payment) | N/A |
+| Docs updated (if API changed) | N/A — no API change |
+| Security review run (if auth/payment) | N/A — no security-sensitive files |
 
-## Backlog Items (WARN)
+## Backlog Items
 | Finding | File |
 |---------|------|
-| Anchor pairs not filtered before prompt injection (tracking/social links leak into link-mapping section) | src/features/job-finder/extractor.js:168-170 |
-| `processEmailContent` missing anchorPairs arg — anchor URL matching silently absent on that path | src/features/job-finder/extractor.js:529 |
-| Anchor cap of 100 may push large-email prompts close to context limit | src/features/job-finder/extractor.js:170 |
-| Truncation test assertion too loose — would pass a 4999-char implementation | tests-local/job-finder-extractor.test.js:42 |
-| `_confidence=null` edge case untested — silently drops the job (may be unintended) | tests-local/job-finder-main.test.js |
-| `_confidence=0` boundary not explicitly tested | tests-local/job-finder-main.test.js |
+| Operator-precedence bug in URL filter | extractor.js:96 |
+| Location fallback contradicts prompt contract | extractor.js:253 |
+| `processEmailContent` dead code | extractor.js:484 |
+| Missing Careers URL Status "Found" test | job-finder-extractor.test.js |
+| Location prompt negative assertion is weak | job-finder-extractor.test.js:241 |
 
 ## Kermit Report
 Verdict: WARN
 Completeness gaps: none
-Backlog items: 6
+Backlog items: 5
 Ready to commit: yes
 
 ## Status: PASS

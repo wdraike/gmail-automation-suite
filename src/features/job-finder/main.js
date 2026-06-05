@@ -326,7 +326,8 @@ function processOneEmail(thread, threadIndex, totalThreads) {
     // Write valid jobs directly to spreadsheet — filter by validity and confidence
     const validJobs = extractionResult.jobs
       .filter(job => isValidJobListing(job))
-      .filter(job => (job._confidence === undefined || job._confidence >= 0.5));
+      .filter(job => (job._confidence === undefined || job._confidence >= 0.5))
+      .filter(job => !(job["Company"] === "Unknown" && job["Job Title"] === "Unknown Position"));
 
     if (validJobs.length === 0) {
       markEmailAsNoJobs(thread);
