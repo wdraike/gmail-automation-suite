@@ -3,7 +3,7 @@
  * Tests spreadsheet operations for job listings
  */
 
-const { MockSpreadsheetApp, MockSpreadsheet, MockSheet } = require('./mocks/spreadsheet.mock');
+const { MockSpreadsheetApp, MockSpreadsheet, MockSheet, MockRange } = require('./mocks/spreadsheet.mock');
 const { createJobData, createJobBatch } = require('./fixtures/job-factory');
 
 // Setup mocks
@@ -56,8 +56,36 @@ const {
   setupSheetHeaders,
   formatDateTime,
   sanitizeString,
-  getJobStatistics
+  getJobStatistics,
+  auditAndRepairSheetHeaders
 } = require('../src/features/job-finder/sheets-handler');
+
+// Final 18-column target (mirrors JOB_FINDER_CONFIG.SHEET_COLUMNS in beforeEach)
+const FINAL_COLUMNS = [
+  'Company', 'Company Description', 'Job Title', 'Employment Type',
+  'Work Arrangement', 'Experience Level', 'Location',
+  'Minimum Salary', 'Maximum Salary', 'Salary Period',
+  'Job URL', 'URL Status',
+  'Email Received Date', 'Email Source', 'Date Added',
+  'Interest', 'Email Title', 'Jobs Found In Email'
+];
+
+/**
+ * Build a MockSheet pre-populated with a given header row + data rows.
+ * @param {string[]} headers
+ * @param {Array<Array>} rows
+ */
+function makeSheetWith(headers, rows = []) {
+  const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+  const sheet = spreadsheet.insertSheet('Job Listings');
+  if (headers && headers.length) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  rows.forEach((row, i) => {
+    sheet.getRange(2 + i, 1, 1, row.length).setValues([row]);
+  });
+  return sheet;
+}
 
 describe('Sheets Handler - Unit Tests', () => {
   describe('formatDateTime', () => {
@@ -212,6 +240,166 @@ describe('Sheets Handler - Unit Tests', () => {
 
       expect(stats).toBeDefined();
       expect(stats.totalJobs).toBe(5);
+    });
+  });
+
+  describe('auditAndRepairSheetHeaders', () => {
+    function readHeaderRow(sheet) {
+      return sheet.getRange(1, 1, 1, FINAL_COLUMNS.length).getValues()[0];
+    }
+    function readDataRow(sheet, dataRowIndex) {
+      // dataRowIndex 0 -> sheet row 2
+      return sheet.getRange(2 + dataRowIndex, 1, 1, FINAL_COLUMNS.length).getValues()[0];
+    }
+
+    it('writes headers and reports empty when the sheet has no rows', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      const sheet = spreadsheet.insertSheet('Job Listings'); // fresh, no data
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(false);
+      expect(result.reason).toBe('empty');
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+      expect(sheet.getFrozenRows()).toBe(1);
+    });
+
+    it('returns repaired:false and does not rewrite when headers already aligned', () => {
+      const dataRow = ['Acme', 'desc', 'Dev', 'FT', 'Remote', 'Senior', 'NYC',
+         '100', '200', 'year', 'http://x', 'OK',
+         '2026-01-01', 'src', '2026-01-02', 'Yes', 'Subject', '1'];
+      const sheet = makeSheetWith(FINAL_COLUMNS, [dataRow]);
+
+      // The repair path clears+rewrites the grid; an aligned sheet must NOT do that.
+      const clearSpy = jest.spyOn(sheet, 'clearContents');
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(false);
+      expect(clearSpy).not.toHaveBeenCalled();
+      // Content untouched
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+      expect(readDataRow(sheet, 0)).toEqual(dataRow);
+
+      clearSpy.mockRestore();
+    });
+
+    it('repairs an old 16-column sheet, mapping each datum under its correct header', () => {
+      // A plausible pre-Phase3 / pre-Careers-removal 16-col layout (names subset of final).
+      const oldHeaders = [
+        'Company', 'Company Description', 'Job Title', 'Location',
+        'Minimum Salary', 'Maximum Salary', 'Salary Period', 'Job URL',
+        'URL Status', 'Email Received Date', 'Email Source', 'Date Added',
+        'Interest', 'Email Title', 'Jobs Found In Email', 'Employment Type'
+      ];
+      const oldRow = [
+        'Acme', 'A company', 'Engineer', 'Boston',
+        '90000', '120000', 'year', 'http://job',
+        'OK', '2026-01-01', 'indeed', '2026-01-02',
+        'High', 'Hot Jobs', '3', 'Full-Time'
+      ];
+      const sheet = makeSheetWith(oldHeaders, [oldRow]);
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(true);
+      expect(result.rows).toBe(1);
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+      // Safety snapshot contract (plan risk note): before/after headers reported
+      expect(result.before).toEqual(oldHeaders);
+      expect(result.after).toEqual(FINAL_COLUMNS);
+
+      const row = readDataRow(sheet, 0);
+      // Spot-check that values land under the correct FINAL header positions
+      expect(row[FINAL_COLUMNS.indexOf('Company')]).toBe('Acme');
+      expect(row[FINAL_COLUMNS.indexOf('Job Title')]).toBe('Engineer');
+      expect(row[FINAL_COLUMNS.indexOf('Location')]).toBe('Boston');
+      expect(row[FINAL_COLUMNS.indexOf('Employment Type')]).toBe('Full-Time');
+      expect(row[FINAL_COLUMNS.indexOf('Email Title')]).toBe('Hot Jobs');
+      // Columns absent in old sheet are inserted blank
+      expect(row[FINAL_COLUMNS.indexOf('Work Arrangement')]).toBe('');
+      expect(row[FINAL_COLUMNS.indexOf('Experience Level')]).toBe('');
+    });
+
+    it('drops legacy Careers URL columns while preserving all other data', () => {
+      const legacyHeaders = [
+        'Company', 'Company Description', 'Job Title', 'Employment Type',
+        'Work Arrangement', 'Experience Level', 'Location',
+        'Minimum Salary', 'Maximum Salary', 'Salary Period',
+        'Job URL', 'URL Status', 'Careers URL', 'Careers URL Status',
+        'Email Received Date', 'Email Source', 'Date Added',
+        'Interest', 'Email Title', 'Jobs Found In Email'
+      ];
+      const legacyRow = [
+        'Acme', 'desc', 'Dev', 'FT', 'Remote', 'Senior', 'NYC',
+        '100', '200', 'year', 'http://job', 'OK',
+        'http://careers', 'DEAD',
+        '2026-01-01', 'src', '2026-01-02', 'Yes', 'Subject', '1'
+      ];
+      const sheet = makeSheetWith(legacyHeaders, [legacyRow]);
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(true);
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+
+      const row = readDataRow(sheet, 0);
+      // Careers URL values must be gone entirely
+      expect(row).not.toContain('http://careers');
+      expect(row).not.toContain('DEAD');
+      // Other data preserved under correct headers
+      expect(row[FINAL_COLUMNS.indexOf('Company')]).toBe('Acme');
+      expect(row[FINAL_COLUMNS.indexOf('Job URL')]).toBe('http://job');
+      expect(row[FINAL_COLUMNS.indexOf('URL Status')]).toBe('OK');
+      expect(row[FINAL_COLUMNS.indexOf('Interest')]).toBe('Yes');
+      expect(row[FINAL_COLUMNS.indexOf('Jobs Found In Email')]).toBe('1');
+    });
+
+    it('remaps data by name when headers are reordered (same names, different order)', () => {
+      const reordered = [...FINAL_COLUMNS].reverse();
+      // Row whose values match the reversed header order
+      const reorderedRow = reordered.map(h => `val:${h}`);
+      const sheet = makeSheetWith(reordered, [reorderedRow]);
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(true);
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+
+      const row = readDataRow(sheet, 0);
+      // Each datum must land under its own header name regardless of original position
+      FINAL_COLUMNS.forEach((h, idx) => {
+        expect(row[idx]).toBe(`val:${h}`);
+      });
+    });
+
+    it('repairs a drifted header-only sheet (no data rows) to canonical headers with rows:0', () => {
+      // Old/mis-ordered header row but zero data rows underneath.
+      const oldHeadersNoData = [
+        'Company', 'Job Title', 'Location', 'Job URL', 'URL Status',
+        'Careers URL', 'Email Source', 'Date Added'
+      ];
+      const sheet = makeSheetWith(oldHeadersNoData, []);
+
+      const result = auditAndRepairSheetHeaders(sheet);
+
+      expect(result.repaired).toBe(true);
+      expect(result.rows).toBe(0);
+      expect(readHeaderRow(sheet)).toEqual(FINAL_COLUMNS);
+      // No phantom data row introduced
+      expect(sheet.getLastRow()).toBe(1);
+    });
+
+    it('throws loudly when data sits under an unnamed (blank) header column', () => {
+      // A column with a BLANK header name but actual data underneath cannot be
+      // name-mapped to any target column -> the value would be silently dropped.
+      // The function must refuse and throw instead of guessing/dropping.
+      const headersWithBlank = [...FINAL_COLUMNS];
+      headersWithBlank[6] = ''; // blank out the 'Location' header name
+      const row = FINAL_COLUMNS.map((h, i) => (i === 6 ? 'ORPHAN-DATA' : `v:${h}`));
+      const sheet = makeSheetWith(headersWithBlank, [row]);
+
+      expect(() => auditAndRepairSheetHeaders(sheet)).toThrow(/cannot reconcile/i);
     });
   });
 });

@@ -478,6 +478,17 @@ function initializeJobFinder() {
 
       // Set up headers (single source of truth in sheets-handler.js)
       setupSheetHeaders(sheet);
+
+      // Reconcile headers to the canonical column set (cheap no-op on a fresh sheet).
+      auditAndRepairSheetHeaders(sheet);
+    } else {
+      // Existing spreadsheet: its header row may predate column changes. Reconcile it to
+      // SHEET_COLUMNS once per execution so appendRow writes land under the correct columns.
+      const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
+      if (sheet) {
+        auditAndRepairSheetHeaders(sheet);
+      }
     }
 
     // Create required labels
@@ -505,6 +516,38 @@ function initializeJobFinder() {
       success: false,
       message: `Failed to initialize job finder: ${error.toString()}`
     };
+  }
+}
+
+/**
+ * Standalone migration entrypoint: open the Job Finder spreadsheet by its configured ID
+ * and reconcile the active sheet's headers to JOB_FINDER_CONFIG.SHEET_COLUMNS, remapping
+ * any existing data by header name. Lets the user run the header repair manually from the
+ * Apps Script editor without processing emails. Requires the JOB_FINDER_SPREADSHEET_ID
+ * Script Property to be set.
+ * @returns {Object} Result of the audit (see auditAndRepairSheetHeaders) or an error object
+ */
+function auditJobSheetHeaders() {
+  try {
+    const spreadsheetId = getJobFinderSpreadsheetId();
+    if (!spreadsheetId) {
+      Logger.log("auditJobSheetHeaders: no JOB_FINDER_SPREADSHEET_ID configured");
+      return { success: false, message: "No spreadsheet ID configured" };
+    }
+
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
+    if (!sheet) {
+      Logger.log(`auditJobSheetHeaders: sheet "${JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME}" not found`);
+      return { success: false, message: `Sheet "${JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME}" not found` };
+    }
+
+    const result = auditAndRepairSheetHeaders(sheet);
+    Logger.log(`auditJobSheetHeaders: ${JSON.stringify(result)}`);
+    return { success: true, ...result };
+  } catch (error) {
+    Logger.log(`auditJobSheetHeaders: error — ${error}`);
+    return { success: false, message: error.toString() };
   }
 }
 
@@ -585,6 +628,7 @@ if (typeof module !== 'undefined' && module.exports) {
     processOneEmail,
     processEmailBatch,
     initializeJobFinder,
+    auditJobSheetHeaders,
     getJobFinderSpreadsheetId,
     updateJobFinderConfig,
     setupJobFinderTrigger

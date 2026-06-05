@@ -49,6 +49,7 @@ global.extractEmailSource = jest.fn(() => "example");
 global.formatDateTime = jest.fn(() => "2026-01-01");
 global.addJobToSpreadsheet = jest.fn(() => true);
 global.setupSheetHeaders = jest.fn();
+global.auditAndRepairSheetHeaders = jest.fn(() => ({ repaired: false }));
 
 const main = require("../src/features/job-finder/main.js");
 

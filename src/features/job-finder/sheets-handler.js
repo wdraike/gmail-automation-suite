@@ -124,6 +124,113 @@ function setupSheetHeaders(sheet) {
 }
 
 /**
+ * Audit the live sheet's header row against JOB_FINDER_CONFIG.SHEET_COLUMNS and,
+ * if they differ, repair the sheet IN PLACE by remapping existing data BY HEADER NAME.
+ *
+ * A sheet created before column changes may carry OLD or mis-ordered headers. Because
+ * addJobToSpreadsheet writes by the current SHEET_COLUMNS order, drifted headers would
+ * place data under the WRONG columns. This function reconciles the live sheet to the
+ * canonical column set with NO silent fallbacks: it repairs explicitly or throws loudly.
+ *
+ * Behavior:
+ *  - Empty sheet (no data rows) -> write canonical headers, return {repaired:false, reason:'empty'}.
+ *  - Live headers === SHEET_COLUMNS exactly -> return {repaired:false}. No write.
+ *  - Otherwise -> remap every data row by header name (dropping columns not in the target,
+ *    inserting "" for target columns missing live), rewrite the whole grid in canonical
+ *    order, and re-apply header formatting. Returns {repaired:true, before, after, rows}.
+ *  - Any row that cannot be reconciled (more cells than live headers) -> throw.
+ *
+ * @param {Sheet} sheet - The live sheet to audit/repair
+ * @returns {Object} { repaired:boolean, reason?:string, before?:string[], after?:string[], rows?:number }
+ */
+function auditAndRepairSheetHeaders(sheet) {
+  const targetColumns = JOB_FINDER_CONFIG.SHEET_COLUMNS;
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+
+  // 1. Empty sheet (no header row written yet) -> write canonical headers and report empty.
+  if (lastRow < 1 || lastColumn < 1) {
+    setupSheetHeaders(sheet);
+    Logger.log(`auditAndRepairSheetHeaders: sheet empty; wrote ${targetColumns.length} canonical headers.`);
+    return { repaired: false, reason: 'empty' };
+  }
+
+  // Read the live header row using its actual width.
+  const liveHeaders = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
+    .map(h => (h === null || h === undefined) ? '' : String(h));
+
+  // 2. Already aligned (same names, same order) -> no-op.
+  if (liveHeaders.length === targetColumns.length &&
+      liveHeaders.every((h, i) => h === targetColumns[i])) {
+    return { repaired: false };
+  }
+
+  // 3. Build a name -> live column index map. Duplicate live names: first occurrence wins.
+  const liveIndexByName = {};
+  liveHeaders.forEach((name, idx) => {
+    if (name !== '' && !(name in liveIndexByName)) {
+      liveIndexByName[name] = idx;
+    }
+  });
+
+  const dataRowCount = lastRow - 1;
+
+  // 4. Safety snapshot BEFORE mutating (per plan risk note).
+  Logger.log(`auditAndRepairSheetHeaders: BEFORE repair — headers=${JSON.stringify(liveHeaders)} rows=${dataRowCount}`);
+
+  // Read existing data rows (if any) and remap each by header name.
+  const remappedRows = [];
+  if (dataRowCount > 0) {
+    const liveData = sheet.getRange(2, 1, dataRowCount, lastColumn).getValues();
+
+    liveData.forEach((row, i) => {
+      // A cell holding data under a BLANK (unnamed) header column cannot be reconciled by
+      // name — there is no header to map it to. Refuse to silently drop it; throw loudly.
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c];
+        const hasData = cell !== null && cell !== undefined && String(cell) !== '';
+        const headerName = c < liveHeaders.length ? liveHeaders[c] : '';
+        if (hasData && headerName === '') {
+          throw new Error(
+            `auditAndRepairSheetHeaders: cannot reconcile data row ${i + 2}, column ${c + 1} — ` +
+            `value "${cell}" sits under a blank/unnamed header. ` +
+            `Refusing to guess column mapping or drop data.`
+          );
+        }
+      }
+      const newRow = targetColumns.map(colName => {
+        const srcIdx = liveIndexByName[colName];
+        if (srcIdx === undefined) {
+          return ''; // Target column absent in live sheet -> insert blank.
+        }
+        const value = row[srcIdx];
+        return (value === null || value === undefined) ? '' : value;
+      });
+      remappedRows.push(newRow);
+    });
+  }
+
+  // 5. Rewrite the whole grid in canonical order: clear, then one setValues for the data block,
+  //    then re-apply header formatting (bold/bg/frozen/widths).
+  sheet.clearContents();
+
+  const block = [targetColumns.slice(), ...remappedRows];
+  sheet.getRange(1, 1, block.length, targetColumns.length).setValues(block);
+
+  setupSheetHeaders(sheet);
+
+  // 7. Log final state and return the repair summary.
+  Logger.log(`auditAndRepairSheetHeaders: AFTER repair — headers=${JSON.stringify(targetColumns)} rows=${remappedRows.length}`);
+
+  return {
+    repaired: true,
+    before: liveHeaders,
+    after: targetColumns.slice(),
+    rows: remappedRows.length
+  };
+}
+
+/**
  * Set appropriate column widths
  * @param {Sheet} sheet - The sheet
  * @param {Array} headers - Array of header names
@@ -309,6 +416,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     addJobToSpreadsheet,
     setupSheetHeaders,
+    auditAndRepairSheetHeaders,
     setColumnWidths,
     formatJobRow,
     getJobStatistics,
