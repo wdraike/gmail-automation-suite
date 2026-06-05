@@ -1,0 +1,10 @@
+{
+  "leg_id": "backlog-warn-fix",
+  "intent": "Fix all WARN-1 through WARN-13 backlog items",
+  "scope": "src/features/job-finder/, src/core/config.js, tests-local/",
+  "status": "complete",
+  "opened": "2026-06-05T00:00:00Z",
+  "last_update": "2026-06-05T00:00:00Z",
+  "verdict": "WARN",
+  "commit_sha": "15243e9"
+}

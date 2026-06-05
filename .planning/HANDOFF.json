@@ -1,0 +1,10 @@
+{
+  "last_leg": "warn-16-19-filter-cleanup",
+  "verdict": "WARN",
+  "completed": "2026-06-05",
+  "summary": "Hoisted noise constants to module level, converted assets./phenom. filters to hostname-anchored regex, added 4 new tests for go./email. subdomain filtering. 46/46 extractor tests pass.",
+  "next": "One minor deferred item (WARN-20 — regression test for assetsolutions.com false-positive). All else clean. clasp push 7 commits ahead.",
+  "backlog_items": [
+    "WARN-20: add regression test assetsolutions.com not filtered"
+  ]
+}
