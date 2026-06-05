@@ -162,8 +162,8 @@ function extractEmailContent(thread) {
     const from = message.getFrom();
     const source = extractEmailSource(from);
 
-    // Parse HTML to get plain text and URLs
-    const { plainText, extractedUrls } = extractTextFromHtml(body);
+    // Parse HTML to get plain text, URLs, and anchor pairs
+    const { plainText, extractedUrls, anchorPairs } = extractTextFromHtml(body);
 
     return {
       thread: thread,
@@ -171,6 +171,7 @@ function extractEmailContent(thread) {
       body: body,
       plainText: plainText,
       urls: extractedUrls,
+      anchorPairs: anchorPairs || [],
       date: date,
       from: from,
       source: source
@@ -197,7 +198,8 @@ function extractJobsFromEmail(emailContent) {
     const jobDetails = extractJobDetailsSimple(
       emailContent.plainText,
       emailContent.urls,
-      processingState
+      processingState,
+      emailContent.anchorPairs
     );
 
     return {
@@ -288,6 +290,18 @@ function processOneEmail(thread, threadIndex, totalThreads) {
     const emailContent = extractEmailContent(thread);
     Logger.log(`[${threadIndex}/${totalThreads}] Processing: "${emailContent.subject}"`);
 
+    // Pre-check: skip full extraction if email doesn't look like a job listing
+    if (!isJobListingEmail(emailContent.plainText)) {
+      Logger.log(`Pre-check: not a job listing email — "${emailContent.subject}"`);
+      markEmailAsNoJobs(thread);
+      return {
+        success: true,
+        jobCount: 0,
+        jobs: [],
+        wasRateLimited: false
+      };
+    }
+
     // Extract jobs from email
     const extractionResult = extractJobsFromEmail(emailContent);
 
@@ -309,8 +323,10 @@ function processOneEmail(thread, threadIndex, totalThreads) {
       Logger.log(`Found ${extractionResult.jobs.length} job(s) in "${emailContent.subject}"`);
     }
 
-    // Write valid jobs directly to spreadsheet
-    const validJobs = extractionResult.jobs.filter(job => isValidJobListing(job));
+    // Write valid jobs directly to spreadsheet — filter by validity and confidence
+    const validJobs = extractionResult.jobs
+      .filter(job => isValidJobListing(job))
+      .filter(job => (job._confidence === undefined || job._confidence >= 0.5));
 
     if (validJobs.length === 0) {
       markEmailAsNoJobs(thread);

@@ -40,8 +40,9 @@ global.GmailService = {
 global.callGeminiApi = jest.fn();
 global.sendNotificationEmail = jest.fn();
 global.extractJobDetailsSimple = jest.fn(() => []);
+global.isJobListingEmail = jest.fn(() => true);
 global.isValidJobListing = jest.fn(() => true);
-global.extractTextFromHtml = jest.fn(() => ({ plainText: "Email body", extractedUrls: [] }));
+global.extractTextFromHtml = jest.fn(() => ({ plainText: "Email body", extractedUrls: [], anchorPairs: [] }));
 global.extractEmailSource = jest.fn(() => "example");
 global.formatDateTime = jest.fn(() => "2026-01-01");
 global.addJobToSpreadsheet = jest.fn(() => true);
@@ -331,6 +332,128 @@ describe("job-finder main", () => {
       expect(result.jobCount).toBe(1);
       expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(1);
       expect(global.addJobToSpreadsheet.mock.calls[0][0]["Company"]).toBe("Acme");
+    });
+  });
+
+  describe("processOneEmail pre-check gate", () => {
+    function makeThread() {
+      return {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Weekly Digest"),
+          getBody: jest.fn(() => "<p>Newsletter content</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "newsletter@example.com"),
+        }]),
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+    }
+
+    it("calls markEmailAsNoJobs and skips extraction when pre-check returns false", () => {
+      const thread = makeThread();
+      global.isJobListingEmail = jest.fn(() => false);
+
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") return sourceLabelObj;
+        return null;
+      });
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(global.isJobListingEmail).toHaveBeenCalled();
+      expect(global.extractJobDetailsSimple).not.toHaveBeenCalled();
+      expect(thread.addLabel).toHaveBeenCalledWith(noJobsLabelObj);
+      expect(result.success).toBe(true);
+      expect(result.jobCount).toBe(0);
+    });
+
+    it("proceeds with extraction when pre-check returns true", () => {
+      const thread = {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Job Alerts"),
+          getBody: jest.fn(() => "<p>We are hiring</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+      };
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev" },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(global.isJobListingEmail).toHaveBeenCalled();
+      expect(global.extractJobDetailsSimple).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.jobCount).toBe(1);
+    });
+  });
+
+  describe("processOneEmail confidence filtering", () => {
+    function makeThreadWith(body) {
+      return {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Jobs"),
+          getBody: jest.fn(() => body),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+      };
+    }
+
+    it("filters out jobs with confidence below 0.5", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev", _confidence: 0.8 },
+        { Company: "Noise", "Job Title": "Ad", _confidence: 0.3 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(1);
+      expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(1);
+      expect(global.addJobToSpreadsheet.mock.calls[0][0]["Company"]).toBe("Acme");
+    });
+
+    it("keeps jobs where _confidence is exactly 0.5", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev", _confidence: 0.5 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(1);
+    });
+
+    it("keeps jobs with no _confidence field (defaults pass)", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
+      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev" },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(1);
     });
   });
 });

@@ -42,6 +42,12 @@ function addJobToSpreadsheet(job, isDuplicate = false, emailDate = null, emailSo
           return job["Company Description"] || "";
         case "Job Title":
           return job["Job Title"] || "";
+        case "Employment Type":
+          return job["Employment Type"] || "Unknown";
+        case "Work Arrangement":
+          return job["Work Arrangement"] || "Unknown";
+        case "Experience Level":
+          return job["Experience Level"] || "Unknown";
         case "Location":
           return job["Location"] || "";
         case "Minimum Salary":
@@ -130,6 +136,9 @@ function setColumnWidths(sheet, headers) {
     "Company": 150,
     "Company Description": 200,
     "Job Title": 200,
+    "Employment Type": 100,
+    "Work Arrangement": 100,
+    "Experience Level": 100,
     "Location": 150,
     "Minimum Salary": 100,
     "Maximum Salary": 100,

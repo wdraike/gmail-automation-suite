@@ -8,9 +8,78 @@ global.callGeminiApi = jest.fn();
 
 const extractor = require("../src/features/job-finder/extractor.js");
 
+describe("isJobListingEmail", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true when Gemini responds YES", () => {
+    global.callGeminiApi = jest.fn(() => ({ response: "YES" }));
+    expect(extractor.isJobListingEmail("We are hiring engineers")).toBe(true);
+  });
+
+  it("returns true when response is YES with surrounding whitespace", () => {
+    global.callGeminiApi = jest.fn(() => ({ response: "  Yes\n" }));
+    expect(extractor.isJobListingEmail("some body")).toBe(true);
+  });
+
+  it("returns false when Gemini responds NO", () => {
+    global.callGeminiApi = jest.fn(() => ({ response: "NO" }));
+    expect(extractor.isJobListingEmail("Newsletter content")).toBe(false);
+  });
+
+  it("returns false when Gemini returns null response", () => {
+    global.callGeminiApi = jest.fn(() => null);
+    expect(extractor.isJobListingEmail("some body")).toBe(false);
+  });
+
+  it("truncates body to 2000 chars before sending", () => {
+    global.callGeminiApi = jest.fn(() => ({ response: "YES" }));
+    const longBody = "x".repeat(5000);
+    extractor.isJobListingEmail(longBody);
+    const promptArg = global.callGeminiApi.mock.calls[0][0];
+    // The prompt includes the 2000-char snippet; the original 5000-char body must be truncated
+    expect(promptArg.length).toBeLessThan(5000 + 200); // 200 chars of prompt overhead
+    expect(promptArg).toContain("x".repeat(100)); // snippet is present
+  });
+});
+
 describe("extractor", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("extractAnchorPairs", () => {
+    it("extracts text and URL from anchor tags", () => {
+      const html = '<a href="https://example.com/job/1">Software Engineer</a>';
+      const pairs = extractor.extractAnchorPairs(html);
+      expect(pairs).toHaveLength(1);
+      expect(pairs[0].text).toBe("Software Engineer");
+      expect(pairs[0].url).toBe("https://example.com/job/1");
+    });
+
+    it("strips inner HTML tags from anchor text", () => {
+      const html = '<a href="https://acme.com/apply"><strong>Product Manager</strong></a>';
+      const pairs = extractor.extractAnchorPairs(html);
+      expect(pairs[0].text).toBe("Product Manager");
+    });
+
+    it("returns empty array for HTML with no anchors", () => {
+      expect(extractor.extractAnchorPairs("<p>No links here</p>")).toEqual([]);
+    });
+
+    it("returns empty array for null/empty input", () => {
+      expect(extractor.extractAnchorPairs(null)).toEqual([]);
+      expect(extractor.extractAnchorPairs("")).toEqual([]);
+    });
+
+    it("handles multiple anchor tags", () => {
+      const html = '<a href="https://a.com">Job A</a><a href="https://b.com">Job B</a>';
+      const pairs = extractor.extractAnchorPairs(html);
+      expect(pairs).toHaveLength(2);
+      expect(pairs[0].text).toBe("Job A");
+      expect(pairs[1].text).toBe("Job B");
+    });
   });
 
   describe("extractTextFromHtml", () => {
@@ -19,6 +88,15 @@ describe("extractor", () => {
       const result = extractor.extractTextFromHtml(html);
       expect(result.plainText).toContain("Hello");
       expect(result.extractedUrls).toContain("https://example.com");
+    });
+
+    it("returns anchorPairs in the result", () => {
+      const html = '<a href="https://jobs.acme.com/123">Senior Engineer</a>';
+      const result = extractor.extractTextFromHtml(html);
+      expect(result.anchorPairs).toBeDefined();
+      expect(result.anchorPairs.length).toBeGreaterThanOrEqual(1);
+      expect(result.anchorPairs[0].text).toBe("Senior Engineer");
+      expect(result.anchorPairs[0].url).toBe("https://jobs.acme.com/123");
     });
 
     it("removes script and style tags", () => {
@@ -53,6 +131,49 @@ describe("extractor", () => {
       expect(result.length).toBe(1);
       expect(result[0]["Company"]).toBe("Acme");
       expect(result[0]["Job Title"]).toBe("Engineer");
+    });
+
+    it("includes new fields in extraction result", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Engineer","location":"Remote","employmentType":"Full-time","workArrangement":"Remote","experienceLevel":"Mid","confidence":0.9}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result.length).toBe(1);
+      expect(result[0]["Employment Type"]).toBe("Full-time");
+      expect(result[0]["Work Arrangement"]).toBe("Remote");
+      expect(result[0]["Experience Level"]).toBe("Mid");
+      expect(result[0]["_confidence"]).toBe(0.9);
+    });
+
+    it("defaults new fields to Unknown when absent from Gemini response", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Dev"}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["Employment Type"]).toBe("Unknown");
+      expect(result[0]["Work Arrangement"]).toBe("Unknown");
+      expect(result[0]["Experience Level"]).toBe("Unknown");
+    });
+
+    it("defaults _confidence to 1.0 when absent from Gemini response", () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Dev"}]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
+      expect(result[0]["_confidence"]).toBe(1.0);
+    });
+
+    it("includes anchor pairs in the prompt when provided", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const anchorPairs = [{ text: "Software Engineer at Acme", url: "https://acme.com/jobs/123" }];
+      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("Software Engineer at Acme");
+      expect(promptArg).toContain("https://acme.com/jobs/123");
     });
 
     it("filters out tracking and social URLs", () => {

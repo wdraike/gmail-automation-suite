@@ -1,23 +1,28 @@
-# Oscar Review — Phase 2: NoJobs Label Routing — 2026-06-05
+# Oscar Review — Phase 3: Pre-check Gate + Richer Extraction — 2026-06-05
 
 ## Verdict: WARN
 
 ## Summary
-Phase 2 complete and correct. One backlog-level item deferred: `markEmailAsNoJobs` does not remove the rate-limit label (edge case — only affects threads that were previously queued as rate-limited and then re-processed to zero valid jobs). All agents PASS or WARN — no blockers.
+Phase 3 complete and correct. 54/54 tests pass. No critical or blocking findings from any agent. Six backlog-level items deferred: anchor pair filtering in prompt, `processEmailContent` missing anchorPairs arg, anchor cap size, truncation assertion loosse bound, `_confidence=null` behavior, and `_confidence=0` boundary test.
 
 ## Agent Findings
 
 ### Ernie — PASS
-No critical or warning findings.
+No critical findings. Three warnings deferred to backlog.
 | # | Severity | Finding | File:Line | Remediation |
 |---|----------|---------|-----------|-------------|
-| 1 | Info | `markEmailAsNoJobs` does not remove rate-limit label before archiving — asymmetric with `markEmailAsProcessed` | main.js:247–261 | Low priority — only affects previously-queued threads yielding zero valid jobs. Add rate-limit label removal for symmetry if edge case confirmed. |
+| 1 | WARN | `anchorPairs` injected into prompt without tracking/social filtering — pollutes link-mapping section | extractor.js:168-170 | Apply same filter predicate as `relevantUrls` before building anchorSection |
+| 2 | WARN | `processEmailContent` calls `extractJobDetailsSimple` without `anchorPairs` (4th arg missing) | extractor.js:529 | Pass anchorPairs or document intentionally anchor-free |
+| 3 | WARN | `anchorPairs.slice(0, 100)` can add ~4KB to prompt on large emails | extractor.js:170 | Reduce cap to 30, or filter by job-keyword anchor text first |
+| 4 | Info | `isJobListingEmail` error path silently returns false — Gemini outage routes all emails to NoJobs | extractor.js:19-22 | Track pre-check errors separately from legit NoJobs verdicts |
+| 5 | Info | Operator-precedence ambiguity (pre-existing) in URL filter condition | extractor.js:96 | Add explicit parens |
+| 6 | Info | `_confidence` leading-underscore convention undocumented | extractor.js:264 | Add comment: filter-only, not stored to sheet |
 
 ### Telly — PASS
-55/55 tests passing. All new Phase 2 functions fully covered: getter default, getter stored-value, setter success, setter throws, zero-job routing branch, markEmailAsNoJobs side-effects.
+54/54 tests passing. All new Phase 3 functions fully covered: `isJobListingEmail` (5 cases), `extractAnchorPairs` (5 cases), `extractTextFromHtml` anchorPairs propagation, new extraction fields (present + defaulted), anchor pairs in prompt, pre-check gate (skip + pass-through), confidence filtering (below/boundary/missing).
 
-### Zoe — WARN
-1 WARN (rate-limit label not removed in markEmailAsNoJobs). No BLOCK findings. All new assertions verified as substantive (object identity, explicit not-called checks).
+### Zoe — PASS
+No false passes. Three WARN items (truncation assertion loose bound, `_confidence=null` edge case, `_confidence=0` boundary) — all deferrable.
 
 ## Fix Loop
 No fix loop run — no BLOCK findings.
@@ -27,18 +32,23 @@ No fix loop run — no BLOCK findings.
 |-------|--------|
 | Tests exist for changed code | PASS |
 | Tests passing | PASS |
-| Docs updated (if API changed) | PASS (no external API change — internal label routing) |
+| Docs updated (if API changed) | PASS (no external API change) |
 | Security review run (if auth/payment) | N/A |
 
 ## Backlog Items (WARN)
 | Finding | File |
 |---------|------|
-| `markEmailAsNoJobs` does not remove rate-limit label — previously-queued threads that yield zero valid jobs retain the RateLimitQueue label after archiving | src/features/job-finder/main.js:247–261 |
+| Anchor pairs not filtered before prompt injection (tracking/social links leak into link-mapping section) | src/features/job-finder/extractor.js:168-170 |
+| `processEmailContent` missing anchorPairs arg — anchor URL matching silently absent on that path | src/features/job-finder/extractor.js:529 |
+| Anchor cap of 100 may push large-email prompts close to context limit | src/features/job-finder/extractor.js:170 |
+| Truncation test assertion too loose — would pass a 4999-char implementation | tests-local/job-finder-extractor.test.js:42 |
+| `_confidence=null` edge case untested — silently drops the job (may be unintended) | tests-local/job-finder-main.test.js |
+| `_confidence=0` boundary not explicitly tested | tests-local/job-finder-main.test.js |
 
 ## Kermit Report
 Verdict: WARN
 Completeness gaps: none
-Backlog items: 1
+Backlog items: 6
 Ready to commit: yes
 
 ## Status: PASS

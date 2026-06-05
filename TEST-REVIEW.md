@@ -1,41 +1,55 @@
-# Test Review — Phase 2: NoJobs Label Routing — 2026-06-05
+# Test Review — Phase 3: Pre-check Gate + Richer Extraction — 2026-06-05
 
 ## Summary
-55 tests passed, 0 failed, 0 skipped across 2 suites. All new NoJobs functionality fully covered. Coverage gaps are in pre-existing legacy functions not touched by this phase.
+54 tests passed, 0 failed, 0 skipped across 2 suites. All new Phase 3 functionality is fully covered: `isJobListingEmail` pre-check gate, `extractAnchorPairs`, new extraction fields (`employmentType`, `workArrangement`, `experienceLevel`, `confidence`), anchor pairs in prompt, and confidence-based filtering in `processOneEmail`. Coverage on the two scoped files is at 73% and 76% respectively — gaps are in legacy/utility functions not touched by this phase.
 
 ## Test Results
 
 | Suite | Tests | Passed | Failed | Skipped | Time |
 |-------|-------|--------|--------|---------|------|
-| config.test.js | 40 | 40 | 0 | 0 | <1s |
+| job-finder-extractor.test.js | 39 | 39 | 0 | 0 | <1s |
 | job-finder-main.test.js | 15 | 15 | 0 | 0 | <1s |
 
 ## Coverage (scoped to changed source files)
 
 | File | Stmt % | Branch % | Funcs % | Status |
 |------|--------|----------|---------|--------|
-| src/core/config.js | 56% | 50% | 79% | WARN (legacy uncovered: testGeminiApiKey, add-on helpers — pre-existing) |
-| src/features/job-finder/main.js | 75% | 58% | 80% | PASS |
+| src/features/job-finder/extractor.js | 73% | 77% | 83% | PASS |
+| src/features/job-finder/main.js | 76% | 60% | 81% | PASS |
 
-## New Tests Added — Phase 2
+Coverage gaps are in pre-existing legacy utilities (`logJobFinderGeminiInteraction`, `processEmailContent`, `extractEmailSource`, `setupJobFinderTrigger`) not touched by this phase.
+
+## New Tests Added — Phase 3
 
 | Test | File | Covers |
 |------|------|--------|
-| getJobFinderNoJobsLabel returns default when not set | config.test.js | Default value '📬 JobAlerts/NoJobs' |
-| getJobFinderNoJobsLabel returns stored value when set | config.test.js | Property storage round-trip |
-| setJobFinderNoJobsLabel returns true on success | config.test.js | Happy path |
-| setJobFinderNoJobsLabel returns false when storage throws | config.test.js | Error path |
-| applies no-jobs label (not processed) when zero valid jobs | job-finder-main.test.js | Zero-job routing branch in processOneEmail |
-| markEmailAsNoJobs applies no-jobs label, removes source, archives | job-finder-main.test.js | Side-effects of markEmailAsNoJobs |
-
-All new functions introduced in Phase 2 are fully covered:
-- `getJobFinderNoJobsLabel` — default + stored-value paths
-- `setJobFinderNoJobsLabel` — success + throws paths
-- `markEmailAsNoJobs` — label applied, source removed, archived
-- Zero-job branch in `processOneEmail` — NoJobs called, Processed not called, addJobToSpreadsheet not called
+| isJobListingEmail returns true when Gemini responds YES | extractor | Happy path |
+| isJobListingEmail returns true when response is YES with whitespace | extractor | Trim handling |
+| isJobListingEmail returns false when Gemini responds NO | extractor | Reject path |
+| isJobListingEmail returns false when Gemini returns null | extractor | Null-response defence |
+| isJobListingEmail truncates body to 2000 chars before sending | extractor | Cost-control truncation |
+| extractAnchorPairs: extracts text and URL from anchor tags | extractor | Core extraction |
+| extractAnchorPairs: strips inner HTML tags from anchor text | extractor | Nested tag handling |
+| extractAnchorPairs: returns empty array for HTML with no anchors | extractor | No-match case |
+| extractAnchorPairs: returns empty array for null/empty input | extractor | Null defence |
+| extractAnchorPairs: handles multiple anchor tags | extractor | Multi-anchor iteration |
+| extractTextFromHtml: returns anchorPairs in the result | extractor | anchorPairs propagation |
+| extractJobDetailsSimple: includes new fields in extraction result | extractor | employmentType, workArrangement, experienceLevel, _confidence |
+| extractJobDetailsSimple: defaults new fields to Unknown when absent | extractor | Missing-field defaults |
+| extractJobDetailsSimple: defaults _confidence to 1.0 when absent | extractor | Default confidence |
+| extractJobDetailsSimple: includes anchor pairs in the prompt | extractor | Anchor section in prompt |
+| pre-check gate: calls markEmailAsNoJobs and skips extraction when false | main | Gate skip path |
+| pre-check gate: proceeds with extraction when pre-check returns true | main | Gate pass-through path |
+| confidence filtering: filters out jobs with confidence below 0.5 | main | Low-confidence rejection |
+| confidence filtering: keeps jobs where _confidence is exactly 0.5 | main | Boundary (inclusive) |
+| confidence filtering: keeps jobs with no _confidence field | main | Missing-field pass-through |
 
 ## Missing Tests
-None for Phase 2 scope. Coverage gaps remain in legacy pre-existing functions (testGeminiApiKey, add-on helpers, setupJobFinderTrigger) unchanged by this phase.
+
+None for Phase 3 scope. The following edge cases are noted as low-priority for a future sprint:
+- `isJobListingEmail` called when Gemini throws — currently returns `false` silently; a test verifying that behaviour is documented
+- `extractAnchorPairs` with malformed `href` containing no quotes — would silently skip the pair (acceptable)
+- `processEmailContent` with anchor pairs — not tested because `anchorPairs` is not passed in that function (tracked in CODE-REVIEW.md Warning #2)
 
 ## Status: PASS
 _Signed: Telly — 2026-06-05T00:00:00Z_

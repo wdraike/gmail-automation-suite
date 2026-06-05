@@ -4,13 +4,52 @@
  */
 
 /**
+ * Cheap pre-check: asks Gemini whether the email contains job listings.
+ * Uses only the first 2000 chars of the body to keep cost low.
+ * @param {string} emailBody - Plain-text email body
+ * @returns {boolean} true if the email appears to contain job listings
+ */
+function isJobListingEmail(emailBody) {
+  const snippet = (emailBody || "").substring(0, 2000);
+  const prompt = `Does this email contain job listings or job alerts? Reply with only YES or NO.\n\n${snippet}`;
+  try {
+    const result = callGeminiApi(prompt, "precheck");
+    if (!result || !result.response) return false;
+    return result.response.trim().toUpperCase().startsWith("YES");
+  } catch (e) {
+    Logger.log(`isJobListingEmail error: ${e}`);
+    return false;
+  }
+}
+
+/**
+ * Extract anchor text/URL pairs from raw HTML before stripping tags.
+ * Returns an array of { text, url } objects for job-title-to-URL matching.
+ * @param {string} html - Raw HTML content
+ * @returns {Array<{text: string, url: string}>}
+ */
+function extractAnchorPairs(html) {
+  if (!html) return [];
+  const pairs = [];
+  const anchorRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = anchorRegex.exec(html)) !== null) {
+    const url = m[1].trim();
+    const text = m[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    if (url && text) pairs.push({ text, url });
+  }
+  return pairs;
+}
+
+/**
  * Extract job details directly from email text without chunking
  * @param {string} emailText - The full email text
  * @param {string[]} extractedUrls - All URLs extracted from the email
  * @param {object} processingState - State tracking for partial processing
+ * @param {Array<{text: string, url: string}>} [anchorPairs] - Anchor text/URL pairs from raw HTML
  * @returns {Object[]} Array of job objects
  */
-function extractJobDetailsSimple(emailText, extractedUrls, processingState) {
+function extractJobDetailsSimple(emailText, extractedUrls, processingState, anchorPairs) {
   try {
     // Validate email text
     if (!emailText) {
@@ -32,7 +71,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState) {
 
     // If text is too long, take the most relevant portion
     const maxLength = 30000;
-    const textToProcess = cleanedText.length > maxLength 
+    const textToProcess = cleanedText.length > maxLength
       ? cleanedText.substring(0, maxLength) + "... [truncated]"
       : cleanedText;
 
@@ -124,6 +163,13 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState) {
       urlSection = 'No direct job application URLs found in this email.';
     }
 
+    // Include anchor text/URL pairs to help match job titles to their apply links
+    let anchorSection = '';
+    if (anchorPairs && anchorPairs.length > 0) {
+      anchorSection = '\nLink Text → URL Mappings (use these to match job titles to apply links):\n' +
+        anchorPairs.slice(0, 100).map(p => `"${p.text}" → ${p.url}`).join('\n');
+    }
+
     // Prepare the prompt for Gemini
     const prompt = `You are a job listing extraction assistant. Extract ALL job listings from the email below.
 
@@ -137,8 +183,12 @@ RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
     "minSalary": "",
     "maxSalary": "",
     "salaryPeriod": "",
-    "jobUrl": "URL from the numbered list below if available, otherwise empty string",
-    "careersUrl": ""
+    "jobUrl": "URL from the numbered list or link mappings below that matches this job title, otherwise empty string",
+    "careersUrl": "",
+    "employmentType": "Full-time|Part-time|Contract|Internship|Unknown",
+    "workArrangement": "Remote|Hybrid|Onsite|Unknown",
+    "experienceLevel": "Entry|Mid|Senior|Lead/Principal|Unknown",
+    "confidence": 0.0
   }
 ]
 
@@ -146,10 +196,12 @@ CRITICAL RULES:
 1. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
 2. If no jobs found, return: []
 3. Extract ALL jobs from the email
-4. For jobUrl, use the URL number from the list below (e.g., if URL #3 matches, use that full URL)
+4. For jobUrl, match the job title to the link text in the mappings section below, then use the corresponding URL
 5. Leave salary fields as empty strings if not mentioned
+6. confidence: number 0.0-1.0 — how confident you are this row is a real job listing (not an ad or filler)
 
 ${urlSection}
+${anchorSection}
 
 EMAIL CONTENT:
 ${textToProcess}
@@ -205,7 +257,11 @@ JSON ARRAY:`;
           "Job URL": job.jobUrl || job["Job URL"] || "",
           "URL Status": job.jobUrl ? "Found" : "Not found",
           "Careers URL": job.careersUrl || job["Careers URL"] || inferCareersUrl(job.jobUrl),
-          "Careers URL Status": job.careersUrl ? "Found" : "Inferred"
+          "Careers URL Status": job.careersUrl ? "Found" : "Inferred",
+          "Employment Type": job.employmentType || job["Employment Type"] || "Unknown",
+          "Work Arrangement": job.workArrangement || job["Work Arrangement"] || "Unknown",
+          "Experience Level": job.experienceLevel || job["Experience Level"] || "Unknown",
+          "_confidence": typeof job.confidence === "number" ? job.confidence : 1.0
         }));
 
       processingState.processedJobs = validJobs;
@@ -294,15 +350,18 @@ function extractJobsFallback(response) {
 /**
  * Extract text content from HTML
  * @param {string} html - HTML content
- * @returns {Object} Object with plainText and extractedUrls
+ * @returns {Object} Object with plainText, extractedUrls, and anchorPairs
  */
 function extractTextFromHtml(html) {
   try {
+    // Extract anchor pairs BEFORE stripping tags so job titles can be matched to URLs
+    const anchorPairs = extractAnchorPairs(html);
+
     // Extract URLs first
     const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
     const extractedUrls = [];
     let match;
-    
+
     while ((match = urlRegex.exec(html)) !== null) {
       const url = match[0];
       // Clean up the URL
@@ -311,11 +370,11 @@ function extractTextFromHtml(html) {
         extractedUrls.push(cleanUrl);
       }
     }
-    
+
     // Remove script and style elements
     let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
     text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-    
+
     // Replace common HTML entities
     text = text.replace(/&nbsp;/gi, ' ');
     text = text.replace(/&amp;/gi, '&');
@@ -323,31 +382,33 @@ function extractTextFromHtml(html) {
     text = text.replace(/&gt;/gi, '>');
     text = text.replace(/&quot;/gi, '"');
     text = text.replace(/&#39;/gi, "'");
-    
+
     // Replace br tags with newlines
     text = text.replace(/<br\s*\/?>/gi, '\n');
     text = text.replace(/<\/p>/gi, '\n\n');
     text = text.replace(/<\/div>/gi, '\n');
     text = text.replace(/<\/li>/gi, '\n');
-    
+
     // Remove all remaining HTML tags
     text = text.replace(/<[^>]+>/g, '');
-    
+
     // Clean up whitespace
     text = text.replace(/[ \t]+/g, ' ');
     text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
     text = text.trim();
-    
+
     return {
       plainText: text,
-      extractedUrls: extractedUrls
+      extractedUrls: extractedUrls,
+      anchorPairs: anchorPairs
     };
-    
+
   } catch (error) {
     Logger.log(`Error extracting text from HTML: ${error}`);
     return {
       plainText: html,
-      extractedUrls: []
+      extractedUrls: [],
+      anchorPairs: []
     };
   }
 }
@@ -537,6 +598,8 @@ function logJobFinderGeminiInteraction(type, content) {
 // Conditional exports for testing (works in both Node.js and Apps Script)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    isJobListingEmail,
+    extractAnchorPairs,
     extractJobDetailsSimple,
     extractJobsFallback,
     extractTextFromHtml,

@@ -1,4 +1,50 @@
-# Zoe Review — Phase 2: NoJobs Label Routing — 2026-06-05
+# Zoe Review — Phase 3: Pre-check Gate + Richer Extraction — 2026-06-05
+
+## Summary
+54/54 tests pass. No false passes detected. Three WARN findings — one loose truncation assertion that would miss a buggy implementation cutting at 4999 chars instead of 2000, and two untested `_confidence` edge cases (null and 0). All deferrable; none justify blocking this commit.
+
+---
+
+## Telly Audit
+
+### BLOCK Findings
+_None._
+
+### WARN Findings
+
+| # | Finding | Evidence | File | Remediation |
+|---|---------|----------|------|-------------|
+| 1 | Truncation assertion too loose: `expect(promptArg.length).toBeLessThan(5200)` would pass even if the implementation sent 5079 chars (e.g. `substring(0, 4999)` instead of 2000). The real prompt with a correct 2000-char snippet is ~2080 chars. | extractor.test.js:42 | job-finder-extractor.test.js | Tighten bound: `expect(promptArg.length).toBeLessThan(2200)` |
+| 2 | `_confidence = null` not tested. Filter condition `job._confidence === undefined \|\| job._confidence >= 0.5` evaluates `null >= 0.5` as `false` in JS, silently dropping the job. Whether this is intended is undocumented. | main.js:329 | job-finder-main.test.js | Add test with `_confidence: null`; decide and document whether null should pass or be rejected. |
+| 3 | `_confidence = 0` not tested as an explicit rejected value. Spec says "filter out confidence < 0.5"; 0.3 and 0.5 are tested, but 0 (complete noise) has no dedicated boundary test. | main.test.js confidence tests | job-finder-main.test.js | Add test: job with `_confidence: 0` is filtered out. |
+
+### PASS Verifications
+
+| # | Check | Status |
+|---|-------|--------|
+| 1 | All 54 tests re-run and independently confirmed passing | PASS |
+| 2 | `isJobListingEmail` YES/NO/null-response/whitespace paths all have substantive assertions | PASS |
+| 3 | `isJobListingEmail` API-throw path: returns `false`, not rethrown — source confirmed to match intent | PASS |
+| 4 | `extractAnchorPairs`: null, empty, single, multiple, nested-HTML-tags cases all verified | PASS |
+| 5 | `extractTextFromHtml` anchorPairs assertion checks actual content (text + url), not just `toBeDefined()` | PASS |
+| 6 | New fields tested both present (with values) and defaulted (absent from Gemini response) | PASS |
+| 7 | Anchor pairs prompt injection: assertion inspects actual prompt content, not just call count | PASS |
+| 8 | Pre-check gate skip path: asserts `extractJobDetailsSimple` NOT called — correct negative assertion | PASS |
+| 9 | Confidence boundary at exactly 0.5 tested (inclusive) | PASS |
+| 10 | `_confidence` undefined field passes through (undefined → pass) | PASS |
+| 11 | URL filter test checks presence of valid URL AND absence of three distinct filtered patterns | PASS |
+| 12 | Rate-limit propagation: `isJobListingEmail` global defaulted to `true` in beforeEach, so existing rate-limit tests remain valid | PASS |
+
+## Bird Audit
+N/A — no frontend files changed.
+
+## Status: PASS
+
+_Signed: Zoe — 2026-06-05T00:00:00Z_
+
+---
+
+# Prior Review — Phase 2: NoJobs Label Routing — 2026-06-05
 
 ## Summary
 1 WARN finding, 0 BLOCK findings. New NoJobs tests are substantive — side effects verified with object identity, not just call presence. One untested interaction: rate-limited threads that produce zero valid jobs will keep the rate-limit label after markEmailAsNoJobs (the rate-limit label is not removed). Ernie also flagged this; covered below.
