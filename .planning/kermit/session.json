@@ -1,18 +1,14 @@
 {
-  "leg_id": "drop-precheck-bump-throughput",
-  "intent": "Drop the isJobListingEmail precheck (false-negative source); lower confidence filter 0.5->0.3 with drop logging; raise throughput (MAX_EMAILS_PER_RUN 2->10, trigger 3h->1h)",
-  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/main.js, src/core/config.js, tests-local/",
-  "status": "complete",
-  "verdict": "PASS",
-  "commit": "fea3cbe",
-  "deployed": true,
-  "jest": "536 passed / 0 failed / 9 skipped",
-  "manual_step": "Re-run setupJobFinderTrigger() in Apps Script editor to apply hourly interval (live trigger still 3h until then). MAX_EMAILS_PER_RUN=10 takes effect immediately.",
-  "decisions": {
-    "precheck": "drop_entirely",
-    "confidence_filter": "lower_to_0.3_and_log_drops",
-    "throughput": "MAX_EMAILS_PER_RUN=10, trigger everyHours(1)"
-  },
+  "leg_id": "fix-nojobs-false-negatives",
+  "intent": "NoJobs-filed emails contain real job listings. Fix extraction + Gemini prompt to detect/extract digest-format aggregator emails (Glassdoor/Indeed/Google Alerts). Reprocess misfiled threads.",
+  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/main.js, tests-local/job-finder-extractor.test.js, tests-local/fixtures/job-finder-nojobs/",
+  "status": "in_progress",
   "opened": "2026-06-06T00:00:00Z",
-  "last_update": "2026-06-06T00:00:00Z"
+  "last_update": "2026-06-06T00:00:00Z",
+  "prior_leg": "drop-precheck-bump-throughput (fea3cbe, PASS)",
+  "evidence": {
+    "glassdoor_19e9d56caf26e3e3": "99177-char HTML, ZERO plaintext part; real jobs (Northrop Grumman Sr. Staff Chief Engineer, Rolling Meadows IL, $184K-$276K) at TAIL; front dominated by CSS/@font-face/MSO/VML noise. extractor maxLength=30000 truncation drops tail. Jobs use VML <v:roundrect> buttons not <a href> -> extractAnchorPairs returns []. Filed NoJobs.",
+    "google_alerts_19e9aa3adc7b13b7": "clean structured plaintext, 10 real jobs (UKG/Accenture/Meta/Oracle). Should extract trivially. Filed NoJobs -> consistent with stale isJobListingEmail precheck (removed fea3cbe) processing before deploy. Needs reprocess.",
+    "indeed_multiple": "donotreply@jobalert.indeed.com digests w/ zero-width obfuscation + multi-job blocks. Prompt lacks digest block-format guidance."
+  }
 }

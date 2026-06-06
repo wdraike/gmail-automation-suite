@@ -31,6 +31,62 @@ function extractAnchorPairs(html) {
 }
 
 /**
+ * Build the Gemini extraction prompt.
+ *
+ * Extracted from extractJobDetailsSimple so the prompt text is unit-testable
+ * without exercising the live Gemini path.
+ *
+ * @param {string} textToProcess - Cleaned/truncated email body
+ * @param {string} urlSection - Pre-formatted "Job Application URLs" block
+ * @param {string} anchorSection - Pre-formatted link-text→URL mappings block
+ * @returns {string} The full prompt string
+ */
+function buildExtractionPrompt(textToProcess, urlSection, anchorSection) {
+  return `You are a job listing extraction assistant. Extract ALL job listings from the email below.
+
+RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
+[
+  {
+    "company": "Company Name",
+    "companyDescription": "Brief description if mentioned, otherwise empty string",
+    "jobTitle": "Exact Job Title",
+    "location": "City, State (US) or City, Country (international) or Remote — no other values",
+    "minSalary": "",
+    "maxSalary": "",
+    "salaryPeriod": "",
+    "jobUrl": "URL from the numbered list or link mappings below that matches this job title, otherwise empty string",
+    "employmentType": "Full-time|Part-time|Contract|Internship|Unknown",
+    "workArrangement": "Remote|Hybrid|Onsite|Unknown",
+    "experienceLevel": "Entry|Mid|Senior|Lead/Principal|Unknown",
+    "confidence": 0.0
+  }
+]
+
+DIGEST / AGGREGATOR EMAILS:
+This email may be a job-alert DIGEST from an aggregator (Glassdoor, Indeed, LinkedIn,
+Google Alerts). Digests list MANY roles as repeated blocks, each typically containing:
+Title / Company / Location / "via <Source>" / Date posted / Employment type.
+Extract EVERY block as a SEPARATE job — do not stop after the first one and do not
+merge multiple roles into a single entry. Treat each repeated block as its own listing.
+
+CRITICAL RULES:
+1. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
+2. If no jobs found, return: []
+3. Extract ALL jobs from the email
+4. For jobUrl, match the job title to the link text in the mappings section below, then use the corresponding URL
+5. Leave salary fields as empty strings if not mentioned
+6. confidence: number 0.0-1.0 — how confident you are this row is a real job listing (not an ad or filler)
+
+${urlSection}
+${anchorSection}
+
+EMAIL CONTENT:
+${textToProcess}
+
+JSON ARRAY:`;
+}
+
+/**
  * Extract job details directly from email text without chunking
  * @param {string} emailText - The full email text
  * @param {string[]} extractedUrls - All URLs extracted from the email
@@ -177,41 +233,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
     }
 
     // Prepare the prompt for Gemini
-    const prompt = `You are a job listing extraction assistant. Extract ALL job listings from the email below.
-
-RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
-[
-  {
-    "company": "Company Name",
-    "companyDescription": "Brief description if mentioned, otherwise empty string",
-    "jobTitle": "Exact Job Title",
-    "location": "City, State (US) or City, Country (international) or Remote — no other values",
-    "minSalary": "",
-    "maxSalary": "",
-    "salaryPeriod": "",
-    "jobUrl": "URL from the numbered list or link mappings below that matches this job title, otherwise empty string",
-    "employmentType": "Full-time|Part-time|Contract|Internship|Unknown",
-    "workArrangement": "Remote|Hybrid|Onsite|Unknown",
-    "experienceLevel": "Entry|Mid|Senior|Lead/Principal|Unknown",
-    "confidence": 0.0
-  }
-]
-
-CRITICAL RULES:
-1. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
-2. If no jobs found, return: []
-3. Extract ALL jobs from the email
-4. For jobUrl, match the job title to the link text in the mappings section below, then use the corresponding URL
-5. Leave salary fields as empty strings if not mentioned
-6. confidence: number 0.0-1.0 — how confident you are this row is a real job listing (not an ad or filler)
-
-${urlSection}
-${anchorSection}
-
-EMAIL CONTENT:
-${textToProcess}
-
-JSON ARRAY:`;
+    const prompt = buildExtractionPrompt(textToProcess, urlSection, anchorSection);
 
     try {
       // Call Gemini API
@@ -374,9 +396,21 @@ function extractTextFromHtml(html) {
       }
     }
 
-    // Remove script and style elements
-    let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    // Remove high-volume noise BEFORE tag-stripping/truncation so the real job
+    // text (often at the TAIL of digest/aggregator HTML) survives the prompt budget.
+    // Order matters: comments first (they wrap MSO conditionals + VML), then
+    // script/style blocks, then any stray VML/Office tags.
+    //
+    // 1. HTML comments — covers Outlook MSO conditional blocks
+    //    (<!--[if mso]>...<![endif]-->) which carry VML button markup.
+    let text = html.replace(/<!--[\s\S]*?-->/g, '');
+    // 2. Script and style elements (style carries @font-face / CSS).
+    text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
     text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    // 3. VML / Office namespaced elements (e.g. <v:roundrect>, <o:p>), both
+    //    paired and self-closing, including their text content.
+    text = text.replace(/<([vo]):([a-z]+)\b[^>]*>[\s\S]*?<\/\1:\2>/gi, '');
+    text = text.replace(/<[vo]:[a-z]+\b[^>]*\/?>/gi, '');
 
     // Replace common HTML entities
     text = text.replace(/&nbsp;/gi, ' ');
@@ -394,6 +428,13 @@ function extractTextFromHtml(html) {
 
     // Remove all remaining HTML tags
     text = text.replace(/<[^>]+>/g, '');
+
+    // Remove zero-width / invisible characters that digest emails (Indeed,
+    // Glassdoor) inject between and inside words as obfuscation. Stripping them
+    // reconnects words ("Nor​throp" -> "Northrop") and removes large junk runs
+    // that otherwise eat into the prompt budget.
+    // U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+200E LRM, U+200F RLM, U+FEFF BOM.
+    text = text.replace(/[​‌‍‎‏﻿]/g, '');
 
     // Clean up whitespace
     text = text.replace(/[ \t]+/g, ' ');
@@ -556,6 +597,7 @@ function logJobFinderGeminiInteraction(type, content) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     extractAnchorPairs,
+    buildExtractionPrompt,
     extractJobDetailsSimple,
     extractJobsFallback,
     extractTextFromHtml,

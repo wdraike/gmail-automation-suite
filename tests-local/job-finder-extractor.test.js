@@ -6,7 +6,19 @@
 // Mock globals before requiring the module
 global.callGeminiApi = jest.fn();
 
+const fs = require("fs");
+const path = require("path");
+
 const extractor = require("../src/features/job-finder/extractor.js");
+
+const GLASSDOOR_FIXTURE = fs.readFileSync(
+  path.join(__dirname, "fixtures", "job-finder-nojobs", "glassdoor-99k-no-plaintext.html"),
+  "utf8"
+);
+
+// The truncation budget used inside extractJobDetailsSimple. Mirrored here so the
+// noise-strip-before-truncation tests assert against the same window Gemini sees.
+const EXTRACTION_MAX_LENGTH = 30000;
 
 describe("extractor", () => {
   beforeEach(() => {
@@ -75,6 +87,79 @@ describe("extractor", () => {
       const result = extractor.extractTextFromHtml("&#39;test&#39;&nbsp;a");
       expect(result.plainText).toContain("'test'");
       expect(result.plainText).toContain(" a");
+    });
+
+    // fix-nojobs: real digest jobs sit at the TAIL of a 99K HTML body whose front
+    // is dominated by CSS/@font-face/MSO-conditional/VML noise. After noise removal,
+    // the tail job markers must survive within the 30000-char prompt budget.
+    it("retains Glassdoor tail job markers within the prompt budget", () => {
+      const { plainText } = extractor.extractTextFromHtml(GLASSDOOR_FIXTURE);
+      // Mirror the cleaning + truncation that extractJobDetailsSimple applies.
+      const cleaned = plainText
+        .replace(/\s+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      const budget = cleaned.substring(0, EXTRACTION_MAX_LENGTH);
+      expect(budget).toContain("Northrop Grumman");
+      expect(budget).toContain("Sr. Staff Chief Engineer");
+      expect(budget).toContain("Rolling Meadows");
+    });
+
+    it("strips MSO conditional / VML / CSS noise from Glassdoor HTML", () => {
+      const { plainText } = extractor.extractTextFromHtml(GLASSDOOR_FIXTURE);
+      expect(plainText).not.toContain("roundrect");
+      expect(plainText).not.toContain("mso-");
+      expect(plainText).not.toContain("@font-face");
+      expect(plainText).not.toContain("v-text-anchor");
+    });
+
+    // ZOE-1/ZOE-2: this case is engineered so the GENERIC `<[^>]+>` tag-strip
+    // alone CANNOT remove the noise — the text BETWEEN the MSO comment delimiters
+    // and INSIDE the VML element survives a tag-only strip. Only the dedicated
+    // comment-strip + VML-strip remove it. Guards the new code from regression.
+    it("removes text inside MSO comments and VML elements that survives a tag-only strip", () => {
+      const html =
+        "<p>Real Job Title</p>" +
+        "<!--[if mso]>MSO_JUNK_TEXT_SHOULD_VANISH<![endif]-->" +
+        "<v:roundrect>BUTTON_LABEL_JUNK</v:roundrect>";
+      const { plainText } = extractor.extractTextFromHtml(html);
+      expect(plainText).toContain("Real Job Title");
+      expect(plainText).not.toContain("MSO_JUNK_TEXT_SHOULD_VANISH");
+      expect(plainText).not.toContain("BUTTON_LABEL_JUNK");
+    });
+
+    it("strips zero-width characters injected inside words", () => {
+      // U+200B inside a word, U+FEFF and U+200C/200D between words.
+      const html = "<p>Nor​throp‌ ‍Grum﻿man</p>";
+      const { plainText } = extractor.extractTextFromHtml(html);
+      expect(plainText).toContain("Northrop");
+      expect(plainText).toContain("Grumman");
+      expect(plainText).not.toMatch(/[​‌‍‎‏﻿]/);
+    });
+
+    it("removes the high-volume zero-width runs from the Glassdoor digest", () => {
+      const { plainText } = extractor.extractTextFromHtml(GLASSDOOR_FIXTURE);
+      expect(plainText).not.toMatch(/[​‌‍‎‏﻿]/);
+    });
+  });
+
+  describe("buildExtractionPrompt", () => {
+    it("is exported as a function", () => {
+      expect(typeof extractor.buildExtractionPrompt).toBe("function");
+    });
+
+    it("includes digest/aggregator guidance instructing extraction of every block", () => {
+      const prompt = extractor.buildExtractionPrompt("EMAIL BODY", "", "");
+      expect(prompt.toLowerCase()).toMatch(/digest|aggregator/);
+      expect(prompt.toLowerCase()).toMatch(/every|each/);
+    });
+
+    it("preserves the JSON contract and CRITICAL RULES", () => {
+      const prompt = extractor.buildExtractionPrompt("EMAIL BODY", "", "");
+      expect(prompt).toContain("RESPONSE FORMAT");
+      expect(prompt).toContain("CRITICAL RULES");
+      expect(prompt).toContain('"jobTitle"');
+      expect(prompt).toContain("EMAIL BODY");
     });
   });
 

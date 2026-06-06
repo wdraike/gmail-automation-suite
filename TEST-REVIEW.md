@@ -1,38 +1,43 @@
-# Test Review — 2026-06-06 (drop-precheck-bump-throughput)
+# Test Review — 2026-06-06 (fix-nojobs-false-negatives)
 
 ## Summary
-Full jest: 536 passed, 0 failed, 9 skipped (545 total). All changed behavior is covered by RED-first tests that were confirmed failing before implementation.
+543 passed / 0 failed / 9 skipped across the full suite (baseline was 536 passed — 7 new tests added). Extractor focused suite: 57/57 pass. Coverage on extractor.js 78% lines / 79% branch (above WARN floor; uncovered lines are the live-Gemini call path and logging/source helpers, out of scope for this leg). Mutation check confirms the new zero-width tests genuinely fail when the strip is removed.
 
 ## Test Results
 
-| Suite | Status | Notes |
-|-------|--------|-------|
-| config.test.js | PASS | MAX_EMAILS_PER_RUN === 10 lock updated |
-| job-finder-main.test.js | PASS | precheck block removed; extraction-direct + confidence-0.3 + rate-limit tests added |
-| job-finder-extractor.test.js | PASS | isJobListingEmail describe removed; extraction + RATE_LIMIT_REACHED retained |
-| full suite (20 suites) | PASS | 0 failures |
+| Suite | Tests | Passed | Failed | Skipped | Time |
+|-------|-------|--------|--------|---------|------|
+| job-finder-extractor (focused) | 58 | 58 | 0 | 0 | ~1.3s |
+| full suite | 553 | 544 | 0 | 9 | ~4s |
 
-## Coverage of Changed Behavior
-
-| Change | Covering Test | Verified |
-|--------|---------------|----------|
-| MAX_EMAILS_PER_RUN = 10 (config) | "sets MAX_EMAILS_PER_RUN to 10" | PASS |
-| getThreads limit -> (0,10) | "fetches new threads using the limit from JOB_FINDER_CONFIG (0, 10)" | PASS |
-| combined trim to 10 | "trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (10)" | PASS |
-| extraction runs without pre-check | "runs full extraction directly without any pre-check gate" | PASS |
-| rate-limit -> markEmailAsRateLimited (not NoJobs) | "marks the thread rate-limited (not NoJobs) when extraction rate-limits" | PASS |
-| confidence 0.4 now WRITTEN | "WRITES a job with confidence 0.4 (was dropped at the old 0.5 gate)" | PASS |
-| confidence 0.2 dropped AND logged | "filters out jobs with confidence below 0.3 AND logs the dropped job" | PASS |
-| exactly 0.3 kept | "keeps jobs where _confidence is exactly 0.3" | PASS |
-| null/0 dropped | two dedicated tests | PASS |
-| isJobListingEmail tests removed | grep count = 0 in extractor test | PASS |
-| extraction RATE_LIMIT_REACHED retained | grep count = 2 (extractor) + 13 (api-service) | PASS |
+(Post-Zoe: +1 discriminating test for the MSO-comment/VML strip — see ZOE-REVIEW.md resolution.)
 
 ## Failed Tests
 None.
 
 ## Coverage Gaps
-None for the changed surface.
+
+| File | Line % | Branch % | Status |
+|------|--------|----------|--------|
+| src/features/job-finder/extractor.js | 78% | 79% | PASS (changed lines all covered; uncovered = live-Gemini path + logging helper, intentionally untested per repo convention) |
+
+## New Tests (this leg)
+
+| Test | Guards |
+|------|--------|
+| retains Glassdoor tail job markers within the prompt budget | Northrop/Sr. Staff Chief Engineer/Rolling Meadows survive 30000-char window |
+| strips MSO conditional / VML / CSS noise from Glassdoor HTML | no roundrect/mso-/@font-face/v-text-anchor in plainText |
+| strips zero-width characters injected inside words | synthetic obfuscated word reconnects; MUTATION-VERIFIED fails without strip |
+| removes the high-volume zero-width runs from the Glassdoor digest | real 99K fixture has zero ZW chars; MUTATION-VERIFIED |
+| buildExtractionPrompt is exported as a function | export contract |
+| includes digest/aggregator guidance instructing extraction of every block | digest prompt guidance present |
+| preserves the JSON contract and CRITICAL RULES | refactor did not drop JSON shape / rules |
+
+## Assertion Strength
+Strong. Tests assert specific substrings and use a negative regex for zero-width residue. Marker test mirrors the production cleaning+truncation pipeline (same `\s+` collapse + 30000 substring) rather than asserting on raw plainText, so it tests the real window Gemini sees. Mutation testing confirmed the zero-width and (by construction) digest tests are not vacuous.
+
+## Flakiness
+None — all transforms are pure/deterministic; no timers, network, or randomness. Re-runs stable.
 
 ## Status: PASS
 

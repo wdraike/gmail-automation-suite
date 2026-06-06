@@ -1,40 +1,39 @@
-# Oscar Review — 2026-06-06 (drop-precheck-bump-throughput)
+# Oscar Review — 2026-06-06 (fix-nojobs-false-negatives)
 
 ## Verdict: PASS
 
 ## Summary
-All checks passed. Ready to commit. The isJobListingEmail pre-check is fully removed, confidence gate lowered 0.5->0.3 with dropped-job logging, and throughput bumped (MAX_EMAILS_PER_RUN 2->10, trigger 3h->1h). Rate-limit safety verified intact. Zoe mutation-killed the confidence tests.
+fix-nojobs-false-negatives is complete and correct. extractor.js now strips MSO/VML/comment/CSS noise and zero-width obfuscation before truncation, and the Gemini prompt (extracted to a testable `buildExtractionPrompt`) carries digest/aggregator guidance. Ernie PASS, Telly PASS, Zoe initially WARN (two vacuous regression guards) — resolved inline with a mutation-verified discriminating test. All checks green; ready to commit.
 
 ## Agent Findings
 
 ### Ernie (code quality) — PASS
-No Critical, no Warning. Two Info notes (NoJobs fallthrough is intended; baseValid iterated twice, negligible). Rate-limit propagation and catch block unchanged. No unapproved fallbacks.
+No Critical/Warning. Two Info notes (VML non-nesting assumption is safe; zero-width literal-vs-escape is cosmetic). Regexes verified bounded (~3ms on 99K input); all 6 zero-width codepoints present; no fallbacks added.
 
-### Telly (test coverage) — PASS
-536 passed / 0 failed / 9 skipped. Every changed behavior mapped to a covering test. isJobListingEmail tests removed (0 refs); extraction RATE_LIMIT_REACHED retained.
+### Telly (tests) — PASS
+58/58 focused, 544/0/9 full suite. extractor.js coverage 78% line / 79% branch (uncovered = live-Gemini path + logging helpers, out of scope). New behavior all exercised.
 
-### Zoe (adversarial) — PASS
-Mutation test: reverted threshold to 0.5 and removed the log line — the 0.4-write, 0.2-drop+log, and exactly-0.3 tests all FAILED against the mutant (killed). Rate-limit dual-assertion, precheck-removal, and (0,10)/trim-to-10 all verified real.
+### Zoe (adversarial) — PASS (after resolution)
+Found that the original tail-marker and MSO-noise tests passed even with the new comment/VML strip removed (the pre-existing generic tag-strip already handled THIS fixture) — vacuous regression guards. Resolved by adding a discriminating test where the generic tag-strip alone cannot remove the noise (MSO-comment inner text + VML inner text). Mutation-verified: fails when the new strip lines are removed.
 
 ## Fix Loop
-- No iterations needed. All reviewers PASS on first pass.
+- Iteration 1: Zoe WARN (2 vacuous guards) → added 1 mutation-verified discriminating test → re-verified GREEN. No bert needed (test gap, not code defect).
 
 ## Completeness
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
-| Tests passing (536/0/9) | PASS |
-| Docs updated (no API change) | N/A |
-| Security review run (no security files) | N/A |
-| No dead/empty staged files | PASS |
+| Tests passing | PASS (544/0/9) |
+| Docs updated (if API changed) | N/A (internal helper; no external API/schema change) |
+| Security review run (if auth/payment) | N/A (no security-sensitive files) |
 | No unapproved fallbacks | PASS |
+| maxLength raised? | No (noise-strip kept job text in existing 30000 budget) |
 
 ## Kermit Report
 Verdict: PASS
 Completeness gaps: none
 Backlog items: 0
 Ready to commit: yes
-Manual step required: live installed trigger does NOT change until user re-runs setupJobFinderTrigger() in the Apps Script editor.
 
 ## Status: PASS
 _Signed: Oscar — 2026-06-06T00:00:00Z_

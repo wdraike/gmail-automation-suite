@@ -1,32 +1,33 @@
-# Code Review — job-finder (drop-precheck-bump-throughput) — 2026-06-06
+# Code Review — src/features/job-finder/extractor.js (fix-nojobs-false-negatives) — 2026-06-06
 
 ## Summary
-Ship-ready. The change is surgical and correct: the cost-saving `isJobListingEmail` pre-check is fully removed (function + export + caller block), the confidence gate is lowered 0.5 -> 0.3 with a guarded log of dropped jobs, and throughput knobs are bumped. Rate-limit safety is preserved through the unchanged `wasRateLimited` / `RATE_LIMIT_REACHED` -> `markEmailAsRateLimited` paths. No unapproved fallbacks. No dangling references to the deleted function.
+Ship-ready. The change is a focused, well-commented noise-strip + zero-width-strip in `extractTextFromHtml` plus a pure-refactor extraction of `buildExtractionPrompt` with added digest guidance. No bugs, no unhandled errors, no fallbacks introduced. All 6 zero-width codepoints verified present in the regex character class. Regexes run in ~3ms on the 99K fixture (no catastrophic backtracking).
 
 ## Critical Findings (must fix before merge)
 | # | Finding | File:Line | Remediation |
 |---|---------|-----------|-------------|
-| – | None | – | – |
+| — | None | — | — |
 
 ## Warning Findings (fix this sprint)
 | # | Finding | File:Line | Remediation |
 |---|---------|-----------|-------------|
-| – | None | – | – |
+| — | None | — | — |
 
 ## Info / Suggestions
 | # | Finding | File:Line | Suggestion |
 |---|---------|-----------|------------|
-| 1 | Removing the pre-check removes one early "not a job email" archive path; genuinely-empty extractions now fall through to the `validJobs.length === 0 -> markEmailAsNoJobs` branch instead. This is the intended behavior (the pre-check was mis-filing real jobs) and is correctly handled downstream. | main.js:~315 | None — informational. |
-| 2 | `baseValid` is iterated twice (validJobs + droppedByConfidence). Negligible for <=10 emails/run; readability win outweighs cost. | main.js:~322 | None. |
+| 1 | VML paired-tag regex does not handle nested same-name VML tags | extractor.js:412 | Not present in real email VML; any leftover opener is caught by the generic `<[^>]+>` strip at line 430. No action needed. |
+| 2 | Zero-width regex uses literal invisible chars rather than `\u` escapes | extractor.js:437 | Codepoints verified correct (U+200B/200C/200D/200E/200F/FEFF). Literal form works in V8/Apps Script; `\uXXXX` would be more reviewer-legible if touched again. |
 
 ## Checklist Status
 - [x] Complexity — PASS
-- [x] Error handling — PASS (rate-limit propagation intact; catch block unchanged)
-- [x] Test coverage — PASS (RED-first tests added)
-- [x] Observability — PASS (added Confidence-dropped log; Filters log preserved)
-- [x] Scalability — PASS
-- [x] No unapproved fallbacks — PASS (getApiKey override is approved prior-leg design, untouched)
-- [x] Dead code — PASS (deleted function fully removed incl. export)
+- [x] Error handling — PASS (existing try/catch preserved; no new throws)
+- [x] Test coverage — PASS (7 new tests, TDD RED→GREEN)
+- [x] Observability — PASS (pure text transforms)
+- [x] Scalability — PASS (~3ms on 99K input)
+- [x] API design — N/A
+- [x] Dead code — PASS
+- [x] No unapproved fallbacks — PASS
 
 ## Status: PASS
 
