@@ -9,7 +9,7 @@ global.JOB_FINDER_CONFIG = {
   PROCESSED_LABEL: "📬 JobAlerts/Processed",
   RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimited",
   ACTIVE_SHEET_NAME: "Jobs",
-  MAX_EMAILS_PER_RUN: 2,
+  MAX_EMAILS_PER_RUN: 10,
   SHEET_COLUMNS: [
     "Company", "Company Description", "Job Title", "Location",
     "Minimum Salary", "Maximum Salary", "Salary Period", "Job URL",
@@ -43,7 +43,6 @@ global.GmailService = {
 global.callGeminiApi = jest.fn();
 global.sendNotificationEmail = jest.fn();
 global.extractJobDetailsSimple = jest.fn(() => []);
-global.isJobListingEmail = jest.fn(() => true);
 global.isValidJobListing = jest.fn(() => true);
 global.extractTextFromHtml = jest.fn(() => ({ plainText: "Email body", extractedUrls: [], anchorPairs: [] }));
 global.extractEmailSource = jest.fn(() => "example");
@@ -114,30 +113,32 @@ describe("job-finder main", () => {
       expect(result.threads).toEqual(threads);
     });
 
-    it("fetches new threads using the throttled limit from JOB_FINDER_CONFIG (0, 2)", () => {
+    it("fetches new threads using the limit from JOB_FINDER_CONFIG (0, 10)", () => {
       const getThreadsSpy = jest.fn(() => []);
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
         if (name === "📬 JobAlerts") return { getThreads: getThreadsSpy };
         return null;
       });
       main.getEmailThreadsToProcess();
-      expect(getThreadsSpy).toHaveBeenCalledWith(0, 2);
+      expect(getThreadsSpy).toHaveBeenCalledWith(0, 10);
     });
 
-    it("trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (2)", () => {
+    it("trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (10)", () => {
+      const newThreads = Array.from({ length: 10 }, (_, i) => ({ id: `new${i}` }));
       global.GmailService.labels.getLabelSafe = jest.fn((name) => {
         if (name === "📬 JobAlerts") {
-          return { getThreads: jest.fn(() => [{ id: "new1" }, { id: "new2" }]) };
+          return { getThreads: jest.fn(() => newThreads) };
         }
         if (name === "📬 JobAlerts/RateLimited") {
-          return { getThreads: jest.fn(() => [{ id: "rl1" }]) };
+          return { getThreads: jest.fn(() => [{ id: "rl1" }, { id: "rl2" }]) };
         }
         return null;
       });
       const result = main.getEmailThreadsToProcess();
-      expect(result.threads.length).toBe(2);
+      expect(result.threads.length).toBe(10);
       // rate-limited threads are prioritized (prepended)
       expect(result.threads[0].id).toBe("rl1");
+      expect(result.threads[1].id).toBe("rl2");
     });
 
     it("prepends rate-limited threads when available", () => {
@@ -371,46 +372,11 @@ describe("job-finder main", () => {
     });
   });
 
-  describe("processOneEmail pre-check gate", () => {
-    function makeThread() {
-      return {
-        getMessages: jest.fn(() => [{
-          getSubject: jest.fn(() => "Weekly Digest"),
-          getBody: jest.fn(() => "<p>Newsletter content</p>"),
-          getDate: jest.fn(() => new Date()),
-          getFrom: jest.fn(() => "newsletter@example.com"),
-        }]),
-        addLabel: jest.fn(),
-        removeLabel: jest.fn(),
-        moveToArchive: jest.fn(),
-      };
-    }
-
-    it("calls markEmailAsNoJobs and skips extraction when pre-check returns false", () => {
-      const thread = makeThread();
-      global.isJobListingEmail = jest.fn(() => false);
-
-      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
-      const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        return { getName: jest.fn(() => name) };
-      });
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return sourceLabelObj;
-        return null;
-      });
-
-      const result = main.processOneEmail(thread, 1, 1);
-
-      expect(global.isJobListingEmail).toHaveBeenCalled();
-      expect(global.extractJobDetailsSimple).not.toHaveBeenCalled();
-      expect(thread.addLabel).toHaveBeenCalledWith(noJobsLabelObj);
-      expect(result.success).toBe(true);
-      expect(result.jobCount).toBe(0);
-    });
-
-    it("proceeds with extraction when pre-check returns true", () => {
+  describe("processOneEmail extraction (no pre-check)", () => {
+    // drop-precheck-bump-throughput: the isJobListingEmail cost-saving pre-check
+    // was removed (it mis-filed real job emails as NoJobs because it only saw the
+    // first 2000 chars). processOneEmail now runs full extraction directly.
+    it("runs full extraction directly without any pre-check gate", () => {
       const thread = {
         getMessages: jest.fn(() => [{
           getSubject: jest.fn(() => "Job Alerts"),
@@ -419,7 +385,6 @@ describe("job-finder main", () => {
           getFrom: jest.fn(() => "jobs@example.com"),
         }]),
       };
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev" },
       ]);
@@ -428,10 +393,42 @@ describe("job-finder main", () => {
 
       const result = main.processOneEmail(thread, 1, 1);
 
-      expect(global.isJobListingEmail).toHaveBeenCalled();
       expect(global.extractJobDetailsSimple).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.jobCount).toBe(1);
+    });
+
+    it("marks the thread rate-limited (not NoJobs) when extraction rate-limits", () => {
+      const thread = {
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => "Job Alerts"),
+          getBody: jest.fn(() => "<p>We are hiring</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+      global.extractJobDetailsSimple = jest.fn(() => {
+        throw new Error("RATE_LIMIT_REACHED");
+      });
+
+      const rateLimitLabelObj = { getName: jest.fn(() => "📬 JobAlerts/RateLimited") };
+      const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
+      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
+        if (name === "📬 JobAlerts/RateLimited") return rateLimitLabelObj;
+        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
+        return { getName: jest.fn(() => name) };
+      });
+      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      // rate-limited path: thread queued, NOT archived as NoJobs
+      expect(thread.addLabel).toHaveBeenCalledWith(rateLimitLabelObj);
+      expect(thread.addLabel).not.toHaveBeenCalledWith(noJobsLabelObj);
+      expect(result.wasRateLimited).toBe(true);
     });
   });
 
@@ -452,7 +449,6 @@ describe("job-finder main", () => {
 
     it("rejects jobs where company is Unknown AND title is Unknown Position", () => {
       const thread = makeThread();
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Unknown", "Job Title": "Unknown Position", _confidence: 0.9 },
         { Company: "Acme", "Job Title": "Unknown Position", _confidence: 0.9 },
@@ -479,7 +475,6 @@ describe("job-finder main", () => {
 
     it("keeps jobs where only one of company/title is Unknown", () => {
       const thread = makeThread();
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Unknown Position", _confidence: 0.9 },
         { Company: "Unknown", "Job Title": "Software Engineer", _confidence: 0.9 },
@@ -506,12 +501,26 @@ describe("job-finder main", () => {
       };
     }
 
-    it("filters out jobs with confidence below 0.5", () => {
+    // drop-precheck-bump-throughput: confidence threshold lowered 0.5 -> 0.3.
+    it("WRITES a job with confidence 0.4 (was dropped at the old 0.5 gate)", () => {
       const thread = makeThreadWith("<p>Apply</p>");
-      global.isJobListingEmail = jest.fn(() => true);
+      global.extractJobDetailsSimple = jest.fn(() => [
+        { Company: "Acme", "Job Title": "Dev", _confidence: 0.4 },
+      ]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const result = main.processOneEmail(thread, 1, 1);
+
+      expect(result.jobCount).toBe(1);
+      expect(global.addJobToSpreadsheet.mock.calls[0][0]["Company"]).toBe("Acme");
+    });
+
+    it("filters out jobs with confidence below 0.3 AND logs the dropped job", () => {
+      const thread = makeThreadWith("<p>Apply</p>");
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev", _confidence: 0.8 },
-        { Company: "Noise", "Job Title": "Ad", _confidence: 0.3 },
+        { Company: "Noise", "Job Title": "Ad", _confidence: 0.2 },
       ]);
       global.isValidJobListing = jest.fn(() => true);
       global.addJobToSpreadsheet = jest.fn(() => true);
@@ -521,13 +530,17 @@ describe("job-finder main", () => {
       expect(result.jobCount).toBe(1);
       expect(global.addJobToSpreadsheet).toHaveBeenCalledTimes(1);
       expect(global.addJobToSpreadsheet.mock.calls[0][0]["Company"]).toBe("Acme");
+
+      // the confidence-dropped job is logged with its title/company/confidence
+      const logged = global.Logger.log.mock.calls.map(c => String(c[0])).join("\n");
+      expect(logged).toMatch(/Confidence-dropped/);
+      expect(logged).toMatch(/Ad@Noise/);
     });
 
-    it("keeps jobs where _confidence is exactly 0.5", () => {
+    it("keeps jobs where _confidence is exactly 0.3", () => {
       const thread = makeThreadWith("<p>Apply</p>");
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
-        { Company: "Acme", "Job Title": "Dev", _confidence: 0.5 },
+        { Company: "Acme", "Job Title": "Dev", _confidence: 0.3 },
       ]);
       global.isValidJobListing = jest.fn(() => true);
       global.addJobToSpreadsheet = jest.fn(() => true);
@@ -539,7 +552,6 @@ describe("job-finder main", () => {
 
     it("keeps jobs with no _confidence field (defaults pass)", () => {
       const thread = makeThreadWith("<p>Apply</p>");
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev" },
       ]);
@@ -551,10 +563,9 @@ describe("job-finder main", () => {
       expect(result.jobCount).toBe(1);
     });
 
-    // WARN-7: confidence=null is coerced to 0 by JS comparison (null < 0.5 === true), so filtered out
-    it("filters out jobs with confidence=null (null < 0.5 is true in JS)", () => {
+    // confidence=null is coerced to 0 by JS comparison (null < 0.3 === true), so filtered out
+    it("filters out jobs with confidence=null (null < 0.3 is true in JS)", () => {
       const thread = makeThreadWith("<p>Apply</p>");
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev", _confidence: null },
       ]);
@@ -563,14 +574,12 @@ describe("job-finder main", () => {
 
       const result = main.processOneEmail(thread, 1, 1);
 
-      // null coerces to 0, so null < 0.5 is true → job is rejected
+      // null coerces to 0, so null < 0.3 is true → job is rejected
       expect(result.jobCount).toBe(0);
     });
 
-    // WARN-8: confidence=0 is below threshold and must be filtered out
     it("filters out jobs with confidence=0", () => {
       const thread = makeThreadWith("<p>Apply</p>");
-      global.isJobListingEmail = jest.fn(() => true);
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev", _confidence: 0 },
       ]);

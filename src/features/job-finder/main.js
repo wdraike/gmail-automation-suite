@@ -294,18 +294,6 @@ function processOneEmail(thread, threadIndex, totalThreads) {
     const emailContent = extractEmailContent(thread);
     Logger.log(`[${threadIndex}/${totalThreads}] Processing: "${emailContent.subject}"`);
 
-    // Pre-check: skip full extraction if email doesn't look like a job listing
-    if (!isJobListingEmail(emailContent.plainText)) {
-      Logger.log(`Pre-check: not a job listing email — "${emailContent.subject}"`);
-      markEmailAsNoJobs(thread);
-      return {
-        success: true,
-        jobCount: 0,
-        jobs: [],
-        wasRateLimited: false
-      };
-    }
-
     // Extract jobs from email
     const extractionResult = extractJobsFromEmail(emailContent);
 
@@ -327,11 +315,18 @@ function processOneEmail(thread, threadIndex, totalThreads) {
       Logger.log(`Found ${extractionResult.jobs.length} job(s) in "${emailContent.subject}"`);
     }
 
-    // Write valid jobs directly to spreadsheet — filter by validity and confidence
-    const validJobs = extractionResult.jobs
+    // Write valid jobs directly to spreadsheet — filter by validity and confidence.
+    // baseValid = passes validity + double-Unknown rejection (confidence not yet applied).
+    const baseValid = extractionResult.jobs
       .filter(job => isValidJobListing(job))
-      .filter(job => (job._confidence === undefined || job._confidence >= 0.5))
       .filter(job => !(job["Company"] === "Unknown" && job["Job Title"] === "Unknown Position"));
+
+    // Confidence gate lowered 0.5 -> 0.3 (drop-precheck-bump-throughput).
+    const validJobs = baseValid.filter(job => (job._confidence === undefined || job._confidence >= 0.3));
+    const droppedByConfidence = baseValid.filter(job => !(job._confidence === undefined || job._confidence >= 0.3));
+    if (droppedByConfidence.length) {
+      Logger.log(`Confidence-dropped (<0.3): ${droppedByConfidence.map(j => `${j["Job Title"]}@${j["Company"]} (${j._confidence})`).join("; ")}`);
+    }
 
     Logger.log(`Filters: ${extractionResult.jobs.length} extracted -> ${validJobs.length} valid (after validity/confidence/Unknown filters)`);
 
@@ -602,14 +597,14 @@ function setupJobFinderTrigger() {
       }
     }
 
-    // Create a new time-based trigger. Throttled to every 3 hours to reduce
-    // Gemini quota burn (RPD/RPM exhaustion).
+    // Create a new time-based trigger. Runs hourly (drop-precheck-bump-throughput)
+    // now that the Gemini key is billing-enabled (no free-tier quota wall).
     ScriptApp.newTrigger("processJobEmailsMain")
       .timeBased()
-      .everyHours(3)
+      .everyHours(1)
       .create();
 
-    const message = `Trigger set up to run job finder every 3 hours`;
+    const message = `Trigger set up to run job finder every hour`;
     Logger.log(message);
     return message;
   } catch (error) {

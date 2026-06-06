@@ -12,56 +12,6 @@ const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'in
 const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
 
 /**
- * Cheap pre-check: asks Gemini whether the email contains job listings.
- * Uses only the first 2000 chars of the body to keep cost low.
- * @param {string} emailBody - Plain-text email body
- * @returns {boolean} true if the email appears to contain job listings
- */
-function isJobListingEmail(emailBody) {
-  const snippet = (emailBody || "").substring(0, 2000);
-  const prompt = `Does this email contain job listings or job alerts? Reply with only YES or NO.\n\n${snippet}`;
-
-  // Matches rate-limit / quota / overload signals in an error string.
-  const isRateLimitSignal = (text) =>
-    /RATE_LIMIT_REACHED|RESOURCE_EXHAUSTED|rate limit|quota|\b429\b|\b503\b/i.test(
-      String(text)
-    );
-
-  let result;
-  try {
-    result = callGeminiApi(prompt, "precheck");
-  } catch (e) {
-    // A thrown rate-limit signal must propagate as RATE_LIMIT_REACHED so the
-    // caller queues the email (markEmailAsRateLimited) instead of archiving it.
-    if (isRateLimitSignal(e && e.message)) {
-      throw new Error("RATE_LIMIT_REACHED");
-    }
-    // Any other thrown error must NOT be swallowed into a false "no jobs"
-    // (which would archive and lose the email). Re-throw and let the caller decide.
-    Logger.log(`isJobListingEmail error: ${e}`);
-    throw e;
-  }
-
-  // callGeminiApi returns {success:false, error} instead of throwing.
-  if (!result || result.success === false) {
-    if (result && isRateLimitSignal(result.error)) {
-      throw new Error("RATE_LIMIT_REACHED");
-    }
-    // Non-rate-limit failure (or a missing result): fail loudly rather than
-    // silently marking the email as no-jobs.
-    throw new Error(
-      `isJobListingEmail: precheck API call failed: ${
-        result ? result.error : "no result returned"
-      }`
-    );
-  }
-
-  // Genuine successful response: a missing/empty YES means NO.
-  if (!result.response) return false;
-  return result.response.trim().toUpperCase().startsWith("YES");
-}
-
-/**
  * Extract anchor text/URL pairs from raw HTML before stripping tags.
  * Returns an array of { text, url } objects for job-title-to-URL matching.
  * @param {string} html - Raw HTML content
@@ -605,7 +555,6 @@ function logJobFinderGeminiInteraction(type, content) {
 // Conditional exports for testing (works in both Node.js and Apps Script)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    isJobListingEmail,
     extractAnchorPairs,
     extractJobDetailsSimple,
     extractJobsFallback,

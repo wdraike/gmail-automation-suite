@@ -59,10 +59,10 @@ const JOB_FINDER_CONFIG = {
   // API rate limiting
   MAX_CALLS_PER_MINUTE: 15,
 
-  // Max email threads processed per run. Throttled to reduce Gemini quota burn
-  // (RPD/RPM exhaustion). Single source of truth — referenced by
-  // getEmailThreadsToProcess in src/features/job-finder/main.js.
-  MAX_EMAILS_PER_RUN: 2,
+  // Max email threads processed per run. Bumped to 10 (drop-precheck-bump-throughput)
+  // now that the Gemini key is billing-enabled (no free-tier wall). Single source of
+  // truth — referenced by getEmailThreadsToProcess in src/features/job-finder/main.js.
+  MAX_EMAILS_PER_RUN: 10,
 
   // Notification settings
   NOTIFICATION_EMAIL: Session.getActiveUser().getEmail(),
