@@ -168,6 +168,38 @@ describe("extractor", () => {
       expect(prompt).toContain('"jobTitle"');
       expect(prompt).toContain("EMAIL BODY");
     });
+
+    // fix-nojobs-output-truncation: URL/anchor injection + jobUrl removed from
+    // the prompt entirely. They bloated Gemini OUTPUT past maxOutputTokens=8192,
+    // truncating the JSON array (no closing ]) and causing NoJobs misfiling.
+    it("does NOT inject any URL or anchor sections", () => {
+      const prompt = extractor.buildExtractionPrompt(
+        "EMAIL BODY",
+        "Job Application URLs:\n1. https://example.com/apply",
+        '\nLink Text → URL Mappings:\n"Engineer" → https://example.com/eng'
+      );
+      expect(prompt).not.toContain("Job Application URLs");
+      expect(prompt).not.toContain("Link Text");
+      expect(prompt).not.toContain("→");
+      expect(prompt).not.toContain("https://example.com/apply");
+      expect(prompt).not.toContain("https://example.com/eng");
+    });
+
+    it("does NOT reference jobUrl in the schema or rules", () => {
+      const prompt = extractor.buildExtractionPrompt("EMAIL BODY", "", "");
+      expect(prompt).not.toContain("jobUrl");
+    });
+
+    it("retains the wanted fields in the schema", () => {
+      const prompt = extractor.buildExtractionPrompt("EMAIL BODY", "", "");
+      expect(prompt).toContain('"company"');
+      expect(prompt).toContain('"location"');
+      expect(prompt).toContain('"minSalary"');
+      expect(prompt).toContain('"employmentType"');
+      expect(prompt).toContain('"workArrangement"');
+      expect(prompt).toContain('"experienceLevel"');
+      expect(prompt).toContain('"confidence"');
+    });
   });
 
   describe("extractJobDetailsSimple", () => {
@@ -222,127 +254,32 @@ describe("extractor", () => {
       expect(result[0]["_confidence"]).toBe(1.0);
     });
 
-    it("includes anchor pairs in the prompt when provided", () => {
+    // fix-nojobs-output-truncation: URLs and anchor pairs are NO LONGER injected
+    // into the prompt. The Gemini OUTPUT bloat they caused (echoing a long
+    // redirect URL into every job's jobUrl) overran maxOutputTokens=8192 and
+    // truncated the JSON array. URLs are tracking redirects the user does not use,
+    // so the entire URL/anchor pathway is dropped from the prompt.
+    it("does NOT inject anchor pairs into the prompt", () => {
       global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
       const state = { processedJobs: [], isPartiallyProcessed: false };
       const anchorPairs = [{ text: "Software Engineer at Acme", url: "https://acme.com/jobs/123" }];
       extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
       const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("Software Engineer at Acme");
-      expect(promptArg).toContain("https://acme.com/jobs/123");
+      expect(promptArg).not.toContain("https://acme.com/jobs/123");
+      expect(promptArg).not.toContain("Link Text");
     });
 
-    // WARN-14 regression: anchor filter must not strip career.com or director.jobs anchors
-    it("keeps career.com anchor pairs (WARN-14 anchor regression)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const anchorPairs = [{ text: "Director of Engineering", url: "https://career.com/jobs/dir-eng" }];
-      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("https://career.com/jobs/dir-eng");
-    });
-
-    it("filters r.example.com anchor pairs (tracking subdomain)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const anchorPairs = [
-        { text: "Apply Here", url: "https://r.example.com/redirect?url=jobs" },
-        { text: "Real Job", url: "https://jobs.acme.com/123" },
-      ];
-      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("r.example.com");
-      expect(promptArg).toContain("https://jobs.acme.com/123");
-    });
-
-    it("filters out tracking and social URLs", () => {
+    it("does NOT inject extracted URLs into the prompt", () => {
       global.callGeminiApi = jest.fn(() => ({
         response: '[{"company":"X","jobTitle":"Dev"}]',
       }));
       const state = { processedJobs: [], isPartiallyProcessed: false };
-      const urls = [
-        "https://track.foobar.com/open",
-        "https://linkedin.com/in/foo",
-        "https://hiring.foobar.com/apply",
-        "https://unsubscribe.foobar.com",
-      ];
+      const urls = ["https://hiring.foobar.com/apply", "https://career.com/jobs"];
       extractor.extractJobDetailsSimple("Apply now", urls, state);
       const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("https://hiring.foobar.com/apply");
-      expect(promptArg).not.toContain("track.foobar.com");
-      expect(promptArg).not.toContain("linkedin.com");
-      expect(promptArg).not.toContain("unsubscribe");
-    });
-
-    // WARN-14 regression: 'r.' was too broad and matched career.com, director.jobs etc.
-    it("does NOT filter out career.com URLs (WARN-14 regression)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      extractor.extractJobDetailsSimple("Apply now", ["https://career.com/jobs"], state);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("https://career.com/jobs");
-    });
-
-    it("does NOT filter out director.jobs URLs (WARN-14 regression)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      extractor.extractJobDetailsSimple("Apply now", ["https://director.jobs/apply"], state);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("https://director.jobs/apply");
-    });
-
-    // WARN-15: tracking subdomains must be filtered via hostname-anchored regex
-    it("filters out click.example.com tracking URLs (WARN-15)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      extractor.extractJobDetailsSimple("Apply now", ["https://click.example.com/track"], state);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("click.example.com");
-    });
-
-    it("filters out r.example.com redirect URLs (WARN-14/15 combined)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      extractor.extractJobDetailsSimple("Apply now", ["https://r.example.com/redirect"], state);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("r.example.com");
-    });
-
-    // WARN-18: go. and email. subdomain anchor filter
-    it("filters out go.example.com anchor pair (tracking subdomain)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const anchorPairs = [{ text: "Apply Here", url: "https://go.example.com/link" }];
-      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("go.example.com");
-    });
-
-    it("filters out email.example.com anchor pair (tracking subdomain)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const anchorPairs = [{ text: "View Job", url: "https://email.example.com/track" }];
-      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("email.example.com");
-    });
-
-    it("does NOT filter anchor pair with 'email' in path (WARN-18 regression)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const anchorPairs = [{ text: "Email Marketing Manager", url: "https://jobs.com/email-marketing" }];
-      extractor.extractJobDetailsSimple("We are hiring", [], state, anchorPairs);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).toContain("https://jobs.com/email-marketing");
-    });
-
-    // WARN-19: go. URL noise filter
-    it("filters out go.example.com redirect URL (WARN-19)", () => {
-      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      extractor.extractJobDetailsSimple("Apply now", ["https://go.example.com/redirect"], state);
-      const promptArg = global.callGeminiApi.mock.calls[0][0];
-      expect(promptArg).not.toContain("go.example.com");
+      expect(promptArg).not.toContain("https://hiring.foobar.com/apply");
+      expect(promptArg).not.toContain("https://career.com/jobs");
+      expect(promptArg).not.toContain("Job Application URLs");
     });
 
     it("throws RATE_LIMIT_REACHED on 429 error", () => {
@@ -353,22 +290,20 @@ describe("extractor", () => {
       expect(() => extractor.extractJobDetailsSimple("text", [], state)).toThrow("RATE_LIMIT_REACHED");
     });
 
-    it("sets URL Status to empty string when jobUrl is absent", () => {
-      global.callGeminiApi = jest.fn(() => ({
-        response: '[{"company":"Acme","jobTitle":"Engineer","jobUrl":""}]',
-      }));
-      const state = { processedJobs: [], isPartiallyProcessed: false };
-      const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
-      expect(result[0]["URL Status"]).toBe("");
-    });
-
-    it("sets URL Status to Found when jobUrl is present", () => {
+    // fix-nojobs-output-truncation: jobUrl is dropped from the prompt/schema.
+    // Job URL and URL Status sheet columns are kept for sheet-schema compatibility
+    // but always set to "" (the URL feature is removed, not a fallback).
+    it("always sets Job URL and URL Status to empty string", () => {
       global.callGeminiApi = jest.fn(() => ({
         response: '[{"company":"Acme","jobTitle":"Engineer","jobUrl":"https://acme.com/jobs/1"}]',
       }));
       const state = { processedJobs: [], isPartiallyProcessed: false };
       const result = extractor.extractJobDetailsSimple("We are hiring", [], state);
-      expect(result[0]["URL Status"]).toBe("Found");
+      expect(result[0]["Job URL"]).toBe("");
+      expect(result[0]["URL Status"]).toBe("");
+      // Wanted fields still carried through.
+      expect(result[0]["Company"]).toBe("Acme");
+      expect(result[0]["Job Title"]).toBe("Engineer");
     });
 
     it("does not emit Careers URL keys in validJobs", () => {
@@ -400,6 +335,59 @@ describe("extractor", () => {
       extractor.extractJobDetailsSimple("We are hiring", [], state);
       const promptArg = global.callGeminiApi.mock.calls[0][0];
       expect(promptArg).not.toContain("careersUrl");
+    });
+
+    // fix-nojobs-output-truncation: when Gemini hits MAX_TOKENS the JSON array is
+    // cut off mid-record with no closing ]. The /\[[\s\S]*\]/ regex then returns
+    // null and the email was misfiled NoJobs. Salvage recovers the complete jobs.
+    describe("truncated-array salvage", () => {
+      // Build a valid array of N jobs, then cut the string mid-way through the
+      // LAST object so there is no closing ] (simulates finishReason=MAX_TOKENS).
+      function truncatedArrayOf(n) {
+        const jobs = [];
+        for (let i = 0; i < n; i++) {
+          jobs.push({
+            company: "Company" + i,
+            jobTitle: "Title" + i,
+            location: "Remote",
+            confidence: 0.9,
+          });
+        }
+        const full = JSON.stringify(jobs);
+        // Drop the closing ] and chop the last object so it is incomplete:
+        // keep everything up to (but not including) the final complete record's
+        // closer, then append a fragment of a new record with no terminator.
+        const withoutBracket = full.slice(0, -1); // remove trailing ]
+        return withoutBracket + ',{"company":"Acme","jobTit';
+      }
+
+      it("salvages the complete jobs from a truncated (no closing ]) array", () => {
+        const truncated = truncatedArrayOf(19);
+        global.callGeminiApi = jest.fn(() => ({ response: truncated }));
+        const state = { processedJobs: [], isPartiallyProcessed: false };
+        const result = extractor.extractJobDetailsSimple("Big digest", [], state);
+        // 19 complete jobs recovered; the dangling 20th fragment dropped.
+        expect(result.length).toBe(19);
+        expect(result[0]["Company"]).toBe("Company0");
+        expect(result[18]["Job Title"]).toBe("Title18");
+      });
+
+      it("still returns [] when there is no salvageable complete object", () => {
+        global.callGeminiApi = jest.fn(() => ({ response: '[{"company":"Acme","jobTit' }));
+        const state = { processedJobs: [], isPartiallyProcessed: false };
+        const result = extractor.extractJobDetailsSimple("Big digest", [], state);
+        expect(result).toEqual([]);
+      });
+
+      it("does not affect a well-formed (non-truncated) array", () => {
+        global.callGeminiApi = jest.fn(() => ({
+          response: '[{"company":"Acme","jobTitle":"Dev","location":"Remote"}]',
+        }));
+        const state = { processedJobs: [], isPartiallyProcessed: false };
+        const result = extractor.extractJobDetailsSimple("text", [], state);
+        expect(result.length).toBe(1);
+        expect(result[0]["Company"]).toBe("Acme");
+      });
     });
   });
 

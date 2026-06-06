@@ -1,44 +1,29 @@
 {
-  "last_leg": "hexagonal-ports-refactor",
+  "last_leg": "fix-nojobs-output-truncation",
   "verdict": "PASS",
   "completed": "2026-06-06",
   "deployed": true,
-  "tests": "573 passed / 0 failed / 9 skipped (baseline 544; +29 net new)",
-  "commits": [
-    "9d31d25: feat(core): add Gemini/Properties/Utilities port adapters + register in serviceFactory",
-    "651e60f: refactor(job-finder): route all platform access through core/services ports",
-    "298fb28: refactor(features): route email-sorter/retention/label-manager through ports",
-    "bff57a1: feat(arch): enforce hexagonal ports boundary — invariant doc + CI guard"
+  "tests": "574 passed / 0 failed / 9 skipped (architecture-boundary green)",
+  "root_cause": "Gemini OUTPUT truncation at maxOutputTokens=8192. buildExtractionPrompt injected 17-32 tracking URLs + up to 30 anchor pairs and asked Gemini to echo a long redirect URL into every job's jobUrl. A 20-25 job digest needed >8192 output tokens -> finishReason=MAX_TOKENS -> JSON array cut off mid-record with no closing ] -> extractor /\\[[\\s\\S]*\\]/ regex returned null -> [] -> processOneEmail misfiled the email as NoJobs.",
+  "fix": [
+    "extractor.js buildExtractionPrompt: removed urlSection + anchorSection injection and the jobUrl schema field/rules. Kept company/companyDescription/jobTitle/location/min+maxSalary/salaryPeriod/employmentType/workArrangement/experienceLevel/confidence.",
+    "extractJobDetailsSimple: stopped building/passing urlSection/anchorSection (removed dead URL filter + dedup block + ANCHOR_NOISE_DOMAINS/ANCHOR_TRACKING_SUBDOMAIN_RE constants). Job URL and URL Status sheet columns kept but always set to '' (removed feature, not a fallback). extractTextFromHtml still returns extractedUrls/anchorPairs for signature stability.",
+    "Hardened parser: new salvageTruncatedJobArray() recovers complete records from a truncated array (substring first [ -> last } + ]) on both the null-regex-match and JSON.parse-throw paths; returns [] when unsalvageable, then extractJobsFallback. Documented as the approved recovery for MAX_TOKENS truncation.",
+    "api-service.js callGemini: logs Gemini finishReason and emits a distinct 'output was truncated' warning on MAX_TOKENS. maxOutputTokens UNCHANGED (8192). 429/503 backoff UNCHANGED."
   ],
-  "ports_created": ["GeminiAdapter", "PropertiesAdapter", "UtilitiesAdapter"],
-  "ports_extended": [
-    "GmailAdapter.getInboxThreads",
-    "GmailAdapter.getAllLabels (relocated from legacy GmailLabelService — cache + system labels + return-[] on error)",
-    "SpreadsheetAdapter.getBandingTheme"
+  "verification": "Oscar PASS. Ernie PASS (no Critical/Warning). Telly PASS. Zoe PASS via live mutation testing (salvage return-[] -> RED; prompt re-inject -> RED; MAX_TOKENS warning false-pass found and FIXED in-review so warning branch is now isolated). Sources restored byte-identical after mutations.",
+  "files_changed": [
+    "src/features/job-finder/extractor.js",
+    "src/core/api-service.js",
+    "tests-local/job-finder-extractor.test.js",
+    "tests-local/api-service.test.js",
+    ".planning/kermit/session.json"
   ],
-  "features_migrated": [
-    "job-finder/main.js",
-    "job-finder/extractor.js",
-    "job-finder/sheets-handler.js",
-    "email-sorter/sorter.js",
-    "email-sorter/categorizer-cache.js",
-    "email-retention-manager.js",
-    "enhanced-label-manager.js"
-  ],
-  "enforcement": {
-    "invariant_doc": "src/CLAUDE.md (hexagonal invariant, approved port list, seam pattern, approved fallback)",
-    "ci_guard": "tests-local/architecture-boundary.test.js (greps src/features/** for forbidden SDK tokens; verified it catches planted violations)",
-    "cookie_strict": "cookie SKILL.md updated out-of-repo: Step 5b HARD BLOCK rule + BLOCK criteria + Proof of Work entry"
-  },
-  "dod_verification": "grep of src/features/** for GmailApp|SpreadsheetApp|DriveApp|UrlFetchApp|PropertiesService|CacheService|Utilities.|callGeminiApi|GmailService = CLEAN (only UnifiedCacheService app-service + comments remain). Full jest suite green. clasp push: up to date.",
-  "summary": "Routed ALL feature code through src/core/services ports. Created GeminiAdapter/PropertiesAdapter/UtilitiesAdapter and consolidated Gmail access onto GmailAdapter (legacy GmailService no longer referenced in features). Behavior identical (structural refactor, no logic changes). Enforcement added: invariant doc, CI guard test with teeth, and strict Cookie rubric. Deployed.",
-  "prior_leg": "fix-nojobs-false-negatives (a8854cc, PASS, deployed)",
+  "prior_leg": "fix-processjobemails-timeout (1e305cd, PASS, deployed)",
   "backlog_items": [
-    "OPTION: convert email HTML -> Markdown before Gemini (carried over from prior leg).",
-    "OPTIONAL: GmailAdapter exposes a few methods (sendEmail/getUserEmailAddress/batchProcessThreads) that reach MailApp/Session/Utilities internally — these live in the core/services boundary so they are allowed, but could be made injectable for fuller DI if desired.",
-    "OPTIONAL: legacy src/core/gmail-service.js (GmailLabelService) is still used by non-feature core callers; consider deprecating fully once those migrate."
+    "Full removal of the URL pathway: drop extractedUrls/anchorPairs params + extractAnchorPairs + Job URL/URL Status SHEET_COLUMNS entirely (kept this leg for sheet-schema compatibility).",
+    "Carried over: OPTION convert email HTML -> Markdown before Gemini.",
+    "Carried over: deprecate legacy src/core/gmail-service.js once non-feature callers migrate."
   ],
-  "issues": [
-    "Environment had no Agent/Task sub-agent dispatch tool available, so the orchestrator implemented the waves directly while still gating each wave through Oscar reviewers (ernie/cookie) per the rubric. Oscar artifacts were produced inline rather than as separate sub-agent threads."
-  ]
+  "summary": "Fixed NoJobs misfiling caused by Gemini output truncation: dropped URL/anchor/jobUrl output bloat from the extraction prompt and added an approved salvage parser for MAX_TOKENS-truncated arrays, plus finishReason logging. Behavior otherwise identical; maxOutputTokens untouched."
 }

@@ -1,32 +1,34 @@
-# Zoe Review — 2026-06-06 (fix-processjobemails-timeout)
+# Zoe Review — 2026-06-06 (fix-nojobs-output-truncation)
 
 ## Summary
-Both behavior changes (deadline guard + in-process sleep caps) are guarded by mutation-verified tests. I ran two live mutations and confirmed each produces RED, then restored the source. No false passes on the fixed behavior. One WARN on a latent vacuous-truth in the sleep assertion, but it is backstopped by the throw + no-fetch assertions in the same test, which the mutation proved are the real guards. Verdict: PASS (WARN noted, not blocking).
+I ran live mutation tests against every load-bearing assertion. The salvage and
+prompt-injection tests are real guards (mutations produced RED). I found one
+false-pass (MAX_TOKENS warning-branch test matched the always-on finishReason log
+rather than the warning), flagged it, and it was fixed in this same review:
+the assertion now targets the distinct `/output was truncated/i` text and a
+re-mutation of the warning branch produces RED. Verdict: PASS (0 open findings).
 
 ## Telly Audit
 
 ### BLOCK Findings
-| # | Finding | Evidence | File | Remediation |
-|---|---------|----------|------|-------------|
-| — | None | — | — | — |
+None.
 
 ### WARN Findings
-| # | Finding | Evidence | File | Remediation |
-|---|---------|----------|------|-------------|
-| 1 | The pre-wait test's sleep assertion `slept.every(ms => ms <= MAX_INPROCESS_WAIT_MS)` is vacuously true if `Utilities.sleep` is never called (empty array → `.every()` === true). On its own it would NOT catch a regression that skips sleeping entirely. | tests-local/api-service.test.js, "does NOT sleep a long rate-limit pre-wait" | tests-local/api-service.test.js | Not blocking: the same test ALSO asserts `toThrow('RATE_LIMIT_REACHED')` and `UrlFetchApp.fetch` NOT called — the discriminating guards. Mutation (always-sleep) confirmed the test fails. Optional hardening: add `expect(slept).not.toContainEqual(expect.any(Number) > cap)` style or assert the specific 60100 value is absent. |
+| # | Finding | Evidence | File | Status |
+|---|---------|----------|------|--------|
+| 1 | (RESOLVED) The MAX_TOKENS test originally asserted `/MAX_TOKENS|truncat/i`, which the always-on `Gemini finishReason: MAX_TOKENS` log already satisfied — mutating the warning branch off left it GREEN. | Now asserts `/output was truncated/i` (distinct warning text). Re-mutation of the warning branch → RED, confirming isolation. | api-service.test.js:~404 | FIXED |
 
-### PASS Verifications
-| # | Check | Status |
-|---|-------|--------|
-| 1 | Deadline guard test non-vacuous | PASS — MUTATION: deleted the `if (Date.now()-startTime >= EXECUTION_BUDGET_MS){...break}` block → "stops the loop and defers remaining threads" went RED (t2/t3 getMessages were called, deferredCount undefined). Source restored, re-green. |
-| 2 | Pre-wait cap test non-vacuous | PASS — MUTATION: replaced the cap-bail with unconditional `Utilities.sleep` → "does NOT sleep a long rate-limit pre-wait" went RED (caught via throw + no-fetch). Source restored, re-green. |
-| 3 | Clock-mock call accounting correct | PASS — startTime consumes tick[0]=0; iter0 guard-check tick[1]=0 (under → process t1); iter1 guard-check tick[2]=budget+1 (over → break). t1 processed, t2/t3 deferred. Verified by asserting per-thread getMessages call state. |
-| 4 | checkRateLimit produces waitTime > cap in pre-wait test | PASS — MAX_CALLS_PER_MINUTE timestamps at `now` → length===MAX → rateLimited, waitTime = 60000-(now-oldest) ≈ 60000 > 20000 cap. |
-| 5 | "budget never exceeded" test is the lower-bound complement (proves guard does not false-trip), correctly stayed GREEN under the delete-guard mutation | PASS — expected behavior; the discriminating test is the budget-exceeded one. |
-| 6 | Backoff-cap test | PASS — spies every sleep value; with current config backoffs (1000/2000/4000) all ≤ cap, so it guards the no-regression case. |
-| 7 | Full suite 577/0/9; source byte-identical after each mutation/restore (git diff stat unchanged) | PASS |
-| 8 | Removed `\|\| 0` (Ernie WARN-1) did not weaken any test — re-ran green | PASS |
+### PASS Verifications (mutation-confirmed)
+| # | Check | Evidence |
+|---|-------|----------|
+| 1 | Salvage test exercises the real no-`]` path | Built string has zero `]`; `/\[[\s\S]*\]/.test()` returns false → salvage branch hit |
+| 2 | Salvage test is not vacuous | Mutated `salvageTruncatedJobArray` to `return []` → "salvages the complete jobs" went RED |
+| 3 | "still returns []" exercises salvage failure, not the empty-input guard | emailText="Big digest" (truthy); input `[{"company":"Acme","jobTit` has `[`@0 but no `}` → salvage's `lastBrace===-1` guard returns [] via the salvage path |
+| 4 | "does not affect well-formed array" proves passthrough | Valid array never reaches salvage (happy path), asserts count+value |
+| 5 | Prompt "does NOT inject" tests are real guards | Mutated buildExtractionPrompt to re-inject params + tokens → all 3 injection tests + jobUrl test went RED |
+| 6 | finishReason logging verified | "logs finishReason from the candidate" asserts Logger called with "finishReason" |
+| 7 | Source restored byte-identical after mutations | `diff -q` clean on both files; suite 112 passed/1 skipped |
 
-## Status: PASS (1 WARN, backstopped by sibling assertions + mutation evidence)
+## Status: PASS
 
 _Signed: Zoe — 2026-06-06T00:00:00Z_

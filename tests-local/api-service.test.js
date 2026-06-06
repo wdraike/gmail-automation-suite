@@ -379,6 +379,46 @@ describe('Gemini API Service - Complete Test Suite', () => {
             expect(JSON.stringify(payload)).toContain(testPrompt);
           }
       });
+
+      // fix-nojobs-output-truncation: surface Gemini finishReason so output
+      // truncation (MAX_TOKENS) is visible in execution logs.
+      it('logs finishReason from the candidate', () => {
+        setApiKey('test-api-key');
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 200),
+          getContentText: jest.fn(() => JSON.stringify({
+            candidates: [{
+              finishReason: 'STOP',
+              content: { parts: [{ text: '[]' }] }
+            }]
+          }))
+        }));
+        const mockLogger = jest.spyOn(Logger, 'log');
+        callGemini('Test prompt');
+        expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('finishReason'));
+        mockLogger.mockRestore();
+      });
+
+      it('logs a MAX_TOKENS truncation warning and still returns the text', () => {
+        setApiKey('test-api-key');
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 200),
+          getContentText: jest.fn(() => JSON.stringify({
+            candidates: [{
+              finishReason: 'MAX_TOKENS',
+              content: { parts: [{ text: '[{"company":"Acme"' }] }
+            }]
+          }))
+        }));
+        const mockLogger = jest.spyOn(Logger, 'log');
+        // Must not throw on a MAX_TOKENS candidate; returns whatever text it got.
+        const result = callGemini('Test prompt');
+        expect(result).toBe('[{"company":"Acme"');
+        // Assert the DISTINCT warning text (not the generic finishReason line,
+        // which always contains "MAX_TOKENS") so this isolates the warning branch.
+        expect(mockLogger).toHaveBeenCalledWith(expect.stringMatching(/output was truncated/i));
+        mockLogger.mockRestore();
+      });
     });
 
     describe('callGemini - Error Cases', () => {

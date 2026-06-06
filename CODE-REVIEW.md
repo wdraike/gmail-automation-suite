@@ -1,7 +1,11 @@
-# Code Review — fix-processjobemails-timeout — 2026-06-06
+# Code Review — fix-nojobs-output-truncation (extractor + api-service) — 2026-06-06
 
 ## Summary
-Ship-ready with one minor cleanup. The deadline guard and sleep caps are correct: the loop always processes at least one email (no starvation), `deferredCount` math is right, and the RATE_LIMIT_REACHED throw inside the retry catch propagates to the outer catch that sets the cross-run backoff — matching the existing rate-limit path. One Warning: a defensive `|| 0` fallback that can never fire and violates the project no-fallback rule.
+Ship-ready. The leg cleanly removes the URL/anchor output bloat that overran
+Gemini's 8192-token output cap and adds an approved, JSON.parse-validated salvage
+path for truncated arrays. No dead references, no hexagonal-boundary violations;
+salvage degrades safely to `[]`/fallback on unparseable input. No Critical or
+Warning findings.
 
 ## Critical Findings (must fix before merge)
 | # | Finding | File:Line | Remediation |
@@ -11,24 +15,25 @@ Ship-ready with one minor cleanup. The deadline guard and sleep caps are correct
 ## Warning Findings (fix this sprint)
 | # | Finding | File:Line | Remediation |
 |---|---------|-----------|-------------|
-| 1 | Unapproved/dead fallback `batchResult.deferredCount \|\| 0` — `processEmailBatch` always initializes `results.deferredCount = 0` and both return paths return that same object, so the LHS is provably never undefined/null. The `\|\| 0` is defensive code that can never fire and violates the global no-fallback rule (papering over a value that "might" be missing). | src/features/job-finder/main.js:97 | Replace with `deferredCount: batchResult.deferredCount,` |
+| — | None | — | — |
 
 ## Info / Suggestions
 | # | Finding | File:Line | Suggestion |
 |---|---------|-----------|------------|
-| 1 | Pre-wait bail threshold raised 5000→20000ms — intentional and within the 290s budget margin; small waits ≤20s now sleep in-process, larger waits bail to next run. Correct per leg intent. | src/core/api-service.js:191 | None — documented. |
-| 2 | Backoff cap branch (backoffTime > 20000) is unreachable with current config (backoffs 1000/2000/4000) — defensive guard against future RETRY_DELAY_MS/MAX_RETRIES changes. Existing "retry up to MAX_RETRIES on 500" behavior unchanged (confirmed by test). | src/core/api-service.js:234 | None — acceptable defensive cap. |
+| 1 | Salvage comment asserts "flat objects with no nested braces"; a `}` inside a free-text `companyDescription` value could in theory shift `lastIndexOf('}')`. In practice `JSON.parse` validates the candidate and returns `[]` on imbalance, so no bad data is ever emitted — only a rare missed salvage that degrades to fallback. | extractor.js:~330 | Acceptable as-is; if precision ever matters, do a brace-depth scan instead of `lastIndexOf`. Not blocking. |
+| 2 | `extractedUrls`/`anchorPairs` params now unused by the prompt but retained for caller-signature stability (documented in JSDoc). | extractor.js:68,134 | Backlog: full removal of the URL pathway + Job URL/URL Status sheet columns (explicitly out-of-scope for this leg). |
 
 ## Checklist Status
-- [x] Complexity — PASS (small localized changes, no nesting growth)
-- [x] Error handling — PASS (throw propagates to existing outer catch; no swallowed errors)
-- [x] Test coverage — PASS (4 new tests: 2 deadline guard, 2 sleep caps; RED→GREEN)
-- [x] Observability — PASS (both new branches Logger.log structured context)
-- [x] Scalability — PASS (deadline guard is the scalability fix itself)
-- [x] API design — N/A
-- [ ] No unapproved fallbacks — WARN (1 dead `|| 0` fallback)
-- [x] Dead code — PASS (no commented-out blocks, no new TODOs)
+- [x] Complexity — PASS (net -118 lines; salvage fn small and single-purpose)
+- [x] Error handling — PASS (salvage wrapped in try/catch, logs failure, returns []; 429 path untouched)
+- [x] Test coverage — PASS (salvage happy/empty/non-truncated + finishReason + MAX_TOKENS tests added)
+- [x] Observability — PASS (finishReason + MAX_TOKENS warning + salvage-count logging added)
+- [x] Scalability — PASS (removes per-call URL filter/dedup; no new loops)
+- [x] API design — N/A (no HTTP routes)
+- [x] No unapproved fallbacks — PASS (salvage is user-approved + commented; Job URL="" is a removed feature, not a fallback)
+- [x] Dead code — PASS (removed constants + URL-filter block; zero orphan refs)
+- [x] Hexagonal boundary — PASS (no forbidden tokens in extractor.js)
 
-## Status: ISSUES
+## Status: PASS
 
 _Signed: Ernie — 2026-06-06T00:00:00Z_

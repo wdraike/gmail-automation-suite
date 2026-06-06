@@ -27,14 +27,6 @@ function _exProps() {
   return _exServiceFactory().getPropertiesAdapter();
 }
 
-// Module-level constants for anchor/URL noise filtering — hoisted to avoid
-// recreating these on every call to extractJobDetailsSimple.
-const ANCHOR_NOISE_DOMAINS = ['linkedin.com', 'twitter.com', 'facebook.com', 'instagram.com',
-  'unsubscribe'];
-// Matches tracking/redirect subdomains: click., track., email., go., r.
-// Hostname-anchored so 'clickup.com' or 'career.com' are not falsely caught.
-const ANCHOR_TRACKING_SUBDOMAIN_RE = /^(click|track|email|go|r)\./i;
-
 /**
  * Extract anchor text/URL pairs from raw HTML before stripping tags.
  * Returns an array of { text, url } objects for job-title-to-URL matching.
@@ -60,12 +52,20 @@ function extractAnchorPairs(html) {
  * Extracted from extractJobDetailsSimple so the prompt text is unit-testable
  * without exercising the live Gemini path.
  *
+ * fix-nojobs-output-truncation: URL/anchor injection and the `jobUrl` schema
+ * field were REMOVED. Echoing a long tracking-redirect URL into every job's
+ * `jobUrl` bloated the Gemini OUTPUT past maxOutputTokens=8192 on large digests,
+ * truncating the JSON array (no closing `]`) and causing NoJobs misfiling. The
+ * user does not use these redirect URLs, so the entire URL pathway is dropped.
+ * The legacy `urlSection`/`anchorSection` parameters are accepted but ignored
+ * for signature stability with existing callers.
+ *
  * @param {string} textToProcess - Cleaned/truncated email body
- * @param {string} urlSection - Pre-formatted "Job Application URLs" block
- * @param {string} anchorSection - Pre-formatted link-text→URL mappings block
+ * @param {string} [_urlSection] - Ignored (URL injection removed).
+ * @param {string} [_anchorSection] - Ignored (anchor injection removed).
  * @returns {string} The full prompt string
  */
-function buildExtractionPrompt(textToProcess, urlSection, anchorSection) {
+function buildExtractionPrompt(textToProcess, _urlSection, _anchorSection) {
   return `You are a job listing extraction assistant. Extract ALL job listings from the email below.
 
 RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
@@ -78,7 +78,6 @@ RESPONSE FORMAT - Return ONLY a valid JSON array with NO additional text:
     "minSalary": "",
     "maxSalary": "",
     "salaryPeriod": "",
-    "jobUrl": "URL from the numbered list or link mappings below that matches this job title, otherwise empty string",
     "employmentType": "Full-time|Part-time|Contract|Internship|Unknown",
     "workArrangement": "Remote|Hybrid|Onsite|Unknown",
     "experienceLevel": "Entry|Mid|Senior|Lead/Principal|Unknown",
@@ -97,12 +96,8 @@ CRITICAL RULES:
 1. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
 2. If no jobs found, return: []
 3. Extract ALL jobs from the email
-4. For jobUrl, match the job title to the link text in the mappings section below, then use the corresponding URL
-5. Leave salary fields as empty strings if not mentioned
-6. confidence: number 0.0-1.0 — how confident you are this row is a real job listing (not an ad or filler)
-
-${urlSection}
-${anchorSection}
+4. Leave salary fields as empty strings if not mentioned
+5. confidence: number 0.0-1.0 — how confident you are this row is a real job listing (not an ad or filler)
 
 EMAIL CONTENT:
 ${textToProcess}
@@ -144,120 +139,15 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
       ? cleanedText.substring(0, maxLength) + "... [truncated]"
       : cleanedText;
 
-    // Comprehensive URL filtering to remove tracking, analytics, social media, and images
-    const relevantUrls = extractedUrls.filter(url => {
-      const lower = url.toLowerCase();
+    // fix-nojobs-output-truncation: URL/anchor extraction is no longer injected
+    // into the prompt. The tracking-redirect URLs the user does not use were
+    // echoed into every job's jobUrl, bloating Gemini OUTPUT past
+    // maxOutputTokens=8192 and truncating the JSON array. The extractedUrls and
+    // anchorPairs parameters are kept on the signature for caller stability but
+    // are intentionally NOT passed into the prompt.
 
-      // Exclude email tracking and analytics
-      // Use hostname-anchored regex for subdomain checks to avoid false positives
-      // (e.g. 'click.' substring would wrongly filter clickup.com)
-      let hostname = '';
-      try { hostname = new URL(url).hostname.toLowerCase(); } catch (e) { hostname = ''; }
-      if (lower.includes('sendgrid.net') ||
-          ANCHOR_TRACKING_SUBDOMAIN_RE.test(hostname) ||
-          lower.includes('tracking') ||
-          lower.includes('analytics') ||
-          lower.includes('utm_') ||
-          lower.includes('/wf/open') ||
-          lower.includes('/wf/click') ||
-          lower.includes('_opens') ||
-          lower.includes('_clicks') ||
-          lower.includes('mailings') ||
-          lower.includes('email-track')) {
-        return false;
-      }
-
-      // Exclude career platform tracking/assets.
-      // Use hostname-anchored checks for 'assets.' and 'phenom.' to avoid
-      // false positives on paths like '/assets/' or legitimate domains
-      // that happen to contain these strings elsewhere.
-      if (lower.includes('phenompro.com') ||
-          lower.includes('phenompeople.com') ||
-          /^phenom\./i.test(hostname) ||
-          lower.includes('careerconnect') ||
-          /^assets\./i.test(hostname)) {
-        return false;
-      }
-
-      // Exclude images and media files
-      if (lower.match(/\.(png|jpg|jpeg|gif|svg|webp|ico|bmp)($|[\?#])/)) {
-        return false;
-      }
-
-      // Exclude social media
-      if (lower.includes('linkedin.com') ||
-          lower.includes('facebook.com') ||
-          lower.includes('twitter.com') ||
-          lower.includes('x.com') ||
-          lower.includes('instagram.com') ||
-          lower.includes('tiktok.com') ||
-          lower.includes('youtube.com')) {
-        return false;
-      }
-
-      // Exclude unsubscribe and preference links
-      if (lower.includes('unsubscribe') ||
-          lower.includes('optout') ||
-          lower.includes('preferences') ||
-          lower.includes('manage-email')) {
-        return false;
-      }
-
-      // Exclude very long URLs (usually tracking)
-      if (url.length > 500) {
-        return false;
-      }
-
-      return true;
-    });
-
-    // Deduplicate and clean URLs
-    const uniqueUrls = [...new Set(relevantUrls)].map(url => {
-      // Remove tracking parameters
-      try {
-        const urlObj = new URL(url);
-        // Remove common tracking params
-        const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
-                                'ref', 'source', 'mc_cid', 'mc_eid', '_hsenc', '_hsmi'];
-        trackingParams.forEach(param => urlObj.searchParams.delete(param));
-        return urlObj.toString();
-      } catch (e) {
-        return url; // Return original if URL parsing fails
-      }
-    });
-
-    Logger.log(`Filtered URLs: ${extractedUrls.length} -> ${uniqueUrls.length} relevant URLs`);
-
-    // Format URLs for better readability in prompt
-    let urlSection = '';
-    if (uniqueUrls.length > 0) {
-      urlSection = 'Job Application URLs:\n' + uniqueUrls.map((url, index) => `${index + 1}. ${url}`).join('\n');
-    } else {
-      urlSection = 'No direct job application URLs found in this email.';
-    }
-
-    // Include anchor text/URL pairs to help match job titles to their apply links
-    let anchorSection = '';
-    if (anchorPairs && anchorPairs.length > 0) {
-      const filteredPairs = anchorPairs
-        .filter(p => {
-          const href = (p.url || '').toLowerCase();
-          if (ANCHOR_NOISE_DOMAINS.some(d => href.includes(d))) return false;
-          try {
-            const anchorHost = new URL(p.url).hostname.toLowerCase();
-            if (ANCHOR_TRACKING_SUBDOMAIN_RE.test(anchorHost)) return false;
-          } catch (e) { /* malformed URL — keep it */ }
-          return true;
-        })
-        .slice(0, 30);
-      if (filteredPairs.length > 0) {
-        anchorSection = '\nLink Text → URL Mappings (use these to match job titles to apply links):\n' +
-          filteredPairs.map(p => `"${p.text}" → ${p.url}`).join('\n');
-      }
-    }
-
-    // Prepare the prompt for Gemini
-    const prompt = buildExtractionPrompt(textToProcess, urlSection, anchorSection);
+    // Prepare the prompt for Gemini (no URL/anchor injection).
+    const prompt = buildExtractionPrompt(textToProcess);
 
     try {
       // Call Gemini API
@@ -282,16 +172,32 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
           jobs = JSON.parse(jsonMatch[0]);
           Logger.log(`Parsed ${jobs.length} jobs from JSON`);
         } else {
-          Logger.log("No JSON array found in Gemini response");
-          Logger.log(`Full response: ${geminiResponse.response}`);
-          return [];
+          // No closing `]` — the response was almost certainly truncated by
+          // Gemini hitting maxOutputTokens (finishReason=MAX_TOKENS). Try to
+          // salvage the complete records before giving up (see salvage note).
+          Logger.log("No JSON array found in Gemini response — attempting truncated-array salvage");
+          jobs = salvageTruncatedJobArray(geminiResponse.response);
+          if (jobs.length === 0) {
+            Logger.log("Salvage found no complete jobs");
+            Logger.log(`Full response: ${geminiResponse.response}`);
+            return [];
+          }
         }
       } catch (parseError) {
-        Logger.log(`Error parsing Gemini response: ${parseError}`);
-        Logger.log(`Response that failed to parse: ${geminiResponse.response}`);
-        // Try fallback extraction
-        jobs = extractJobsFallback(geminiResponse.response);
-        Logger.log(`Fallback extraction found ${jobs.length} jobs`);
+        // JSON.parse can throw when the matched array is itself truncated
+        // (the greedy /\[[\s\S]*\]/ may capture a stray `]` inside a string but
+        // leave the array structurally invalid). Attempt salvage before the
+        // pattern-based fallback.
+        Logger.log(`Error parsing Gemini response: ${parseError} — attempting truncated-array salvage`);
+        jobs = salvageTruncatedJobArray(geminiResponse.response);
+        if (jobs.length > 0) {
+          Logger.log(`Salvage recovered ${jobs.length} jobs from truncated response`);
+        } else {
+          Logger.log(`Response that failed to parse: ${geminiResponse.response}`);
+          // Try fallback extraction
+          jobs = extractJobsFallback(geminiResponse.response);
+          Logger.log(`Fallback extraction found ${jobs.length} jobs`);
+        }
       }
 
       // Validate and clean the jobs
@@ -305,8 +211,11 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
           "Minimum Salary": cleanSalaryValue(job.minSalary || job["Minimum Salary"]),
           "Maximum Salary": cleanSalaryValue(job.maxSalary || job["Maximum Salary"]),
           "Salary Period": job.salaryPeriod || job["Salary Period"] || "",
-          "Job URL": job.jobUrl || job["Job URL"] || "",
-          "URL Status": job.jobUrl ? "Found" : "",
+          // fix-nojobs-output-truncation: the jobUrl feature is removed (tracking
+          // redirects the user does not use). Columns kept for sheet-schema
+          // compatibility but always empty. This is a removed feature, not a fallback.
+          "Job URL": "",
+          "URL Status": "",
           "Employment Type": job.employmentType || job["Employment Type"] || "Unknown",
           "Work Arrangement": job.workArrangement || job["Work Arrangement"] || "Unknown",
           "Experience Level": job.experienceLevel || job["Experience Level"] || "Unknown",
@@ -392,6 +301,47 @@ function extractJobsFallback(response) {
     
   } catch (error) {
     Logger.log(`Error in fallback extraction: ${error}`);
+    return [];
+  }
+}
+
+/**
+ * Salvage complete job records from a Gemini JSON array that was truncated
+ * mid-record (no closing `]`).
+ *
+ * APPROVED RECOVERY (fix-nojobs-output-truncation): when Gemini hits its
+ * output-token limit (finishReason=MAX_TOKENS) the JSON array is cut off in the
+ * middle of the last object with no closing bracket. The primary
+ * `/\[[\s\S]*\]/` regex then returns null and the whole digest was misfiled as
+ * NoJobs, silently dropping 15-25 real listings. Recovering the already-complete
+ * records (everything up to the last balanced `}`) is the user-approved
+ * behavior for this leg — it is NOT a value-substituting fallback; it parses the
+ * jobs Gemini did emit and only the dangling partial record is discarded.
+ *
+ * Strategy: take the substring from the first `[`, cut back to the last complete
+ * top-level `}`, append `]`, and JSON.parse. Returns [] if nothing parses.
+ *
+ * @param {string} response - Raw (possibly truncated) Gemini response text
+ * @returns {Array} Array of complete job objects, or [] if unsalvageable
+ */
+function salvageTruncatedJobArray(response) {
+  try {
+    if (!response || typeof response !== 'string') return [];
+
+    const start = response.indexOf('[');
+    if (start === -1) return [];
+
+    // Cut back to the last complete top-level object closer. The records Gemini
+    // emits are flat objects with no nested braces, so the last `}` before the
+    // truncation point closes the last complete record.
+    const lastBrace = response.lastIndexOf('}');
+    if (lastBrace === -1 || lastBrace < start) return [];
+
+    const candidate = response.substring(start, lastBrace + 1) + ']';
+    const parsed = JSON.parse(candidate);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    Logger.log(`Truncated-array salvage failed: ${e}`);
     return [];
   }
 }
@@ -624,6 +574,7 @@ if (typeof module !== 'undefined' && module.exports) {
     buildExtractionPrompt,
     extractJobDetailsSimple,
     extractJobsFallback,
+    salvageTruncatedJobArray,
     extractTextFromHtml,
     isValidJobListing,
     cleanSalaryValue,

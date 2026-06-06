@@ -465,6 +465,22 @@ function callGemini(prompt) {
 
   const jsonResponse = JSON.parse(responseText);
 
+  // Surface the candidate finishReason so output truncation is visible in logs.
+  // fix-nojobs-output-truncation: a MAX_TOKENS finishReason means Gemini ran out
+  // of output budget and the JSON array is cut off mid-record (no closing `]`).
+  // The job-finder parser salvages the complete records, but logging this here
+  // makes future truncation occurrences diagnosable from the execution logs.
+  if (jsonResponse.candidates && jsonResponse.candidates.length > 0) {
+    const finishReason = jsonResponse.candidates[0].finishReason;
+    Logger.log(`Gemini finishReason: ${finishReason}`);
+    if (finishReason === 'MAX_TOKENS') {
+      Logger.log(
+        'WARNING: Gemini output was truncated (finishReason=MAX_TOKENS). ' +
+        'The response may be cut off mid-record; downstream salvage will apply.'
+      );
+    }
+  }
+
   // Extract text from JSON response
   if (
     jsonResponse.candidates &&

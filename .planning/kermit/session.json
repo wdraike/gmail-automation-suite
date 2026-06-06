@@ -1,15 +1,14 @@
 {
-  "leg_id": "fix-processjobemails-timeout",
-  "intent": "processJobEmailsMain exceeds the Apps Script 6-min execution limit (time-based trigger failing repeatedly). Add wall-clock deadline guard to the per-email loop (stop launching new emails near ~290s, defer remainder to next hourly run) and cap in-process rate-limit/backoff sleeps so they cannot blow the budget. Keep MAX_EMAILS_PER_RUN=10 (run self-limits via deadline).",
-  "scope": "src/features/job-finder/main.js (per-email loop deadline guard), src/core/api-service.js (cap in-process rate-limit pre-wait + backoff sleeps), src/core/config.js (deadline constant if needed), tests-local/",
-  "status": "in_progress",
+  "leg_id": "fix-nojobs-output-truncation",
+  "intent": "NoJobs flood root cause = Gemini OUTPUT truncation at maxOutputTokens=8192. Large digests echo a long tracking URL into every job's jobUrl, blowing past 8192 -> finishReason=MAX_TOKENS -> truncated JSON array w/ no closing ] -> extractor regex returns null -> [] -> NoJobs. FIX: drop URL/anchor injection + jobUrl entirely (user does not rely on these tracking-redirect URLs; wants title/company/location/details/salary), harden parser to salvage truncated arrays, log finishReason. Do NOT raise maxOutputTokens (input already condensed to pure text 1.8k-7k chars; output bloat was the only problem).",
+  "scope": "src/features/job-finder/extractor.js (buildExtractionPrompt: remove URL+anchor sections + jobUrl from schema; field mapping; harden truncated-array parser), src/core/api-service.js (log finishReason / detect MAX_TOKENS), tests-local/",
+  "status": "complete",
+  "verdict": "PASS",
   "opened": "2026-06-06T00:00:00Z",
   "last_update": "2026-06-06T00:00:00Z",
-  "prior_leg": "hexagonal-ports-refactor (da94986/bff57a1, PASS, deployed)",
-  "decision": "deadline_guard_plus_cap_sleeps_keep_MAX_10",
-  "evidence": {
-    "limit": "Apps Script consumer time-based trigger hard cap = 6 min. Error: 'Exceeded maximum execution time'.",
-    "cause": "Prior leg drop-precheck-bump-throughput set MAX_EMAILS_PER_RUN=10 and removed the cheap precheck -> 10 full Gemini extractions/run. In-process sleeps compound: api-service.js:196 Utilities.sleep(rateLimitStatus.waitTime+100) waits out rate-limit window inside execution; exponential backoff Utilities.sleep(backoffTime) on retries; main.js:467 _jfUtils().sleep(500) between emails. No wall-clock deadline -> run exceeds 6 min.",
-    "boundary": "src/CLAUDE.md hexagonal invariant in force: main.js (feature) must use ports for sleep; api-service.js is core (Utilities.sleep allowed there). Date.now() for the deadline is allowed (not a platform SDK)."
-  }
+  "prior_leg": "fix-processjobemails-timeout (1e305cd, PASS, deployed)",
+  "decision": "drop_urls_entirely + harden_parser + no_token_raise",
+  "evidence_replay": "5 NoJobs emails replayed vs gemini-2.5-flash-lite: 3 failed with finishReason=MAX_TOKENS / candidateTokens pinned 8192 / truncated array no ]; 2 succeeded (smaller output). cleanedTextLen 1.8k-7k (input not the issue). Confidence gate / double-Unknown / HTML-strip / 30000 input cap / 429 all ruled out.",
+  "fields_wanted": ["Job Title", "Company", "Location", "details/description", "Salary", "Employment Type", "Work Arrangement", "Experience Level", "confidence"],
+  "fields_dropped": ["jobUrl", "URL injection", "anchor-pair injection"]
 }
