@@ -113,6 +113,39 @@ describe('Service Adapters - Integration Tests', () => {
       expect(adapter.drive).toBe(global.DriveApp);
     });
 
+    it('should create GeminiAdapter instance through factory', () => {
+      const fn = jest.fn();
+      const factory = new ServiceFactory({ callGeminiApi: fn });
+      const adapter = factory.getGeminiAdapter();
+
+      expect(adapter).toBeDefined();
+      expect(adapter.callGeminiApi).toBe(fn);
+    });
+
+    it('should create PropertiesAdapter instance through factory', () => {
+      const factory = new ServiceFactory();
+      const adapter = factory.getPropertiesAdapter();
+
+      expect(adapter).toBeDefined();
+      expect(adapter.propertiesService).toBe(global.PropertiesService);
+    });
+
+    it('should create UtilitiesAdapter instance through factory', () => {
+      const factory = new ServiceFactory();
+      const adapter = factory.getUtilitiesAdapter();
+
+      expect(adapter).toBeDefined();
+      expect(adapter.utilities).toBe(global.Utilities);
+    });
+
+    it('should allow dependency injection of mock PropertiesService', () => {
+      const mockPropertiesService = { getScriptProperties: jest.fn() };
+      const factory = new ServiceFactory({ PropertiesService: mockPropertiesService });
+      const adapter = factory.getPropertiesAdapter();
+
+      expect(adapter.propertiesService).toBe(mockPropertiesService);
+    });
+
     it('should return the same adapter instance on multiple calls (singleton pattern)', () => {
       const factory = new ServiceFactory();
 
@@ -145,6 +178,19 @@ describe('Service Adapters - Integration Tests', () => {
       expect(adapter1).not.toBe(adapter2);
     });
 
+    it('should reset new port adapters when reset() is called', () => {
+      const factory = new ServiceFactory();
+
+      const props1 = factory.getPropertiesAdapter();
+      const util1 = factory.getUtilitiesAdapter();
+      factory.reset();
+      const props2 = factory.getPropertiesAdapter();
+      const util2 = factory.getUtilitiesAdapter();
+
+      expect(props1).not.toBe(props2);
+      expect(util1).not.toBe(util2);
+    });
+
     it('should allow creating multiple independent factory instances', () => {
       const factory1 = new ServiceFactory();
       const factory2 = new ServiceFactory();
@@ -167,6 +213,9 @@ describe('Service Adapters - Integration Tests', () => {
       expect(exports.GmailAdapter).toBeDefined();
       expect(exports.SpreadsheetAdapter).toBeDefined();
       expect(exports.DriveAdapter).toBeDefined();
+      expect(exports.GeminiAdapter).toBeDefined();
+      expect(exports.PropertiesAdapter).toBeDefined();
+      expect(exports.UtilitiesAdapter).toBeDefined();
     });
 
     it('should export the same classes from index.js as from individual files', () => {

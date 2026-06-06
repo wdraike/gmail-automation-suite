@@ -10,11 +10,15 @@
 // Load adapters for Node.js environment only
 // In GAS, these will be undefined (but the global classes will be available)
 let _GmailAdapter, _SpreadsheetAdapter, _DriveAdapter;
+let _GeminiAdapter, _PropertiesAdapter, _UtilitiesAdapter;
 
 if (typeof require !== 'undefined') {
   _GmailAdapter = require('./gmail-adapter.js').GmailAdapter;
   _SpreadsheetAdapter = require('./spreadsheet-adapter.js').SpreadsheetAdapter;
   _DriveAdapter = require('./drive-adapter.js').DriveAdapter;
+  _GeminiAdapter = require('./gemini-adapter.js').GeminiAdapter;
+  _PropertiesAdapter = require('./properties-adapter.js').PropertiesAdapter;
+  _UtilitiesAdapter = require('./utilities-adapter.js').UtilitiesAdapter;
 }
 
 /**
@@ -62,6 +66,45 @@ class ServiceFactory {
     return this._driveAdapter;
   }
 
+  getGeminiAdapter() {
+    if (!this._geminiAdapter) {
+      const AdapterClass = _GeminiAdapter || (typeof GeminiAdapter !== 'undefined' ? GeminiAdapter : null);
+      if (!AdapterClass) {
+        throw new Error('GeminiAdapter is not available');
+      }
+      this._geminiAdapter = new AdapterClass(
+        this.services.callGeminiApi || (typeof callGeminiApi !== 'undefined' ? callGeminiApi : undefined)
+      );
+    }
+    return this._geminiAdapter;
+  }
+
+  getPropertiesAdapter() {
+    if (!this._propertiesAdapter) {
+      const AdapterClass = _PropertiesAdapter || (typeof PropertiesAdapter !== 'undefined' ? PropertiesAdapter : null);
+      if (!AdapterClass) {
+        throw new Error('PropertiesAdapter is not available');
+      }
+      this._propertiesAdapter = new AdapterClass(
+        this.services.PropertiesService || PropertiesService
+      );
+    }
+    return this._propertiesAdapter;
+  }
+
+  getUtilitiesAdapter() {
+    if (!this._utilitiesAdapter) {
+      const AdapterClass = _UtilitiesAdapter || (typeof UtilitiesAdapter !== 'undefined' ? UtilitiesAdapter : null);
+      if (!AdapterClass) {
+        throw new Error('UtilitiesAdapter is not available');
+      }
+      this._utilitiesAdapter = new AdapterClass(
+        this.services.Utilities || Utilities
+      );
+    }
+    return this._utilitiesAdapter;
+  }
+
   /**
    * Reset all adapters (useful for testing)
    */
@@ -69,6 +112,9 @@ class ServiceFactory {
     this._gmailAdapter = null;
     this._spreadsheetAdapter = null;
     this._driveAdapter = null;
+    this._geminiAdapter = null;
+    this._propertiesAdapter = null;
+    this._utilitiesAdapter = null;
   }
 }
 
@@ -82,6 +128,9 @@ if (typeof module !== 'undefined' && module.exports) {
     serviceFactory,
     GmailAdapter: _GmailAdapter,
     SpreadsheetAdapter: _SpreadsheetAdapter,
-    DriveAdapter: _DriveAdapter
+    DriveAdapter: _DriveAdapter,
+    GeminiAdapter: _GeminiAdapter,
+    PropertiesAdapter: _PropertiesAdapter,
+    UtilitiesAdapter: _UtilitiesAdapter
   };
 }
