@@ -1,23 +1,44 @@
 {
-  "last_leg": "fix-failures-delete-csv-deadcode",
+  "last_leg": "hexagonal-ports-refactor",
   "verdict": "PASS",
-  "completed": "2026-06-05",
-  "test_suite": "537 passed / 0 failed / 9 skipped — all failures eliminated. 9 skips are intentional (8 real-Gemini-API describe.skip, 1 hard-to-mock it.skip).",
-  "csv_layer": "DELETED — csv-handler.js + workflow-test.js + 2 dev csv scaffolds + 2 csv test files removed (orphaned dead code, zero callers). Deployed via clasp push.",
-  "live_trigger_cleanup_needed": "Check Apps Script editor > Triggers and delete any installed importPendingJobCsvs trigger (handler no longer exists).",
-  "prior_leg": "execute-sheet-alignment-cleanup",
-  "prior_verdict": "WARN",
-  "prior_completed": "2026-06-05",
-  "summary": "Sheet export alignment hardened + formatting cleaned in 3 legs (commits eed614c, 777a4e4, 84e3728), all deployed via clasp push. Removed Careers URL columns (sheet now 18 cols, CSV 15) and dead dedup code; consolidated to one header-writing path; added auditAndRepairSheetHeaders() that reconciles a drifted live sheet to canonical SHEET_COLUMNS by header NAME (drops obsolete, inserts missing, throws loudly on unreconcilable data) + standalone auditJobSheetHeaders() entrypoint; salary now stored as Number; native row banding replaces row%2 striping; added normalizeLocation. 590 jest pass / 6 pre-existing failures.",
-  "next": "REQUIRED runtime step: open Apps Script editor, run auditJobSheetHeaders() ONCE to migrate the existing live sheet headers to the 18-col canonical set. Then run processJobEmailsMain and confirm via diagnostic Logger.log (resolved spreadsheet id/url/tab, committed bf19c62) that rows land under correct headers.",
-  "backlog_items": [
-    "salary numeric-0 || \"\" coercion (latent, salaries >0)",
-    "normalizeLocation trailing/double-comma edge cases untested",
-    "auditAndRepairSheetHeaders duplicate live-header name soft-drop (first-occurrence-wins)",
-    "JSDoc throw-condition doc drift in audit fn (sheets-handler.js:141)",
-    "initializeJobFinder setupSheetHeaders(sheet) call not asserted in test",
-    "WARN-20: regression test assetsolutions.com not filtered",
-    "WARN-21: test isJobListingEmail {success:true, response:undefined} returns false"
+  "completed": "2026-06-06",
+  "deployed": true,
+  "tests": "573 passed / 0 failed / 9 skipped (baseline 544; +29 net new)",
+  "commits": [
+    "9d31d25: feat(core): add Gemini/Properties/Utilities port adapters + register in serviceFactory",
+    "651e60f: refactor(job-finder): route all platform access through core/services ports",
+    "298fb28: refactor(features): route email-sorter/retention/label-manager through ports",
+    "bff57a1: feat(arch): enforce hexagonal ports boundary — invariant doc + CI guard"
   ],
-  "prior_leg_this_session": "fix-gemini-429-pipeline (bf19c62) — Gemini 429/503 silent email-loss fix, deployed."
+  "ports_created": ["GeminiAdapter", "PropertiesAdapter", "UtilitiesAdapter"],
+  "ports_extended": [
+    "GmailAdapter.getInboxThreads",
+    "GmailAdapter.getAllLabels (relocated from legacy GmailLabelService — cache + system labels + return-[] on error)",
+    "SpreadsheetAdapter.getBandingTheme"
+  ],
+  "features_migrated": [
+    "job-finder/main.js",
+    "job-finder/extractor.js",
+    "job-finder/sheets-handler.js",
+    "email-sorter/sorter.js",
+    "email-sorter/categorizer-cache.js",
+    "email-retention-manager.js",
+    "enhanced-label-manager.js"
+  ],
+  "enforcement": {
+    "invariant_doc": "src/CLAUDE.md (hexagonal invariant, approved port list, seam pattern, approved fallback)",
+    "ci_guard": "tests-local/architecture-boundary.test.js (greps src/features/** for forbidden SDK tokens; verified it catches planted violations)",
+    "cookie_strict": "cookie SKILL.md updated out-of-repo: Step 5b HARD BLOCK rule + BLOCK criteria + Proof of Work entry"
+  },
+  "dod_verification": "grep of src/features/** for GmailApp|SpreadsheetApp|DriveApp|UrlFetchApp|PropertiesService|CacheService|Utilities.|callGeminiApi|GmailService = CLEAN (only UnifiedCacheService app-service + comments remain). Full jest suite green. clasp push: up to date.",
+  "summary": "Routed ALL feature code through src/core/services ports. Created GeminiAdapter/PropertiesAdapter/UtilitiesAdapter and consolidated Gmail access onto GmailAdapter (legacy GmailService no longer referenced in features). Behavior identical (structural refactor, no logic changes). Enforcement added: invariant doc, CI guard test with teeth, and strict Cookie rubric. Deployed.",
+  "prior_leg": "fix-nojobs-false-negatives (a8854cc, PASS, deployed)",
+  "backlog_items": [
+    "OPTION: convert email HTML -> Markdown before Gemini (carried over from prior leg).",
+    "OPTIONAL: GmailAdapter exposes a few methods (sendEmail/getUserEmailAddress/batchProcessThreads) that reach MailApp/Session/Utilities internally — these live in the core/services boundary so they are allowed, but could be made injectable for fuller DI if desired.",
+    "OPTIONAL: legacy src/core/gmail-service.js (GmailLabelService) is still used by non-feature core callers; consider deprecating fully once those migrate."
+  ],
+  "issues": [
+    "Environment had no Agent/Task sub-agent dispatch tool available, so the orchestrator implemented the waves directly while still gating each wave through Oscar reviewers (ernie/cookie) per the rubric. Oscar artifacts were produced inline rather than as separate sub-agent threads."
+  ]
 }

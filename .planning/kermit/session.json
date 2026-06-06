@@ -1,14 +1,27 @@
 {
-  "leg_id": "fix-nojobs-false-negatives",
-  "intent": "NoJobs-filed emails contain real job listings. Fix extraction + Gemini prompt to detect/extract digest-format aggregator emails (Glassdoor/Indeed/Google Alerts). Reprocess misfiled threads.",
-  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/main.js, tests-local/job-finder-extractor.test.js, tests-local/fixtures/job-finder-nojobs/",
-  "status": "in_progress",
+  "leg_id": "hexagonal-ports-refactor",
+  "intent": "Route ALL feature code through ports (adapters); no direct Google SDK / Gemini / Properties / Utilities access in src/features. Create missing ports (Gemini, Properties, Utilities). Consolidate Gmail access to GmailAdapter. Make Cookie reviewer strict — enforce hexagonal on all new development.",
+  "scope": "src/features/** (job-finder, email-sorter, email-retention-manager, enhanced-label-manager), src/core/services/** (new gemini/properties/utilities adapters + serviceFactory), cookie skill, architecture invariant doc/ADR, tests-local/**",
+  "status": "complete",
+  "verdict": "PASS",
   "opened": "2026-06-06T00:00:00Z",
-  "last_update": "2026-06-06T00:00:00Z",
-  "prior_leg": "drop-precheck-bump-throughput (fea3cbe, PASS)",
-  "evidence": {
-    "glassdoor_19e9d56caf26e3e3": "99177-char HTML, ZERO plaintext part; real jobs (Northrop Grumman Sr. Staff Chief Engineer, Rolling Meadows IL, $184K-$276K) at TAIL; front dominated by CSS/@font-face/MSO/VML noise. extractor maxLength=30000 truncation drops tail. Jobs use VML <v:roundrect> buttons not <a href> -> extractAnchorPairs returns []. Filed NoJobs.",
-    "google_alerts_19e9aa3adc7b13b7": "clean structured plaintext, 10 real jobs (UKG/Accenture/Meta/Oracle). Should extract trivially. Filed NoJobs -> consistent with stale isJobListingEmail precheck (removed fea3cbe) processing before deploy. Needs reprocess.",
-    "indeed_multiple": "donotreply@jobalert.indeed.com digests w/ zero-width obfuscation + multi-job blocks. Prompt lacks digest block-format guidance."
-  }
+  "last_update": "2026-06-06T12:55:00Z",
+  "prior_leg": "fix-nojobs-false-negatives (a8854cc, PASS, deployed)",
+  "decisions": {
+    "scope": "all_features",
+    "missing_ports": "create_all (Gemini, Properties, Utilities)",
+    "gmail_dup": "consolidate_to_GmailAdapter",
+    "cookie": "strict_BLOCK_on_direct_SDK_in_features"
+  },
+  "wbs": ".planning/kermit/WBS-hexagonal-ports.md",
+  "driver": "kermit-orchestrator-agent (background) -> Oscar per wave",
+  "waves": {
+    "wave1_ports": { "status": "committed", "commit": "9d31d25", "oscar": "PASS" },
+    "wave2_job_finder": { "status": "committed", "commit": "651e60f", "oscar": "PASS" },
+    "wave3_remaining_features": { "status": "committed", "commit": "298fb28", "oscar": "PASS" },
+    "wave4_enforce": { "status": "committed", "commit": "bff57a1", "oscar": "PASS (Cookie reviewed boundary)" }
+  },
+  "tests_final": "573 passed / 0 failed / 9 skipped",
+  "deployed": true,
+  "handoff": ".planning/HANDOFF.json"
 }
