@@ -6,7 +6,44 @@
  * - Error handling
  * - Caching
  * - Retry logic
+ *
+ * This is the Gemini infrastructure layer. Its platform access (outbound HTTP,
+ * Properties for backoff/error state, Drive for debug logs, Utilities for sleep)
+ * is routed exclusively through the src/core/services ports (HttpAdapter,
+ * PropertiesAdapter, DriveAdapter, UtilitiesAdapter) via the serviceFactory seam
+ * — no direct platform SDK references (full-hexagonal-conversion, Wave 4 / D2).
+ * The GeminiAdapter wraps the callGeminiApi function defined here; there is no
+ * cycle (GeminiAdapter only invokes the global function).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton (lazy, call-time).
+ */
+function _asServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('./services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _asHttp() {
+  return _asServiceFactory().getHttpAdapter();
+}
+
+function _asProps() {
+  return _asServiceFactory().getPropertiesAdapter();
+}
+
+function _asDrive() {
+  return _asServiceFactory().getDriveAdapter();
+}
+
+function _asUtils() {
+  return _asServiceFactory().getUtilitiesAdapter();
+}
 
 // API monitoring system
 const API_MONITOR = {
@@ -196,7 +233,7 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
         throw new Error("RATE_LIMIT_REACHED");
       } else {
         // If wait time is within the cap, actually wait.
-        Utilities.sleep(rateLimitStatus.waitTime + 100);
+        _asUtils().sleep(rateLimitStatus.waitTime + 100);
       }
     }
 
@@ -244,7 +281,7 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
         Logger.log(
           `API call failed, retrying in ${backoffTime}ms (attempt ${retries}/${API_SERVICE_CONFIG.MAX_RETRIES})`
         );
-        Utilities.sleep(backoffTime);
+        _asUtils().sleep(backoffTime);
       }
     }
 
@@ -265,7 +302,7 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
 
       // Store next run time
       const nextRunTime = Date.now() + backoffTime;
-      PropertiesService.getScriptProperties().setProperty(
+      _asProps().setProperty(
         PROPERTY_KEYS.RATE_LIMIT_NEXT_RUN,
         nextRunTime.toString()
       );
@@ -438,7 +475,7 @@ function callGemini(prompt) {
   };
 
   Logger.log("Sending request to Gemini API...");
-  const response = UrlFetchApp.fetch(
+  const response = _asHttp().fetch(
     API_SERVICE_CONFIG.GEMINI_API_ENDPOINT,
     options
   );
@@ -531,7 +568,7 @@ function logGeminiInteraction(type, content) {
 
     // Store errors for later analysis
     if (type === "error") {
-      const errors = PropertiesService.getScriptProperties().getProperty("GEMINI_ERRORS");
+      const errors = _asProps().getProperty("GEMINI_ERRORS");
       const errorList = errors ? JSON.parse(errors) : [];
       errorList.push(logEntry);
 
@@ -540,7 +577,7 @@ function logGeminiInteraction(type, content) {
         errorList.shift();
       }
 
-      PropertiesService.getScriptProperties().setProperty(
+      _asProps().setProperty(
         "GEMINI_ERRORS",
         JSON.stringify(errorList)
       );
@@ -560,8 +597,9 @@ function logGeminiInteraction(type, content) {
 function saveGeminiInteractionToDrive(type, content, timestamp) {
   try {
     const folderName = "Gemini API Debug Logs";
-    const folders = DriveApp.getFoldersByName(folderName);
-    const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+    const drive = _asDrive();
+    const folders = drive.getFoldersByName(folderName);
+    const folder = folders.hasNext() ? folders.next() : drive.createFolder(folderName);
 
     const safeTimestamp = timestamp.replace(/:/g, '-').replace(/\./g, '-');
     const baseFileName = `gemini_${content.operationType || 'unknown'}_${safeTimestamp}`;
@@ -580,14 +618,14 @@ function saveGeminiInteractionToDrive(type, content, timestamp) {
       Logger.log(`Created interaction file: ${file.getUrl()}`);
 
       // Store file ID for response to append to
-      PropertiesService.getScriptProperties().setProperty(`GEMINI_FILE_${safeTimestamp}`, file.getId());
+      _asProps().setProperty(`GEMINI_FILE_${safeTimestamp}`, file.getId());
 
     } else if (type === "response") {
       // Find and update the existing file
-      const fileId = PropertiesService.getScriptProperties().getProperty(`GEMINI_FILE_${safeTimestamp}`);
+      const fileId = _asProps().getProperty(`GEMINI_FILE_${safeTimestamp}`);
 
       if (fileId) {
-        const file = DriveApp.getFileById(fileId);
+        const file = _asDrive().getFileById(fileId);
         const currentContent = file.getBlob().getDataAsString();
 
         // Replace the "(waiting for response...)" with actual response
@@ -600,7 +638,7 @@ function saveGeminiInteractionToDrive(type, content, timestamp) {
         Logger.log(`Updated interaction file with response: ${file.getUrl()}`);
 
         // Clean up property
-        PropertiesService.getScriptProperties().deleteProperty(`GEMINI_FILE_${safeTimestamp}`);
+        _asProps().deleteProperty(`GEMINI_FILE_${safeTimestamp}`);
       } else {
         Logger.log(`Warning: No request file found for timestamp ${safeTimestamp}`);
       }

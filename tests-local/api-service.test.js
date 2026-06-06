@@ -43,10 +43,16 @@ global.PROPERTY_KEYS = PROPERTY_KEYS;
 global.getApiKey = getApiKey;
 global.setApiKey = setApiKey;
 
+// HTTP/Properties/Drive/Utilities access is routed through serviceFactory ports;
+// the real adapters delegate to the global SDK mocks (setup.js). Reset the
+// factory each test so adapters rebind to the current globals.
+const { serviceFactory } = require('../src/core/services/index.js');
+
 describe('Gemini API Service - Complete Test Suite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    serviceFactory.reset();
 
     // Reset API monitor
       API_MONITOR.requestCount = 0;

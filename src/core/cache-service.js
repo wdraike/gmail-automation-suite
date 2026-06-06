@@ -2,7 +2,38 @@
  * Unified Cache Service
  * Centralized caching system for all data types
  * Provides consistent interface for script properties, cache service, and Drive storage
+ *
+ * This is the application-level cache service. Its storage backends (script
+ * cache, script properties, Drive) are accessed exclusively through the
+ * src/core/services ports (CacheAdapter, PropertiesAdapter, DriveAdapter) via
+ * the serviceFactory seam — no direct platform SDK references
+ * (full-hexagonal-conversion, Wave 4 / D3).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton (lazy, call-time).
+ */
+function _csServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('./services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _csCache() {
+  return _csServiceFactory().getCacheAdapter();
+}
+
+function _csProps() {
+  return _csServiceFactory().getPropertiesAdapter();
+}
+
+function _csDrive() {
+  return _csServiceFactory().getDriveAdapter();
+}
 
 /**
  * Cache configuration
@@ -50,14 +81,14 @@ const UnifiedCacheCore = {
       
       switch (storageType) {
         case CACHE_CONFIG.STORAGE.CACHE:
-          const cached = CacheService.getScriptCache().get(key);
+          const cached = _csCache().get(key);
           if (cached) {
             data = JSON.parse(cached);
           }
           break;
-          
+
         case CACHE_CONFIG.STORAGE.PROPERTIES:
-          const prop = PropertiesService.getScriptProperties().getProperty(key);
+          const prop = _csProps().getProperty(key);
           if (prop) {
             data = JSON.parse(prop);
           }
@@ -90,12 +121,12 @@ const UnifiedCacheCore = {
       switch (storageType) {
         case CACHE_CONFIG.STORAGE.CACHE:
           if (duration > 0) {
-            CacheService.getScriptCache().put(key, jsonData, duration);
+            _csCache().put(key, jsonData, duration);
           }
           break;
-          
+
         case CACHE_CONFIG.STORAGE.PROPERTIES:
-          PropertiesService.getScriptProperties().setProperty(key, jsonData);
+          _csProps().setProperty(key, jsonData);
           break;
           
         case CACHE_CONFIG.STORAGE.DRIVE:
@@ -120,11 +151,11 @@ const UnifiedCacheCore = {
     try {
       switch (storageType) {
         case CACHE_CONFIG.STORAGE.CACHE:
-          CacheService.getScriptCache().remove(key);
+          _csCache().remove(key);
           break;
-          
+
         case CACHE_CONFIG.STORAGE.PROPERTIES:
-          PropertiesService.getScriptProperties().deleteProperty(key);
+          _csProps().deleteProperty(key);
           break;
           
         case CACHE_CONFIG.STORAGE.DRIVE:
@@ -148,11 +179,11 @@ const UnifiedCacheCore = {
     try {
       switch (storageType) {
         case CACHE_CONFIG.STORAGE.CACHE:
-          CacheService.getScriptCache().removeAll(Object.values(CACHE_CONFIG.KEYS));
+          _csCache().removeAll(Object.values(CACHE_CONFIG.KEYS));
           break;
-          
+
         case CACHE_CONFIG.STORAGE.PROPERTIES:
-          const props = PropertiesService.getScriptProperties();
+          const props = _csProps();
           Object.values(CACHE_CONFIG.KEYS).forEach(key => {
             props.deleteProperty(key);
           });
@@ -193,10 +224,10 @@ const UnifiedCacheCore = {
    */
   _getDriveData(key) {
     try {
-      const fileId = PropertiesService.getScriptProperties().getProperty(`${key}_FILE_ID`);
+      const fileId = _csProps().getProperty(`${key}_FILE_ID`);
       if (!fileId) return null;
-      
-      const file = DriveApp.getFileById(fileId);
+
+      const file = _csDrive().getFileById(fileId);
       const content = file.getBlob().getDataAsString();
       return JSON.parse(content);
     } catch (error) {
@@ -211,15 +242,15 @@ const UnifiedCacheCore = {
    */
   _setDriveData(key, data) {
     try {
-      const fileId = PropertiesService.getScriptProperties().getProperty(`${key}_FILE_ID`);
+      const fileId = _csProps().getProperty(`${key}_FILE_ID`);
       let file;
-      
+
       if (fileId) {
-        file = DriveApp.getFileById(fileId);
+        file = _csDrive().getFileById(fileId);
         file.setContent(JSON.stringify(data, null, 2));
       } else {
-        file = DriveApp.createFile(`${key}.json`, JSON.stringify(data, null, 2));
-        PropertiesService.getScriptProperties().setProperty(`${key}_FILE_ID`, file.getId());
+        file = _csDrive().createFile(`${key}.json`, JSON.stringify(data, null, 2));
+        _csProps().setProperty(`${key}_FILE_ID`, file.getId());
       }
       
       return true;
@@ -235,10 +266,10 @@ const UnifiedCacheCore = {
    */
   _deleteDriveData(key) {
     try {
-      const fileId = PropertiesService.getScriptProperties().getProperty(`${key}_FILE_ID`);
+      const fileId = _csProps().getProperty(`${key}_FILE_ID`);
       if (fileId) {
-        DriveApp.getFileById(fileId).setTrashed(true);
-        PropertiesService.getScriptProperties().deleteProperty(`${key}_FILE_ID`);
+        _csDrive().getFileById(fileId).setTrashed(true);
+        _csProps().deleteProperty(`${key}_FILE_ID`);
       }
       return true;
     } catch (error) {
@@ -265,7 +296,7 @@ const EmailCategoriesCache = {
       CACHE_CONFIG.KEYS.EMAIL_CATEGORIES,
       () => {
         // Fallback to properties if not in cache
-        const prop = PropertiesService.getScriptProperties().getProperty('EMAIL_CATEGORIES_MAP');
+        const prop = _csProps().getProperty('EMAIL_CATEGORIES_MAP');
         return prop ? JSON.parse(prop) : {};
       },
       CACHE_CONFIG.DURATIONS.MEDIUM,
@@ -343,7 +374,7 @@ const LabelCategoriesCache = {
     return UnifiedCacheCore.getOrCompute(
       CACHE_CONFIG.KEYS.LABEL_CATEGORIES,
       () => {
-        const prop = PropertiesService.getScriptProperties().getProperty('LABEL_CATEGORIES_MAP');
+        const prop = _csProps().getProperty('LABEL_CATEGORIES_MAP');
         return prop ? JSON.parse(prop) : {};
       },
       CACHE_CONFIG.DURATIONS.LONG,

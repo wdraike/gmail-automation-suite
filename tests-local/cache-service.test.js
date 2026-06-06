@@ -14,11 +14,20 @@ const {
   RetentionRulesCache,
   UnifiedCacheService
 } = require('../src/core/cache-service.js');
+// Cache/Properties/Drive access is routed through serviceFactory ports; the real
+// adapters delegate to the global mocks. Tests reassign those globals per-test,
+// so reset the factory each test to rebind the adapters to the current globals.
+const { serviceFactory } = require('../src/core/services/index.js');
 
 describe('Cache Service - Complete Test Suite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    serviceFactory.reset();
+  });
+
+  afterEach(() => {
+    serviceFactory.reset();
   });
 
   describe('CACHE_CONFIG', () => {
