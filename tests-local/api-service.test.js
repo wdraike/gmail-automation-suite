@@ -544,6 +544,68 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
           sleepSpy.mockRestore();
       });
+
+      it('makes exactly ONE request on a 429 rate limit (no wasteful retries)', () => {
+          API_STATE.lastApiCalls = [];
+          API_STATE.consecutiveFailures = 0;
+
+          // 429 -> callGemini throws RATE_LIMIT_REACHED
+          UrlFetchApp.fetch = jest.fn(() => ({
+            getResponseCode: jest.fn(() => 429),
+            getContentText: jest.fn(() => JSON.stringify({
+              error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' }
+            }))
+          }));
+
+          expect(() => callGeminiWithRateLimiting('Test prompt'))
+            .toThrow('RATE_LIMIT_REACHED');
+
+          // Must NOT consume exponential-backoff retries on a rate-limit error.
+          expect(UrlFetchApp.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('sets the rate-limit backoff property when a 429 occurs', () => {
+          API_STATE.lastApiCalls = [];
+          API_STATE.consecutiveFailures = 0;
+
+          // Clear any prior backoff value.
+          PropertiesService.getScriptProperties()
+            .deleteProperty(PROPERTY_KEYS.RATE_LIMIT_NEXT_RUN);
+
+          UrlFetchApp.fetch = jest.fn(() => ({
+            getResponseCode: jest.fn(() => 429),
+            getContentText: jest.fn(() => JSON.stringify({
+              error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' }
+            }))
+          }));
+
+          expect(() => callGeminiWithRateLimiting('Test prompt'))
+            .toThrow('RATE_LIMIT_REACHED');
+
+          // Outer catch must still record the next-run backoff time.
+          const nextRun = PropertiesService.getScriptProperties()
+            .getProperty(PROPERTY_KEYS.RATE_LIMIT_NEXT_RUN);
+          expect(nextRun).not.toBeNull();
+          expect(Number(nextRun)).toBeGreaterThan(Date.now());
+      });
+
+      it('still retries up to MAX_RETRIES on a non-rate-limit transient error (500)', () => {
+          API_STATE.lastApiCalls = [];
+          API_STATE.consecutiveFailures = 0;
+
+          // 500 -> callGemini throws a generic (non-rate-limit) error
+          UrlFetchApp.fetch = jest.fn(() => ({
+            getResponseCode: jest.fn(() => 500),
+            getContentText: jest.fn(() => 'Internal Server Error')
+          }));
+
+          expect(() => callGeminiWithRateLimiting('Test prompt')).toThrow();
+
+          // Non-rate-limit errors should still exhaust retries: 1 + MAX_RETRIES.
+          expect(UrlFetchApp.fetch).toHaveBeenCalledTimes(
+            API_SERVICE_CONFIG.MAX_RETRIES + 1
+          );
+      });
     });
   });
 

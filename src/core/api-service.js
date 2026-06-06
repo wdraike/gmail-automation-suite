@@ -206,6 +206,15 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
         response = callGemini(prompt);
         break; // Success, exit the retry loop
       } catch (error) {
+        // Rate-limit errors are NOT retryable here: each retry burns another
+        // request against the per-minute Gemini quota and immediately 429s
+        // again. Re-throw so the outer catch sets the 300s backoff and the
+        // caller can queue the email. Only transient/non-rate-limit errors
+        // (network/5xx-other/parse) consume the exponential-backoff retries.
+        if (error.message === "RATE_LIMIT_REACHED") {
+          throw error;
+        }
+
         retries++;
 
         // If we've hit max retries, throw the error
