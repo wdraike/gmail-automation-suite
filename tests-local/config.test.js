@@ -141,6 +141,13 @@ describe('Config Module - Local Tests', () => {
       expect(JOB_FINDER_CONFIG.BACKUP_SHEET_NAME).toBeUndefined();
       expect(Object.prototype.hasOwnProperty.call(JOB_FINDER_CONFIG, 'BACKUP_SHEET_NAME')).toBe(false);
     });
+
+    // Regression lock for diagnose-429-and-throttle: MAX_EMAILS_PER_RUN is hoisted
+    // to JOB_FINDER_CONFIG (single source of truth) and throttled to 2 per run to
+    // reduce Gemini quota burn. Lower this only with an explicit quota-budget reason.
+    it('throttles MAX_EMAILS_PER_RUN to 2', () => {
+      expect(JOB_FINDER_CONFIG.MAX_EMAILS_PER_RUN).toBe(2);
+    });
   });
 
   describe('getSpreadsheetId', () => {

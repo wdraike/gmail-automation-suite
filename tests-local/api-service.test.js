@@ -402,6 +402,25 @@ describe('Gemini API Service - Complete Test Suite', () => {
         expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
       });
 
+      it('logs the raw 429 body for quota diagnosis before throwing', () => {
+        const mockLogger = jest.spyOn(Logger, 'log');
+        UrlFetchApp.fetch = jest.fn(() => ({
+          getResponseCode: jest.fn(() => 429),
+          getContentText: jest.fn(() => JSON.stringify({
+            error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded for metric GenerateRequestsPerDay' }
+          }))
+        }));
+
+        expect(() => callGemini('Test prompt')).toThrow('RATE_LIMIT_REACHED');
+        expect(mockLogger).toHaveBeenCalledWith(
+          expect.stringContaining('Gemini 429 body:')
+        );
+        expect(mockLogger).toHaveBeenCalledWith(
+          expect.stringContaining('RESOURCE_EXHAUSTED')
+        );
+        mockLogger.mockRestore();
+      });
+
       it('should throw RATE_LIMIT_REACHED on service unavailable (503)', () => {
         UrlFetchApp.fetch = jest.fn(() => ({
           getResponseCode: jest.fn(() => 503),

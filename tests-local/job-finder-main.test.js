@@ -9,6 +9,7 @@ global.JOB_FINDER_CONFIG = {
   PROCESSED_LABEL: "📬 JobAlerts/Processed",
   RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimited",
   ACTIVE_SHEET_NAME: "Jobs",
+  MAX_EMAILS_PER_RUN: 2,
   SHEET_COLUMNS: [
     "Company", "Company Description", "Job Title", "Location",
     "Minimum Salary", "Maximum Salary", "Salary Period", "Job URL",
@@ -111,6 +112,32 @@ describe("job-finder main", () => {
       const result = main.getEmailThreadsToProcess();
       expect(result.success).toBe(true);
       expect(result.threads).toEqual(threads);
+    });
+
+    it("fetches new threads using the throttled limit from JOB_FINDER_CONFIG (0, 2)", () => {
+      const getThreadsSpy = jest.fn(() => []);
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") return { getThreads: getThreadsSpy };
+        return null;
+      });
+      main.getEmailThreadsToProcess();
+      expect(getThreadsSpy).toHaveBeenCalledWith(0, 2);
+    });
+
+    it("trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (2)", () => {
+      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
+        if (name === "📬 JobAlerts") {
+          return { getThreads: jest.fn(() => [{ id: "new1" }, { id: "new2" }]) };
+        }
+        if (name === "📬 JobAlerts/RateLimited") {
+          return { getThreads: jest.fn(() => [{ id: "rl1" }]) };
+        }
+        return null;
+      });
+      const result = main.getEmailThreadsToProcess();
+      expect(result.threads.length).toBe(2);
+      // rate-limited threads are prioritized (prepended)
+      expect(result.threads[0].id).toBe("rl1");
     });
 
     it("prepends rate-limited threads when available", () => {

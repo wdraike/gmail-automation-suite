@@ -108,8 +108,10 @@ function getEmailThreadsToProcess() {
       };
     }
 
-    // Get new threads from source label (limit to 5 to avoid long execution times)
-    const MAX_EMAILS_PER_RUN = 5;
+    // Get new threads from source label. Limit comes from JOB_FINDER_CONFIG
+    // (single source of truth) — throttled to reduce Gemini quota burn and avoid
+    // long execution times.
+    const MAX_EMAILS_PER_RUN = JOB_FINDER_CONFIG.MAX_EMAILS_PER_RUN;
     const threads = sourceLabel.getThreads(0, MAX_EMAILS_PER_RUN);
     Logger.log(`Found ${threads.length} new thread(s) in "${sourceLabelName}" (max ${MAX_EMAILS_PER_RUN} per run)`);
 
@@ -600,13 +602,14 @@ function setupJobFinderTrigger() {
       }
     }
 
-    // Create a new time-based trigger to run every hour
+    // Create a new time-based trigger. Throttled to every 3 hours to reduce
+    // Gemini quota burn (RPD/RPM exhaustion).
     ScriptApp.newTrigger("processJobEmailsMain")
       .timeBased()
-      .everyHours(1)
+      .everyHours(3)
       .create();
 
-    const message = `Trigger set up to run job finder every hour`;
+    const message = `Trigger set up to run job finder every 3 hours`;
     Logger.log(message);
     return message;
   } catch (error) {

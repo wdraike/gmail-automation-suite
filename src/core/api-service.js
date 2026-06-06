@@ -431,6 +431,10 @@ function callGemini(prompt) {
     // callGeminiWithRateLimiting fires and callers queue the email for retry
     // instead of treating it as a hard failure (which silently drops emails).
     if (responseCode === 429 || responseCode === 503) {
+      // Diagnostic: log the raw body so we can identify which Gemini quota was hit
+      // (RESOURCE_EXHAUSTED carries the quota metric — e.g. PerDay vs PerMinute —
+      // plus a retryDelay, distinguishing RPD / RPM / zero-quota exhaustion).
+      Logger.log("Gemini 429 body: " + responseText.substring(0, 500));
       throw new Error("RATE_LIMIT_REACHED");
     }
     throw new Error(`API returned status ${responseCode}: ${responseText.substring(0, 200)}`);
