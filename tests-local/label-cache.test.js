@@ -6,6 +6,10 @@
 const {
   getGmailLabels
 } = require('../src/utils/label-cache.js');
+// label-cache routes Gmail/Properties/Drive through serviceFactory ports; the
+// real adapters delegate to these globals. Reset the factory each test so the
+// adapters bind to the current global mocks.
+const { serviceFactory } = require('../src/core/services/index.js');
 
 // Mock Google Apps Script services
 global.Logger = { log: jest.fn() };
@@ -29,6 +33,7 @@ describe('Label Cache - Complete Test Suite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    serviceFactory.reset();
   });
 
   describe('getGmailLabels', () => {

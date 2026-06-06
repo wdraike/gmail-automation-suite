@@ -27,14 +27,56 @@ const {
   getJobFinderRateLimitLabel,
   setJobFinderRateLimitLabel,
   getJobFinderNoJobsLabel,
-  setJobFinderNoJobsLabel
+  setJobFinderNoJobsLabel,
+  testGeminiApiKey
 } = require('../src/core/config.js');
+// Properties + Http access is routed through serviceFactory ports; the real
+// adapters delegate to the global PropertiesService / UrlFetchApp mocks
+// (setup.js). Reset the factory each test.
+const { serviceFactory } = require('../src/core/services/index.js');
 
 describe('Config Module - Local Tests', () => {
 
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
+    serviceFactory.reset();
+  });
+
+  describe('testGeminiApiKey (port-routed Http)', () => {
+    it('returns failure when no API key is set', () => {
+      global.PropertiesService.getScriptProperties().deleteProperty(PROPERTY_KEYS.API_KEY);
+      const result = testGeminiApiKey();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No API key');
+    });
+
+    it('returns success via HttpAdapter when API responds 200', () => {
+      setApiKey('test-key');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({
+          candidates: [{ content: { parts: [{ text: 'API key is working' }] } }],
+        }),
+      }));
+      const result = testGeminiApiKey();
+      expect(global.UrlFetchApp.fetch).toHaveBeenCalledWith(
+        API_SERVICE_CONFIG.GEMINI_API_ENDPOINT,
+        expect.objectContaining({ method: 'post' })
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('returns failure via HttpAdapter on non-200 status', () => {
+      setApiKey('test-key');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 403,
+        getContentText: () => 'forbidden',
+      }));
+      const result = testGeminiApiKey();
+      expect(result.success).toBe(false);
+      expect(result.status).toBe(403);
+    });
   });
 
   describe('getApiKey', () => {

@@ -419,9 +419,10 @@ function formatDateTime(date) {
   if (!date) return "";
   
   try {
-    return _shUtils().formatDate(
+    const utils = _shUtils();
+    return utils.formatDate(
       date,
-      Session.getScriptTimeZone(),
+      utils.getScriptTimeZone(),
       "yyyy-MM-dd HH:mm:ss"
     );
   } catch (error) {

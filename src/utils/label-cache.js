@@ -1,3 +1,32 @@
+// Platform access (Gmail, Properties, Drive) is routed exclusively through
+// src/core/services ports via the serviceFactory seam. No direct Google SDK
+// references live in this file (full-hexagonal-conversion, Wave 3).
+
+/**
+ * Resolve the shared serviceFactory singleton.
+ */
+function _lcServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _lcGmail() {
+  return _lcServiceFactory().getGmailAdapter();
+}
+
+function _lcProps() {
+  return _lcServiceFactory().getPropertiesAdapter();
+}
+
+function _lcDrive() {
+  return _lcServiceFactory().getDriveAdapter();
+}
+
 // Cache for label structure
 let LABEL_STRUCTURE_CACHE = null;
 let LAST_CACHE_UPDATE = null;
@@ -83,10 +112,10 @@ function _ensureCacheInitialized() {
 
   try {
     // Try to read existing cache from storage
-    const cachedTimestamp = PropertiesService.getScriptProperties().getProperty(
+    const cachedTimestamp = _lcProps().getProperty(
       PROP_LABEL_CACHE_TIMESTAMP
     );
-    const cachedFileId = PropertiesService.getScriptProperties().getProperty(
+    const cachedFileId = _lcProps().getProperty(
       PROP_LABEL_CACHE_FILE_ID
     );
 
@@ -99,7 +128,7 @@ function _ensureCacheInitialized() {
       // If cache is still fresh, load from file
       if (new Date() - LAST_CACHE_UPDATE <= CACHE_EXPIRATION) {
         try {
-          const file = DriveApp.getFileById(cachedFileId);
+          const file = _lcDrive().getFileById(cachedFileId);
           const content = file.getBlob().getDataAsString();
           LABEL_STRUCTURE_CACHE = JSON.parse(content);
           Logger.log(
@@ -119,7 +148,7 @@ function _ensureCacheInitialized() {
     Logger.log("Refreshing label cache from Gmail API...");
 
     // Get all user labels
-    const gmailLabels = GmailApp.getUserLabels();
+    const gmailLabels = _lcGmail().getUserLabels();
 
     // Map Gmail labels to our cache structure
     LABEL_STRUCTURE_CACHE = gmailLabels.map((label) => {
@@ -145,7 +174,7 @@ function _ensureCacheInitialized() {
     LAST_CACHE_UPDATE = new Date();
 
     // Store in properties
-    PropertiesService.getScriptProperties().setProperty(
+    _lcProps().setProperty(
       PROP_LABEL_CACHE_TIMESTAMP,
       LAST_CACHE_UPDATE.getTime().toString()
     );
@@ -225,7 +254,7 @@ function getLabelByName(labelName) {
 
     // If not found in cache, try direct API call as fallback
     try {
-      const label = GmailApp.getUserLabelByName(labelName);
+      const label = _lcGmail().getUserLabelByName(labelName);
       if (label) {
         // Add to cache for next time
         if (!LABEL_STRUCTURE_CACHE) {
@@ -286,14 +315,14 @@ function saveCacheToFile() {
     const jsonContent = JSON.stringify(LABEL_STRUCTURE_CACHE);
 
     // Get the existing file ID or create a new file
-    let cacheFileId = PropertiesService.getScriptProperties().getProperty(
+    let cacheFileId = _lcProps().getProperty(
       PROP_LABEL_CACHE_FILE_ID
     );
     let file;
 
     if (cacheFileId) {
       try {
-        file = DriveApp.getFileById(cacheFileId);
+        file = _lcDrive().getFileById(cacheFileId);
         file.setContent(jsonContent);
         Logger.log("Updated existing label cache file");
       } catch (fileError) {
@@ -304,8 +333,8 @@ function saveCacheToFile() {
 
     if (!cacheFileId) {
       // Create a new file
-      file = DriveApp.createFile(LABEL_CACHE_FILENAME, jsonContent);
-      PropertiesService.getScriptProperties().setProperty(
+      file = _lcDrive().createFile(LABEL_CACHE_FILENAME, jsonContent);
+      _lcProps().setProperty(
         PROP_LABEL_CACHE_FILE_ID,
         file.getId()
       );

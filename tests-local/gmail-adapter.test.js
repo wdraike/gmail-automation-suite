@@ -172,6 +172,18 @@ describe('GmailAdapter', () => {
     });
   });
 
+  describe('getUserLabels', () => {
+    it('should delegate to gmail.getUserLabels', () => {
+      const labels = [{ getName: () => 'Work' }];
+      mockGmailApp.getUserLabels = jest.fn(() => labels);
+
+      const result = adapter.getUserLabels();
+
+      expect(mockGmailApp.getUserLabels).toHaveBeenCalled();
+      expect(result).toBe(labels);
+    });
+  });
+
   describe('getLabelSafe', () => {
     it('returns the label when found', () => {
       const mockLabel = { getName: () => 'Work' };

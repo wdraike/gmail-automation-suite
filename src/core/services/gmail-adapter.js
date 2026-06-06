@@ -66,6 +66,15 @@ class GmailAdapter {
   }
 
   /**
+   * Get all raw user-label objects (GmailLabel[]). Callers that need the live
+   * label objects (e.g. to read getName()/getThreads()) use this; callers that
+   * want plain cached {name,type} records use getAllLabels().
+   */
+  getUserLabels() {
+    return this.gmail.getUserLabels();
+  }
+
+  /**
    * Safely get a label by name; returns null (not throw) on error.
    * Relocated from the legacy GmailLabelService.getLabelSafe (D5).
    */

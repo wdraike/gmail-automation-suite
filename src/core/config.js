@@ -3,7 +3,34 @@
  *
  * This file contains all configuration settings for the Gmail automation scripts.
  * All sensitive data (API keys, etc.) should be stored in ScriptProperties.
+ *
+ * Platform access (Properties for config reads/writes, Http for the API-key test)
+ * is routed through src/core/services ports via the serviceFactory seam. The seam
+ * resolves the factory lazily at call time, so config.js can load first in the
+ * GAS concatenation order without a circular dependency
+ * (full-hexagonal-conversion, Wave 3 / D4).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton (lazy, call-time).
+ */
+function _cfgServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('./services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _cfgProps() {
+  return _cfgServiceFactory().getPropertiesAdapter();
+}
+
+function _cfgHttp() {
+  return _cfgServiceFactory().getHttpAdapter();
+}
 
 // Script Properties Keys
 const PROPERTY_KEYS = {
@@ -74,8 +101,13 @@ const JOB_FINDER_CONFIG = {
   // label and are naturally re-picked-up). Single source of truth — read in main.js.
   EXECUTION_BUDGET_MS: 290000,
 
-  // Notification settings
-  NOTIFICATION_EMAIL: Session.getActiveUser().getEmail(),
+  // (Notification settings) — the former NOTIFICATION_EMAIL property was removed
+  // in the full-hexagonal conversion (Wave 3 / D4). It was evaluated at
+  // module-load time via Session.getActiveUser().getEmail() — the only
+  // module-load platform-SDK call in config.js — and had zero consumers. Removing
+  // it eliminates the load-time SDK reference entirely (no documented exception
+  // needed). Code that needs the user's email uses
+  // serviceFactory.getGmailAdapter().getUserEmailAddress().
 
   // Spreadsheet columns
   SHEET_COLUMNS: [
@@ -130,7 +162,7 @@ function getApiKey() {
   if (typeof GEMINI_API_KEY_OVERRIDE !== 'undefined' && GEMINI_API_KEY_OVERRIDE) {
     return GEMINI_API_KEY_OVERRIDE;
   }
-  return PropertiesService.getScriptProperties().getProperty(
+  return _cfgProps().getProperty(
     PROPERTY_KEYS.API_KEY
   );
 }
@@ -141,7 +173,7 @@ function getApiKey() {
  */
 function getSpreadsheetId() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.SPREADSHEET_ID
     ) || ""
   );
@@ -154,7 +186,7 @@ function getSpreadsheetId() {
  */
 function setSpreadsheetId(spreadsheetId) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.SPREADSHEET_ID,
       spreadsheetId
     );
@@ -170,7 +202,7 @@ function setSpreadsheetId(spreadsheetId) {
  * @returns {boolean} True if dynamic categories are enabled.
  */
 function isDynamicCategoriesEnabled() {
-  const value = PropertiesService.getScriptProperties().getProperty(
+  const value = _cfgProps().getProperty(
     PROPERTY_KEYS.ENABLE_DYNAMIC_CATEGORIES
   );
   return value === "true";
@@ -183,7 +215,7 @@ function isDynamicCategoriesEnabled() {
  */
 function setDynamicCategoriesEnabled(enabled) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.ENABLE_DYNAMIC_CATEGORIES,
       enabled.toString()
     );
@@ -200,7 +232,7 @@ function setDynamicCategoriesEnabled(enabled) {
  */
 function getCacheFileId() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.CACHE_FILE_ID
     ) || ""
   );
@@ -213,7 +245,7 @@ function getCacheFileId() {
  */
 function setCacheFileId(fileId) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.CACHE_FILE_ID,
       fileId
     );
@@ -230,7 +262,7 @@ function setCacheFileId(fileId) {
  */
 function getCategoriesFileId() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.CATEGORIES_FILE_ID
     ) || ""
   );
@@ -243,7 +275,7 @@ function getCategoriesFileId() {
  */
 function setCategoriesFileId(fileId) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.CATEGORIES_FILE_ID,
       fileId
     );
@@ -261,7 +293,7 @@ function setCategoriesFileId(fileId) {
  */
 function isApiKeySet() {
   try {
-    const apiKey = PropertiesService.getScriptProperties().getProperty(
+    const apiKey = _cfgProps().getProperty(
       PROPERTY_KEYS.API_KEY
     );
     return Boolean(apiKey);
@@ -286,7 +318,7 @@ function setApiKey(apiKey) {
 
   try {
     // Store it in script properties (trim whitespace)
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.API_KEY,
       apiKey.trim()
     );
@@ -350,8 +382,8 @@ function testGeminiApiKey() {
       muteHttpExceptions: true
     };
     
-    // Make the API call
-    const response = UrlFetchApp.fetch(API_SERVICE_CONFIG.GEMINI_API_ENDPOINT, options);
+    // Make the API call (via HttpAdapter port)
+    const response = _cfgHttp().fetch(API_SERVICE_CONFIG.GEMINI_API_ENDPOINT, options);
     const responseCode = response.getResponseCode();
     
     if (responseCode !== 200) {
@@ -476,7 +508,7 @@ function testApiKeyFromAddon() {
  */
 function getJobFinderSourceLabel() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.JOB_FINDER_SOURCE_LABEL
     ) || JOB_FINDER_CONFIG.SOURCE_LABEL
   );
@@ -489,7 +521,7 @@ function getJobFinderSourceLabel() {
  */
 function setJobFinderSourceLabel(label) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.JOB_FINDER_SOURCE_LABEL,
       label
     );
@@ -506,7 +538,7 @@ function setJobFinderSourceLabel(label) {
  */
 function getJobFinderProcessedLabel() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.JOB_FINDER_PROCESSED_LABEL
     ) || JOB_FINDER_CONFIG.PROCESSED_LABEL
   );
@@ -519,7 +551,7 @@ function getJobFinderProcessedLabel() {
  */
 function setJobFinderProcessedLabel(label) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.JOB_FINDER_PROCESSED_LABEL,
       label
     );
@@ -536,7 +568,7 @@ function setJobFinderProcessedLabel(label) {
  */
 function getJobFinderRateLimitLabel() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.JOB_FINDER_RATE_LIMIT_LABEL
     ) || JOB_FINDER_CONFIG.RATE_LIMIT_LABEL
   );
@@ -549,7 +581,7 @@ function getJobFinderRateLimitLabel() {
  */
 function setJobFinderRateLimitLabel(label) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.JOB_FINDER_RATE_LIMIT_LABEL,
       label
     );
@@ -566,7 +598,7 @@ function setJobFinderRateLimitLabel(label) {
  */
 function getJobFinderNoJobsLabel() {
   return (
-    PropertiesService.getScriptProperties().getProperty(
+    _cfgProps().getProperty(
       PROPERTY_KEYS.JOB_FINDER_NO_JOBS_LABEL
     ) || JOB_FINDER_CONFIG.NO_JOBS_LABEL
   );
@@ -579,7 +611,7 @@ function getJobFinderNoJobsLabel() {
  */
 function setJobFinderNoJobsLabel(label) {
   try {
-    PropertiesService.getScriptProperties().setProperty(
+    _cfgProps().setProperty(
       PROPERTY_KEYS.JOB_FINDER_NO_JOBS_LABEL,
       label
     );
