@@ -28,6 +28,25 @@ class UtilitiesAdapter {
   formatDate(date, timeZone, format) {
     return this.utilities.formatDate(date, timeZone, format);
   }
+
+  /**
+   * Generate a UUID via Utilities.getUuid().
+   * @returns {string}
+   */
+  getUuid() {
+    return this.utilities.getUuid();
+  }
+
+  /**
+   * Get the script's time zone via Session.getScriptTimeZone().
+   * Surfaced here so UI code can format dates without referencing the Session
+   * SDK directly. Session is a platform SDK and is correctly accessed from
+   * within this adapter ring.
+   * @returns {string} IANA time zone id (e.g. "America/New_York").
+   */
+  getScriptTimeZone() {
+    return Session.getScriptTimeZone();
+  }
 }
 
 // Export for both GAS and Node.js

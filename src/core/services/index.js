@@ -11,6 +11,7 @@
 // In GAS, these will be undefined (but the global classes will be available)
 let _GmailAdapter, _SpreadsheetAdapter, _DriveAdapter;
 let _GeminiAdapter, _PropertiesAdapter, _UtilitiesAdapter;
+let _HttpAdapter, _CacheAdapter;
 
 if (typeof require !== 'undefined') {
   _GmailAdapter = require('./gmail-adapter.js').GmailAdapter;
@@ -19,6 +20,8 @@ if (typeof require !== 'undefined') {
   _GeminiAdapter = require('./gemini-adapter.js').GeminiAdapter;
   _PropertiesAdapter = require('./properties-adapter.js').PropertiesAdapter;
   _UtilitiesAdapter = require('./utilities-adapter.js').UtilitiesAdapter;
+  _HttpAdapter = require('./http-adapter.js').HttpAdapter;
+  _CacheAdapter = require('./cache-adapter.js').CacheAdapter;
 }
 
 /**
@@ -105,6 +108,32 @@ class ServiceFactory {
     return this._utilitiesAdapter;
   }
 
+  getHttpAdapter() {
+    if (!this._httpAdapter) {
+      const AdapterClass = _HttpAdapter || (typeof HttpAdapter !== 'undefined' ? HttpAdapter : null);
+      if (!AdapterClass) {
+        throw new Error('HttpAdapter is not available');
+      }
+      this._httpAdapter = new AdapterClass(
+        this.services.UrlFetchApp || (typeof UrlFetchApp !== 'undefined' ? UrlFetchApp : undefined)
+      );
+    }
+    return this._httpAdapter;
+  }
+
+  getCacheAdapter() {
+    if (!this._cacheAdapter) {
+      const AdapterClass = _CacheAdapter || (typeof CacheAdapter !== 'undefined' ? CacheAdapter : null);
+      if (!AdapterClass) {
+        throw new Error('CacheAdapter is not available');
+      }
+      this._cacheAdapter = new AdapterClass(
+        this.services.CacheService || (typeof CacheService !== 'undefined' ? CacheService : undefined)
+      );
+    }
+    return this._cacheAdapter;
+  }
+
   /**
    * Reset all adapters (useful for testing)
    */
@@ -115,6 +144,8 @@ class ServiceFactory {
     this._geminiAdapter = null;
     this._propertiesAdapter = null;
     this._utilitiesAdapter = null;
+    this._httpAdapter = null;
+    this._cacheAdapter = null;
   }
 }
 
@@ -131,6 +162,8 @@ if (typeof module !== 'undefined' && module.exports) {
     DriveAdapter: _DriveAdapter,
     GeminiAdapter: _GeminiAdapter,
     PropertiesAdapter: _PropertiesAdapter,
-    UtilitiesAdapter: _UtilitiesAdapter
+    UtilitiesAdapter: _UtilitiesAdapter,
+    HttpAdapter: _HttpAdapter,
+    CacheAdapter: _CacheAdapter
   };
 }

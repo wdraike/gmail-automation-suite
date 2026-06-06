@@ -191,6 +191,47 @@ describe('Service Adapters - Integration Tests', () => {
       expect(util1).not.toBe(util2);
     });
 
+    it('should create HttpAdapter instance through factory', () => {
+      const factory = new ServiceFactory();
+      const adapter = factory.getHttpAdapter();
+
+      expect(adapter).toBeDefined();
+      expect(adapter.urlFetchApp).toBe(global.UrlFetchApp);
+    });
+
+    it('should create CacheAdapter instance through factory', () => {
+      const factory = new ServiceFactory();
+      const adapter = factory.getCacheAdapter();
+
+      expect(adapter).toBeDefined();
+      expect(adapter.cacheService).toBe(global.CacheService);
+    });
+
+    it('should allow dependency injection of mock UrlFetchApp / CacheService', () => {
+      const mockUrlFetch = { fetch: jest.fn() };
+      const mockCacheSvc = { getScriptCache: jest.fn() };
+      const factory = new ServiceFactory({
+        UrlFetchApp: mockUrlFetch,
+        CacheService: mockCacheSvc,
+      });
+
+      expect(factory.getHttpAdapter().urlFetchApp).toBe(mockUrlFetch);
+      expect(factory.getCacheAdapter().cacheService).toBe(mockCacheSvc);
+    });
+
+    it('should reset Http and Cache adapters when reset() is called', () => {
+      const factory = new ServiceFactory();
+
+      const http1 = factory.getHttpAdapter();
+      const cache1 = factory.getCacheAdapter();
+      factory.reset();
+      const http2 = factory.getHttpAdapter();
+      const cache2 = factory.getCacheAdapter();
+
+      expect(http1).not.toBe(http2);
+      expect(cache1).not.toBe(cache2);
+    });
+
     it('should allow creating multiple independent factory instances', () => {
       const factory1 = new ServiceFactory();
       const factory2 = new ServiceFactory();
@@ -216,6 +257,8 @@ describe('Service Adapters - Integration Tests', () => {
       expect(exports.GeminiAdapter).toBeDefined();
       expect(exports.PropertiesAdapter).toBeDefined();
       expect(exports.UtilitiesAdapter).toBeDefined();
+      expect(exports.HttpAdapter).toBeDefined();
+      expect(exports.CacheAdapter).toBeDefined();
     });
 
     it('should export the same classes from index.js as from individual files', () => {

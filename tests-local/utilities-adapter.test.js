@@ -14,6 +14,7 @@ describe('UtilitiesAdapter', () => {
     mockUtilities = {
       sleep: jest.fn(),
       formatDate: jest.fn(() => '2026-01-01'),
+      getUuid: jest.fn(() => 'abcd-1234-efgh-5678'),
     };
     adapter = new UtilitiesAdapter(mockUtilities);
   });
@@ -43,6 +44,25 @@ describe('UtilitiesAdapter', () => {
 
       expect(mockUtilities.formatDate).toHaveBeenCalledWith(date, 'GMT', 'yyyy-MM-dd');
       expect(result).toBe('2026-01-01');
+    });
+  });
+
+  describe('getUuid', () => {
+    it('should delegate to Utilities.getUuid', () => {
+      const result = adapter.getUuid();
+      expect(mockUtilities.getUuid).toHaveBeenCalled();
+      expect(result).toBe('abcd-1234-efgh-5678');
+    });
+  });
+
+  describe('getScriptTimeZone', () => {
+    it('should delegate to Session.getScriptTimeZone()', () => {
+      global.Session = {
+        getScriptTimeZone: jest.fn(() => 'America/New_York'),
+      };
+      const result = adapter.getScriptTimeZone();
+      expect(global.Session.getScriptTimeZone).toHaveBeenCalled();
+      expect(result).toBe('America/New_York');
     });
   });
 });

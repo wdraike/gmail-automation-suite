@@ -59,14 +59,93 @@ class GmailAdapter {
   }
 
   /**
-   * Get or create a label (ensures label exists)
+   * Get a message by ID
    */
-  getOrCreateLabel(name) {
-    let label = this.getUserLabelByName(name);
-    if (!label) {
-      label = this.createLabel(name);
+  getMessageById(id) {
+    return this.gmail.getMessageById(id);
+  }
+
+  /**
+   * Safely get a label by name; returns null (not throw) on error.
+   * Relocated from the legacy GmailLabelService.getLabelSafe (D5).
+   */
+  getLabelSafe(labelName) {
+    try {
+      return this.getUserLabelByName(labelName);
+    } catch (error) {
+      Logger.log(`Label not found: ${labelName}`);
+      return null;
     }
-    return label;
+  }
+
+  /**
+   * Get or create a Gmail label, creating each level of a nested path
+   * (e.g. "Work/Projects/Q1") as needed. Relocated from the legacy
+   * GmailLabelService.getOrCreateLabel (D5) so callers consolidate on
+   * GmailAdapter.
+   */
+  getOrCreateLabel(labelPath) {
+    let label = this.getUserLabelByName(labelPath);
+    if (label) return label;
+
+    if (labelPath.includes('/')) {
+      const parts = labelPath.split('/');
+      let currentPath = '';
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        if (!this.getUserLabelByName(currentPath)) {
+          this.createLabel(currentPath);
+          Logger.log(`Created label: ${currentPath}`);
+        }
+      }
+      return this.getUserLabelByName(labelPath);
+    }
+
+    return this.createLabel(labelPath);
+  }
+
+  /**
+   * Get threads from a label with pagination. Returns [] when the label does
+   * not exist. Relocated from the legacy GmailThreadService.getThreadsFromLabel
+   * (D5).
+   */
+  getThreadsFromLabel(labelName, start = 0, max = 100) {
+    try {
+      const label = this.getLabelSafe(labelName);
+      if (!label) return [];
+      return label.getThreads(start, max);
+    } catch (error) {
+      Logger.log(`Error getting threads from ${labelName}: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Extract metadata for a thread. Returns null on error. Relocated from the
+   * legacy GmailThreadService.getThreadMetadata (D5).
+   */
+  getThreadMetadata(thread) {
+    try {
+      const messages = thread.getMessages();
+      const firstMessage = messages[0];
+      const lastMessage = messages[messages.length - 1];
+
+      return {
+        id: thread.getId(),
+        subject: thread.getFirstMessageSubject(),
+        messageCount: messages.length,
+        isUnread: thread.isUnread(),
+        isImportant: thread.isImportant(),
+        labels: thread.getLabels().map(l => l.getName()),
+        firstMessageDate: firstMessage.getDate(),
+        lastMessageDate: lastMessage.getDate(),
+        from: firstMessage.getFrom(),
+        hasAttachments: messages.some(m => m.getAttachments().length > 0)
+      };
+    } catch (error) {
+      Logger.log(`Error getting thread metadata: ${error}`);
+      return null;
+    }
   }
 
   /**
