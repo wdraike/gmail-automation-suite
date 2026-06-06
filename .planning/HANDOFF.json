@@ -1,29 +1,42 @@
 {
-  "last_leg": "fix-nojobs-output-truncation",
+  "last_leg": "full-hexagonal-conversion",
+  "status": "complete",
   "verdict": "PASS",
   "completed": "2026-06-06",
   "deployed": true,
-  "tests": "574 passed / 0 failed / 9 skipped (architecture-boundary green)",
-  "root_cause": "Gemini OUTPUT truncation at maxOutputTokens=8192. buildExtractionPrompt injected 17-32 tracking URLs + up to 30 anchor pairs and asked Gemini to echo a long redirect URL into every job's jobUrl. A 20-25 job digest needed >8192 output tokens -> finishReason=MAX_TOKENS -> JSON array cut off mid-record with no closing ] -> extractor /\\[[\\s\\S]*\\]/ regex returned null -> [] -> processOneEmail misfiled the email as NoJobs.",
-  "fix": [
-    "extractor.js buildExtractionPrompt: removed urlSection + anchorSection injection and the jobUrl schema field/rules. Kept company/companyDescription/jobTitle/location/min+maxSalary/salaryPeriod/employmentType/workArrangement/experienceLevel/confidence.",
-    "extractJobDetailsSimple: stopped building/passing urlSection/anchorSection (removed dead URL filter + dedup block + ANCHOR_NOISE_DOMAINS/ANCHOR_TRACKING_SUBDOMAIN_RE constants). Job URL and URL Status sheet columns kept but always set to '' (removed feature, not a fallback). extractTextFromHtml still returns extractedUrls/anchorPairs for signature stability.",
-    "Hardened parser: new salvageTruncatedJobArray() recovers complete records from a truncated array (substring first [ -> last } + ]) on both the null-regex-match and JSON.parse-throw paths; returns [] when unsalvageable, then extractJobsFallback. Documented as the approved recovery for MAX_TOKENS truncation.",
-    "api-service.js callGemini: logs Gemini finishReason and emits a distinct 'output was truncated' warning on MAX_TOKENS. maxOutputTokens UNCHANGED (8192). 429/503 backoff UNCHANGED."
+  "pushed_to_github": true,
+  "git_range": "f40da67..3d29c80",
+  "summary": "Converted the ENTIRE application to hexagonal architecture. The adapter ring (src/core/services/**) is now the single SDK-touching layer; features, ui, utils, and non-adapter core all route platform access through ports via the serviceFactory seam. Documented (ADR-001 + ARCHITECTURE.md + src/CLAUDE.md + cookie SKILL.md), tested (8 adapters unit-tested + expanded boundary guard with per-directory planted-violation self-tests), reviewed (Oscar PASS each wave), built + deployed (clasp push) and pushed (git push origin master).",
+  "waves": [
+    {"wave": 1, "commit": "9ba02c3", "desc": "ADR-001 + adapter ring completion (HttpAdapter, CacheAdapter, UtilitiesAdapter.getUuid/getScriptTimeZone, GmailAdapter thread/message/label methods)"},
+    {"wave": 2, "commit": "1ee9d25", "desc": "src/ui/** routed through ports (dashboardController, dashboard-api, gmail-addon)"},
+    {"wave": 3, "commit": "32a6fbc", "desc": "config.js + label-cache.js routed through ports; gmail-service.js DELETED (D5); sheets-handler Session leak fixed"},
+    {"wave": 4, "commit": "c413dd6", "desc": "api-service.js + cache-service.js relocated behind the adapter ring (D2, D3)"},
+    {"wave": 5, "commit": "5650a6c", "desc": "boundary guard expanded to all 4 non-adapter layers + planted-violation self-tests; src/CLAUDE.md + cookie SKILL.md updated"},
+    {"wave": 6, "commit": "3d29c80", "desc": "ARCHITECTURE.md; final Oscar pass; clasp push; git push"}
   ],
-  "verification": "Oscar PASS. Ernie PASS (no Critical/Warning). Telly PASS. Zoe PASS via live mutation testing (salvage return-[] -> RED; prompt re-inject -> RED; MAX_TOKENS warning false-pass found and FIXED in-review so warning branch is now isolated). Sources restored byte-identical after mutations.",
-  "files_changed": [
-    "src/features/job-finder/extractor.js",
-    "src/core/api-service.js",
-    "tests-local/job-finder-extractor.test.js",
-    "tests-local/api-service.test.js",
-    ".planning/kermit/session.json"
+  "tests": "590 passed / 0 failed / 9 skipped (baseline 574; +16 net new excluding 27 removed legacy gmail-service tests)",
+  "boundary_scope_expanded_to": ["features", "ui", "utils", "core-excl-services"],
+  "adapters_added_or_relocated": [
+    "HttpAdapter (new, wraps UrlFetchApp)",
+    "CacheAdapter (new, wraps CacheService.getScriptCache)",
+    "UtilitiesAdapter (extended: getUuid, getScriptTimeZone)",
+    "GmailAdapter (extended: getMessageById, getUserLabels, getLabelSafe, nested getOrCreateLabel, getThreadsFromLabel, getThreadMetadata)",
+    "api-service.js Gemini HTTP relocated behind HttpAdapter (D2)",
+    "cache-service.js storage relocated behind CacheAdapter/PropertiesAdapter/DriveAdapter (D3)"
   ],
-  "prior_leg": "fix-processjobemails-timeout (1e305cd, PASS, deployed)",
-  "backlog_items": [
-    "Full removal of the URL pathway: drop extractedUrls/anchorPairs params + extractAnchorPairs + Job URL/URL Status SHEET_COLUMNS entirely (kept this leg for sheet-schema compatibility).",
-    "Carried over: OPTION convert email HTML -> Markdown before Gemini.",
-    "Carried over: deprecate legacy src/core/gmail-service.js once non-feature callers migrate."
+  "gmail_service_deleted": true,
+  "docs_written": ["ADR-001-hexagonal.md", "ARCHITECTURE.md", "src/CLAUDE.md", "cookie SKILL.md (out-of-repo ~/.claude)"],
+  "remaining_violations": ["src/core/api-service.js callGeminiApi definition+export (lines 118, 888) — the ADR-001 D2 documented exception, whitelisted in the boundary test"],
+  "documented_exceptions": [
+    "D2: api-service.js defines/exports the callGeminiApi global the GeminiAdapter wraps (whitelisted for that one token; all its SDK access is via ports)",
+    "GmailAdapter.getAllLabels() returns [] on Gmail error (pre-existing behavior relocated verbatim)",
+    "D4: config.js NOTIFICATION_EMAIL (module-load Session call) removed entirely — zero consumers, so no runtime exception remains"
   ],
-  "summary": "Fixed NoJobs misfiling caused by Gemini output truncation: dropped URL/anchor/jobUrl output bloat from the extraction prompt and added an approved salvage parser for MAX_TOKENS-truncated arrays, plus finishReason logging. Behavior otherwise identical; maxOutputTokens untouched."
+  "backlog_items": [],
+  "notes": [
+    ".clasp.json is git-ignored; its filePushOrder entry for gmail-service.js was removed on-disk so clasp push stays valid.",
+    "GAS predeploy 'Sensitive Data Check' flags src/core/local-secrets.js (by-design git-ignored API-key override, deployed via clasp per the prior leg). All 4 architecture-relevant GAS checks PASS.",
+    "cookie SKILL.md lives in ~/.claude (out of repo) and was updated there to expand the BLOCK rule to all non-adapter layers."
+  ]
 }
