@@ -14,8 +14,16 @@ describe('SpreadsheetAdapter', () => {
       openByUrl: jest.fn(),
       getActiveSpreadsheet: jest.fn(),
       create: jest.fn(),
+      BandingTheme: { LIGHT_GREY: 'LIGHT_GREY_THEME' },
     };
     adapter = new SpreadsheetAdapter(mockSpreadsheetApp);
+  });
+
+  describe('getBandingTheme', () => {
+    it('should return the requested BandingTheme enum value', () => {
+      const result = adapter.getBandingTheme('LIGHT_GREY');
+      expect(result).toBe('LIGHT_GREY_THEME');
+    });
   });
 
   describe('openById', () => {

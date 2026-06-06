@@ -1,7 +1,31 @@
 /**
  * Job Finder Extractor Module
  * Handles extraction of job details from email content using Gemini API
+ *
+ * Platform access (Gemini, Properties) is routed exclusively through
+ * src/core/services ports via the serviceFactory (hexagonal-ports-refactor).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton (global in Apps Script, required in Node).
+ */
+function _exServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _exGemini() {
+  return _exServiceFactory().getGeminiAdapter();
+}
+
+function _exProps() {
+  return _exServiceFactory().getPropertiesAdapter();
+}
 
 // Module-level constants for anchor/URL noise filtering — hoisted to avoid
 // recreating these on every call to extractJobDetailsSimple.
@@ -237,7 +261,7 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
 
     try {
       // Call Gemini API
-      const geminiResponse = callGeminiApi(prompt, "job_extraction");
+      const geminiResponse = _exGemini().call(prompt, "job_extraction");
       
       if (!geminiResponse || !geminiResponse.response) {
         Logger.log("No response from Gemini API");
@@ -574,7 +598,7 @@ function logJobFinderGeminiInteraction(type, content) {
     // Could also save to a sheet or properties for debugging
     if (type === "error") {
       // Store errors for later analysis
-      const errors = PropertiesService.getScriptProperties().getProperty("GEMINI_ERRORS");
+      const errors = _exProps().getProperty("GEMINI_ERRORS");
       const errorList = errors ? JSON.parse(errors) : [];
       errorList.push(logEntry);
       
@@ -583,7 +607,7 @@ function logJobFinderGeminiInteraction(type, content) {
         errorList.shift();
       }
       
-      PropertiesService.getScriptProperties().setProperty(
+      _exProps().setProperty(
         "GEMINI_ERRORS",
         JSON.stringify(errorList)
       );

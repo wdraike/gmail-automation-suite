@@ -1,7 +1,31 @@
 /**
  * Job Finder Sheets Module
  * Handles all spreadsheet operations for job listings
+ *
+ * Platform access (Sheets, Utilities) is routed exclusively through
+ * src/core/services ports via the serviceFactory (hexagonal-ports-refactor).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton (global in Apps Script, required in Node).
+ */
+function _shServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _shSheets() {
+  return _shServiceFactory().getSpreadsheetAdapter();
+}
+
+function _shUtils() {
+  return _shServiceFactory().getUtilitiesAdapter();
+}
 
 /**
  * Add a job to the spreadsheet
@@ -21,7 +45,7 @@ function addJobToSpreadsheet(job, emailDate = null, emailSource = '', emailTitle
       return false;
     }
 
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = _shSheets().openById(spreadsheetId);
     const sheetName = JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME;
 
     Logger.log(`addJobToSpreadsheet: writing to spreadsheetId=${spreadsheetId} url=${spreadsheet.getUrl()} tab="${sheetName}"`);
@@ -123,7 +147,7 @@ function setupSheetHeaders(sheet) {
     const fullRange = sheet.getRange(1, 1, sheet.getMaxRows(), headers.length);
     const existingBandings = sheet.getBandings();
     existingBandings.forEach(banding => banding.remove());
-    fullRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+    fullRange.applyRowBanding(_shSheets().getBandingTheme("LIGHT_GREY"), true, false);
 
     // Set column widths
     setColumnWidths(sheet, headers);
@@ -283,7 +307,7 @@ function formatJobRow(sheet, row) {
     const lastColumn = sheet.getLastColumn();
 
     // Row striping is handled once by native row banding in setupSheetHeaders
-    // (SpreadsheetApp.BandingTheme.LIGHT_GREY). A per-row row % 2 background was
+    // (_shSheets().getBandingTheme("LIGHT_GREY")). A per-row row % 2 background was
     // removed here because it desyncs after any row is deleted.
 
     // Format salary columns
@@ -334,7 +358,7 @@ function getJobStatistics() {
       return { error: "No spreadsheet configured" };
     }
     
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = _shSheets().openById(spreadsheetId);
     const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
     
     if (!sheet || sheet.getLastRow() <= 1) {
@@ -395,7 +419,7 @@ function formatDateTime(date) {
   if (!date) return "";
   
   try {
-    return Utilities.formatDate(
+    return _shUtils().formatDate(
       date,
       Session.getScriptTimeZone(),
       "yyyy-MM-dd HH:mm:ss"

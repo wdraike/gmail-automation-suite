@@ -38,6 +38,14 @@ class SpreadsheetAdapter {
   }
 
   /**
+   * Get a BandingTheme enum value by name (e.g. 'LIGHT_GREY').
+   * Lets feature code apply row banding without referencing SpreadsheetApp directly.
+   */
+  getBandingTheme(themeName) {
+    return this.spreadsheetApp.BandingTheme[themeName];
+  }
+
+  /**
    * Get or create a sheet in a spreadsheet
    */
   getOrCreateSheet(spreadsheet, sheetName) {

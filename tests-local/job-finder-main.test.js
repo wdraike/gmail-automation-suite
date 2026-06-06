@@ -24,21 +24,34 @@ global.getJobFinderNoJobsLabel = jest.fn(() => "📬 JobAlerts/NoJobs");
 // NOTE: getter mocks above are initialized at module-load time (required for require() to work).
 // They are re-assigned to their default implementations in beforeEach (WARN-2 fix).
 
-global.GmailService = {
-  labels: {
-    getLabelSafe: jest.fn((name) => ({
-      getName: jest.fn(() => name),
-      getThreads: jest.fn(() => []),
-      addToThread: jest.fn(),
-      removeFromThread: jest.fn(),
-    })),
-    getOrCreateLabel: jest.fn((name) => ({
-      getName: jest.fn(() => name),
-      addToThread: jest.fn(),
-      removeFromThread: jest.fn(),
-    })),
-  },
-};
+// Gmail label access is routed through GmailAdapter (serviceFactory). Tests drive
+// it by mocking the underlying GmailApp.getUserLabelByName / createLabel, which the
+// adapter delegates to. A per-test label registry backs these mocks.
+let _labelRegistry = {};
+
+function _defaultLabelObj(name) {
+  return {
+    getName: jest.fn(() => name),
+    getThreads: jest.fn(() => []),
+  };
+}
+
+global.GmailApp.getUserLabelByName = jest.fn((name) =>
+  Object.prototype.hasOwnProperty.call(_labelRegistry, name) ? _labelRegistry[name] : null
+);
+global.GmailApp.createLabel = jest.fn((name) => {
+  const obj = _defaultLabelObj(name);
+  _labelRegistry[name] = obj;
+  return obj;
+});
+
+// Helper: register label objects for a test. Pass a map of name -> labelObject
+// (or name -> getThreads-array shorthand handled by callers).
+function setLabels(map) {
+  _labelRegistry = Object.assign({}, map);
+}
+
+const { serviceFactory } = require("../src/core/services/index.js");
 
 global.callGeminiApi = jest.fn();
 global.sendNotificationEmail = jest.fn();
@@ -56,6 +69,18 @@ const main = require("../src/features/job-finder/main.js");
 describe("job-finder main", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset port adapters so each test gets fresh adapters bound to current globals.
+    serviceFactory.reset();
+    // Reset label registry and re-arm the GmailApp label mocks (clearAllMocks wiped impls).
+    _labelRegistry = {};
+    global.GmailApp.getUserLabelByName.mockImplementation((name) =>
+      Object.prototype.hasOwnProperty.call(_labelRegistry, name) ? _labelRegistry[name] : null
+    );
+    global.GmailApp.createLabel.mockImplementation((name) => {
+      const obj = _defaultLabelObj(name);
+      _labelRegistry[name] = obj;
+      return obj;
+    });
     // WARN-2: reset getter mock implementations every test so overrides in one test don't bleed
     global.getJobFinderSourceLabel.mockImplementation(() => "📬 JobAlerts");
     global.getJobFinderProcessedLabel.mockImplementation(() => "📬 JobAlerts/Processed");
@@ -93,7 +118,7 @@ describe("job-finder main", () => {
 
   describe("getEmailThreadsToProcess", () => {
     it("returns error when source label not found", () => {
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+      setLabels({});
       const result = main.getEmailThreadsToProcess();
       expect(result.success).toBe(false);
       expect(result.message).toContain("not found");
@@ -102,12 +127,7 @@ describe("job-finder main", () => {
 
     it("returns threads from source label", () => {
       const threads = [{ id: "t1" }];
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") {
-          return { getThreads: jest.fn(() => threads) };
-        }
-        return null;
-      });
+      setLabels({ "📬 JobAlerts": { getThreads: jest.fn(() => threads) } });
       const result = main.getEmailThreadsToProcess();
       expect(result.success).toBe(true);
       expect(result.threads).toEqual(threads);
@@ -115,24 +135,16 @@ describe("job-finder main", () => {
 
     it("fetches new threads using the limit from JOB_FINDER_CONFIG (0, 10)", () => {
       const getThreadsSpy = jest.fn(() => []);
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return { getThreads: getThreadsSpy };
-        return null;
-      });
+      setLabels({ "📬 JobAlerts": { getThreads: getThreadsSpy } });
       main.getEmailThreadsToProcess();
       expect(getThreadsSpy).toHaveBeenCalledWith(0, 10);
     });
 
     it("trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (10)", () => {
       const newThreads = Array.from({ length: 10 }, (_, i) => ({ id: `new${i}` }));
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") {
-          return { getThreads: jest.fn(() => newThreads) };
-        }
-        if (name === "📬 JobAlerts/RateLimited") {
-          return { getThreads: jest.fn(() => [{ id: "rl1" }, { id: "rl2" }]) };
-        }
-        return null;
+      setLabels({
+        "📬 JobAlerts": { getThreads: jest.fn(() => newThreads) },
+        "📬 JobAlerts/RateLimited": { getThreads: jest.fn(() => [{ id: "rl1" }, { id: "rl2" }]) },
       });
       const result = main.getEmailThreadsToProcess();
       expect(result.threads.length).toBe(10);
@@ -142,10 +154,9 @@ describe("job-finder main", () => {
     });
 
     it("prepends rate-limited threads when available", () => {
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [{ id: "new1" }]) };
-        if (name === "📬 JobAlerts/RateLimited") return { getThreads: jest.fn(() => [{ id: "rl1" }]) };
-        return null;
+      setLabels({
+        "📬 JobAlerts": { getThreads: jest.fn(() => [{ id: "new1" }]) },
+        "📬 JobAlerts/RateLimited": { getThreads: jest.fn(() => [{ id: "rl1" }]) },
       });
       const result = main.getEmailThreadsToProcess();
       expect(result.threads.length).toBe(2);
@@ -212,10 +223,7 @@ describe("job-finder main", () => {
           getFrom: jest.fn(() => "jobs@example.com"),
         }]),
       };
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [thread]) };
-        return null;
-      });
+      setLabels({ "📬 JobAlerts": { getThreads: jest.fn(() => [thread]) } });
       global.extractJobDetailsSimple = jest.fn(() => [
         { Company: "Acme", "Job Title": "Dev" },
       ]);
@@ -226,10 +234,7 @@ describe("job-finder main", () => {
     });
 
     it("returns no-threads message when no threads found", () => {
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => []) };
-        return null;
-      });
+      setLabels({ "📬 JobAlerts": { getThreads: jest.fn(() => []) } });
       const result = main.processJobEmailsMain();
       expect(result.success).toBe(true);
       expect(result.message).toContain("No new job emails");
@@ -244,10 +249,7 @@ describe("job-finder main", () => {
           getFrom: jest.fn(() => "jobs@example.com"),
         }]),
       };
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return { getThreads: jest.fn(() => [thread]) };
-        return null;
-      });
+      setLabels({ "📬 JobAlerts": { getThreads: jest.fn(() => [thread]) } });
       global.extractJobDetailsSimple = jest.fn(() => {
         throw new Error("RATE_LIMIT_REACHED");
       });
@@ -281,14 +283,10 @@ describe("job-finder main", () => {
       const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
       const processedLabelObj = { getName: jest.fn(() => "📬 JobAlerts/Processed") };
 
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        if (name === "📬 JobAlerts/Processed") return processedLabelObj;
-        return { getName: jest.fn(() => name) };
-      });
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return sourceLabelObj;
-        return null;
+      setLabels({
+        "📬 JobAlerts/NoJobs": noJobsLabelObj,
+        "📬 JobAlerts/Processed": processedLabelObj,
+        "📬 JobAlerts": sourceLabelObj,
       });
 
       const result = main.processOneEmail(thread, 1, 1);
@@ -304,13 +302,9 @@ describe("job-finder main", () => {
     it("markEmailAsNoJobs applies no-jobs label, removes source label, archives", () => {
       const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
       const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        return { getName: jest.fn(() => name) };
-      });
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return sourceLabelObj;
-        return null;
+      setLabels({
+        "📬 JobAlerts/NoJobs": noJobsLabelObj,
+        "📬 JobAlerts": sourceLabelObj,
       });
 
       const thread = {
@@ -416,12 +410,10 @@ describe("job-finder main", () => {
 
       const rateLimitLabelObj = { getName: jest.fn(() => "📬 JobAlerts/RateLimited") };
       const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/RateLimited") return rateLimitLabelObj;
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        return { getName: jest.fn(() => name) };
+      setLabels({
+        "📬 JobAlerts/RateLimited": rateLimitLabelObj,
+        "📬 JobAlerts/NoJobs": noJobsLabelObj,
       });
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
 
       const result = main.processOneEmail(thread, 1, 1);
 
@@ -458,11 +450,7 @@ describe("job-finder main", () => {
       global.addJobToSpreadsheet = jest.fn(() => true);
 
       const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        return { getName: jest.fn(() => name) };
-      });
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+      setLabels({ "📬 JobAlerts/NoJobs": noJobsLabelObj });
 
       const result = main.processOneEmail(thread, 1, 1);
 
@@ -481,7 +469,7 @@ describe("job-finder main", () => {
       ]);
       global.isValidJobListing = jest.fn(() => true);
       global.addJobToSpreadsheet = jest.fn(() => true);
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+      setLabels({});
 
       const result = main.processOneEmail(thread, 1, 1);
 
@@ -599,14 +587,10 @@ describe("job-finder main", () => {
       const sourceLabelObj = { getName: jest.fn(() => "📬 JobAlerts") };
       const rateLimitLabelObj = { getName: jest.fn(() => "📬 JobAlerts/RateLimited") };
 
-      global.GmailService.labels.getOrCreateLabel = jest.fn((name) => {
-        if (name === "📬 JobAlerts/NoJobs") return noJobsLabelObj;
-        return { getName: jest.fn(() => name) };
-      });
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "📬 JobAlerts") return sourceLabelObj;
-        if (name === "📬 JobAlerts/RateLimited") return rateLimitLabelObj;
-        return null;
+      setLabels({
+        "📬 JobAlerts/NoJobs": noJobsLabelObj,
+        "📬 JobAlerts": sourceLabelObj,
+        "📬 JobAlerts/RateLimited": rateLimitLabelObj,
       });
 
       const thread = {
@@ -625,8 +609,7 @@ describe("job-finder main", () => {
 
     it("does not error when rate-limit label is absent", () => {
       const noJobsLabelObj = { getName: jest.fn(() => "📬 JobAlerts/NoJobs") };
-      global.GmailService.labels.getOrCreateLabel = jest.fn(() => noJobsLabelObj);
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+      setLabels({ "📬 JobAlerts/NoJobs": noJobsLabelObj });
 
       const thread = {
         addLabel: jest.fn(),
@@ -645,22 +628,19 @@ describe("job-finder main", () => {
       global.getJobFinderRateLimitLabel.mockImplementation(() => "MyCustomJobs/Queue");
 
       const threads = [{ id: "t1" }];
-      global.GmailService.labels.getLabelSafe = jest.fn((name) => {
-        if (name === "MyCustomJobs") return { getThreads: jest.fn(() => threads) };
-        return null;
-      });
+      setLabels({ "MyCustomJobs": { getThreads: jest.fn(() => threads) } });
 
       const result = main.getEmailThreadsToProcess();
 
       expect(result.success).toBe(true);
       expect(result.threads).toEqual(threads);
-      // Confirm getLabelSafe was called with the custom label, not the default
-      expect(global.GmailService.labels.getLabelSafe).toHaveBeenCalledWith("MyCustomJobs");
+      // Confirm the source label lookup used the custom label, not the default
+      expect(global.GmailApp.getUserLabelByName).toHaveBeenCalledWith("MyCustomJobs");
     });
 
     it("returns not-found error when custom label does not exist in Gmail", () => {
       global.getJobFinderSourceLabel.mockImplementation(() => "NonExistentLabel");
-      global.GmailService.labels.getLabelSafe = jest.fn(() => null);
+      setLabels({});
 
       const result = main.getEmailThreadsToProcess();
 

@@ -5,6 +5,7 @@
 
 const { MockSpreadsheetApp, MockSpreadsheet, MockSheet, MockRange, BandingTheme } = require('./mocks/spreadsheet.mock');
 const { createJobData, createJobBatch } = require('./fixtures/job-factory');
+const { serviceFactory } = require('../src/core/services/index.js');
 
 // Setup mocks
 beforeEach(() => {
@@ -46,6 +47,10 @@ beforeEach(() => {
 
   // Production code resolves the spreadsheet id via getJobFinderSpreadsheetId
   global.getJobFinderSpreadsheetId = jest.fn(() => 'test-spreadsheet-id');
+
+  // Rebuild port adapters so they bind to the freshly-created global mocks above
+  // (Sheets/Utilities are accessed through serviceFactory ports).
+  serviceFactory.reset();
 });
 
 // Mock setColumnWidths and formatJobRow before loading the module

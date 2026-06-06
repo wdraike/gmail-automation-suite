@@ -3,12 +3,16 @@
  * Focus on extractJobDetailsSimple and related helpers.
  */
 
-// Mock globals before requiring the module
+// Mock globals before requiring the module.
+// Gemini + Properties access is routed through the serviceFactory ports; tests
+// drive Gemini by reassigning global.callGeminiApi and resetting the factory so a
+// fresh GeminiAdapter binds to the current global each test.
 global.callGeminiApi = jest.fn();
 
 const fs = require("fs");
 const path = require("path");
 
+const { serviceFactory } = require("../src/core/services/index.js");
 const extractor = require("../src/features/job-finder/extractor.js");
 
 const GLASSDOOR_FIXTURE = fs.readFileSync(
@@ -23,6 +27,9 @@ const EXTRACTION_MAX_LENGTH = 30000;
 describe("extractor", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Rebuild adapters each test so the GeminiAdapter binds to the per-test
+    // global.callGeminiApi reassignment.
+    serviceFactory.reset();
   });
 
   describe("extractAnchorPairs", () => {

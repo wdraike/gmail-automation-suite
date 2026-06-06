@@ -1,7 +1,42 @@
 /**
  * Job Finder Main Module
  * Core job email processing functionality - refactored for clarity
+ *
+ * Platform access (Gmail, Sheets, Properties, Utilities) is routed exclusively
+ * through src/core/services ports via the serviceFactory. No direct Google SDK
+ * references live in this file (hexagonal-ports-refactor).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton.
+ * In Apps Script it is the global from src/core/services/index.js (concatenated
+ * into global scope). In Node it is required for testability.
+ */
+function _jfServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _jfGmail() {
+  return _jfServiceFactory().getGmailAdapter();
+}
+
+function _jfSheets() {
+  return _jfServiceFactory().getSpreadsheetAdapter();
+}
+
+function _jfProps() {
+  return _jfServiceFactory().getPropertiesAdapter();
+}
+
+function _jfUtils() {
+  return _jfServiceFactory().getUtilitiesAdapter();
+}
 
 /**
  * Main orchestrator function to process job alert emails
@@ -99,7 +134,7 @@ function getEmailThreadsToProcess() {
   try {
     // Get the source label (e.g., "JobAlerts")
     const sourceLabelName = getJobFinderSourceLabel();
-    const sourceLabel = GmailService.labels.getLabelSafe(sourceLabelName);
+    const sourceLabel = _jfGmail().getUserLabelByName(sourceLabelName);
     if (!sourceLabel) {
       return {
         success: false,
@@ -116,7 +151,7 @@ function getEmailThreadsToProcess() {
     Logger.log(`Found ${threads.length} new thread(s) in "${sourceLabelName}" (max ${MAX_EMAILS_PER_RUN} per run)`);
 
     // Check for rate-limited threads from previous runs (prioritize these)
-    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
+    const rateLimitLabel = _jfGmail().getUserLabelByName(getJobFinderRateLimitLabel());
     if (rateLimitLabel) {
       const rateLimitedThreads = rateLimitLabel.getThreads(0, 3);
       if (rateLimitedThreads.length > 0) {
@@ -227,9 +262,9 @@ function extractJobsFromEmail(emailContent) {
  */
 function markEmailAsProcessed(thread) {
   try {
-    const processedLabel = GmailService.labels.getOrCreateLabel(getJobFinderProcessedLabel());
-    const sourceLabel = GmailService.labels.getLabelSafe(getJobFinderSourceLabel());
-    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
+    const processedLabel = _jfGmail().getOrCreateLabel(getJobFinderProcessedLabel());
+    const sourceLabel = _jfGmail().getUserLabelByName(getJobFinderSourceLabel());
+    const rateLimitLabel = _jfGmail().getUserLabelByName(getJobFinderRateLimitLabel());
 
     thread.addLabel(processedLabel);
     if (sourceLabel) thread.removeLabel(sourceLabel);
@@ -250,9 +285,9 @@ function markEmailAsProcessed(thread) {
  */
 function markEmailAsNoJobs(thread) {
   try {
-    const noJobsLabel = GmailService.labels.getOrCreateLabel(getJobFinderNoJobsLabel());
-    const sourceLabel = GmailService.labels.getLabelSafe(getJobFinderSourceLabel());
-    const rateLimitLabel = GmailService.labels.getLabelSafe(getJobFinderRateLimitLabel());
+    const noJobsLabel = _jfGmail().getOrCreateLabel(getJobFinderNoJobsLabel());
+    const sourceLabel = _jfGmail().getUserLabelByName(getJobFinderSourceLabel());
+    const rateLimitLabel = _jfGmail().getUserLabelByName(getJobFinderRateLimitLabel());
 
     thread.addLabel(noJobsLabel);
     if (sourceLabel) thread.removeLabel(sourceLabel);
@@ -272,7 +307,7 @@ function markEmailAsNoJobs(thread) {
  */
 function markEmailAsRateLimited(thread) {
   try {
-    const rateLimitLabel = GmailService.labels.getOrCreateLabel(getJobFinderRateLimitLabel());
+    const rateLimitLabel = _jfGmail().getOrCreateLabel(getJobFinderRateLimitLabel());
     thread.addLabel(rateLimitLabel);
     Logger.log(`Marked thread as rate-limited for later processing`);
 
@@ -429,7 +464,7 @@ function processEmailBatch(threads) {
 
       // Brief pause between emails
       if (i < threads.length - 1) {
-        Utilities.sleep(500);
+        _jfUtils().sleep(500);
       }
     }
 
@@ -458,11 +493,11 @@ function initializeJobFinder() {
 
     if (!spreadsheetId) {
       // Create new spreadsheet
-      const spreadsheet = SpreadsheetApp.create("Job Listings");
+      const spreadsheet = _jfSheets().create("Job Listings");
       spreadsheetId = spreadsheet.getId();
 
       // Save the ID
-      PropertiesService.getScriptProperties().setProperty(
+      _jfProps().setProperty(
         "JOB_FINDER_SPREADSHEET_ID",
         spreadsheetId
       );
@@ -481,7 +516,7 @@ function initializeJobFinder() {
     } else {
       // Existing spreadsheet: its header row may predate column changes. Reconcile it to
       // SHEET_COLUMNS once per execution so appendRow writes land under the correct columns.
-      const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      const spreadsheet = _jfSheets().openById(spreadsheetId);
       const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
       if (sheet) {
         auditAndRepairSheetHeaders(sheet);
@@ -496,7 +531,7 @@ function initializeJobFinder() {
     ];
 
     for (const labelName of requiredLabels) {
-      GmailService.labels.getOrCreateLabel(labelName);
+      _jfGmail().getOrCreateLabel(labelName);
     }
 
     Logger.log("Job finder initialized successfully");
@@ -532,7 +567,7 @@ function auditJobSheetHeaders() {
       return { success: false, message: "No spreadsheet ID configured" };
     }
 
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = _jfSheets().openById(spreadsheetId);
     const sheet = spreadsheet.getSheetByName(JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME);
     if (!sheet) {
       Logger.log(`auditJobSheetHeaders: sheet "${JOB_FINDER_CONFIG.ACTIVE_SHEET_NAME}" not found`);
@@ -553,7 +588,7 @@ function auditJobSheetHeaders() {
  * @returns {string|null} Spreadsheet ID or null
  */
 function getJobFinderSpreadsheetId() {
-  return PropertiesService.getScriptProperties().getProperty("JOB_FINDER_SPREADSHEET_ID");
+  return _jfProps().getProperty("JOB_FINDER_SPREADSHEET_ID");
 }
 
 /**
@@ -563,7 +598,7 @@ function getJobFinderSpreadsheetId() {
  */
 function updateJobFinderConfig(newConfig) {
   try {
-    const props = PropertiesService.getScriptProperties();
+    const props = _jfProps();
 
     // Update each config value
     Object.entries(newConfig).forEach(([key, value]) => {
