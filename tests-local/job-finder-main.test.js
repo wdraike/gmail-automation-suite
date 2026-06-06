@@ -10,6 +10,7 @@ global.JOB_FINDER_CONFIG = {
   RATE_LIMIT_LABEL: "📬 JobAlerts/RateLimited",
   ACTIVE_SHEET_NAME: "Jobs",
   MAX_EMAILS_PER_RUN: 10,
+  EXECUTION_BUDGET_MS: 290000,
   SHEET_COLUMNS: [
     "Company", "Company Description", "Job Title", "Location",
     "Minimum Salary", "Maximum Salary", "Salary Period", "Job URL",
@@ -619,6 +620,80 @@ describe("job-finder main", () => {
 
       expect(() => main.markEmailAsNoJobs(thread)).not.toThrow();
       expect(thread.removeLabel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("processEmailBatch execution-budget deadline guard", () => {
+    // fix-processjobemails-timeout: a wall-clock deadline guard must stop the
+    // per-email loop once EXECUTION_BUDGET_MS elapses, deferring the remaining
+    // threads to the next hourly run (they keep their source label, so the next
+    // run picks them up). This prevents the Apps Script 6-min hard cap kill.
+    function makeProcessableThread(id) {
+      return {
+        _id: id,
+        getMessages: jest.fn(() => [{
+          getSubject: jest.fn(() => `Jobs ${id}`),
+          getBody: jest.fn(() => "<p>Apply</p>"),
+          getDate: jest.fn(() => new Date()),
+          getFrom: jest.fn(() => "jobs@example.com"),
+        }]),
+        addLabel: jest.fn(),
+        removeLabel: jest.fn(),
+        moveToArchive: jest.fn(),
+      };
+    }
+
+    afterEach(() => {
+      if (Date.now.mockRestore) Date.now.mockRestore();
+    });
+
+    it("stops the loop and defers remaining threads once the budget is exceeded", () => {
+      global.extractJobDetailsSimple = jest.fn(() => [{ Company: "Acme", "Job Title": "Dev" }]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const threads = [
+        makeProcessableThread("t1"),
+        makeProcessableThread("t2"),
+        makeProcessableThread("t3"),
+      ];
+
+      // Clock: start=0, then before t1 still 0 (under budget), before t2 jump
+      // past the budget so the loop stops before processing t2 and t3.
+      const budget = JOB_FINDER_CONFIG.EXECUTION_BUDGET_MS;
+      const ticks = [0, 0, budget + 1, budget + 1];
+      let tick = 0;
+      jest.spyOn(Date, "now").mockImplementation(() => {
+        const v = ticks[Math.min(tick, ticks.length - 1)];
+        tick++;
+        return v;
+      });
+
+      const result = main.processEmailBatch(threads);
+
+      // Only t1 processed; t2 & t3 deferred (their getMessages never called).
+      expect(threads[0].getMessages).toHaveBeenCalled();
+      expect(threads[1].getMessages).not.toHaveBeenCalled();
+      expect(threads[2].getMessages).not.toHaveBeenCalled();
+      expect(result.processedCount).toBe(1);
+      expect(result.deferredCount).toBe(2);
+    });
+
+    it("processes all threads when the budget is never exceeded", () => {
+      global.extractJobDetailsSimple = jest.fn(() => [{ Company: "Acme", "Job Title": "Dev" }]);
+      global.isValidJobListing = jest.fn(() => true);
+      global.addJobToSpreadsheet = jest.fn(() => true);
+
+      const threads = [makeProcessableThread("t1"), makeProcessableThread("t2")];
+
+      jest.spyOn(Date, "now").mockImplementation(() => 0);
+
+      const result = main.processEmailBatch(threads);
+
+      expect(threads[0].getMessages).toHaveBeenCalled();
+      expect(threads[1].getMessages).toHaveBeenCalled();
+      expect(result.processedCount).toBe(2);
+      expect(result.deferredCount).toBe(0);
     });
   });
 

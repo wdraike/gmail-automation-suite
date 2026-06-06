@@ -1,7 +1,7 @@
-# Zoe Review — 2026-06-06 (fix-nojobs-false-negatives)
+# Zoe Review — 2026-06-06 (fix-processjobemails-timeout)
 
 ## Summary
-The real bug (zero-width obfuscation + missing digest prompt guidance) is solidly covered by mutation-verified tests. However, two of the seven new tests are VACUOUS for the supplied fixture: they pass even when the new comment-strip and VML-strip code is removed, because the pre-existing generic `<[^>]+>` tag-strip already eliminates that noise for this specific email. No false-pass on the actually-fixed behavior. Verdict: WARN (overclaiming regression guards), not BLOCK.
+Both behavior changes (deadline guard + in-process sleep caps) are guarded by mutation-verified tests. I ran two live mutations and confirmed each produces RED, then restored the source. No false passes on the fixed behavior. One WARN on a latent vacuous-truth in the sleep assertion, but it is backstopped by the throw + no-fetch assertions in the same test, which the mutation proved are the real guards. Verdict: PASS (WARN noted, not blocking).
 
 ## Telly Audit
 
@@ -13,22 +13,20 @@ The real bug (zero-width obfuscation + missing digest prompt guidance) is solidl
 ### WARN Findings
 | # | Finding | Evidence | File | Remediation |
 |---|---------|----------|------|-------------|
-| 1 | Test "retains Glassdoor tail job markers within the prompt budget" passes even with the new comment-strip + VML-strip lines removed (script/style kept). Mutation: removed lines 406 (`<!--...-->`) + 412–413 (VML) → 57/57 still green. The generic `<[^>]+>` strip already handles this fixture's noise. | extractor.js:406,412-413 vs test:88-101 | tests-local/job-finder-extractor.test.js | Add a fixture/case where tag-strip alone fails (e.g. MSO `<!--[if mso]>` wrapping visible-looking junk text, or VML with inner text that survives tag-strip), so the test actually depends on the new code. OR relabel as defense-in-depth and accept it does not regress-guard the new lines. |
-| 2 | Test "strips MSO conditional / VML / CSS noise from Glassdoor HTML" — same vacuity. Asserts absence of roundrect/mso-/@font-face/v-text-anchor, but these are absent for this fixture even without the new strips (generic tag-strip + style-strip already remove them). | extractor.js:406,412-413 vs test:103-109 | tests-local/job-finder-extractor.test.js | Same as #1. |
+| 1 | The pre-wait test's sleep assertion `slept.every(ms => ms <= MAX_INPROCESS_WAIT_MS)` is vacuously true if `Utilities.sleep` is never called (empty array → `.every()` === true). On its own it would NOT catch a regression that skips sleeping entirely. | tests-local/api-service.test.js, "does NOT sleep a long rate-limit pre-wait" | tests-local/api-service.test.js | Not blocking: the same test ALSO asserts `toThrow('RATE_LIMIT_REACHED')` and `UrlFetchApp.fetch` NOT called — the discriminating guards. Mutation (always-sleep) confirmed the test fails. Optional hardening: add `expect(slept).not.toContainEqual(expect.any(Number) > cap)` style or assert the specific 60100 value is absent. |
 
 ### PASS Verifications
 | # | Check | Status |
 |---|-------|--------|
-| 1 | Zero-width strip tests non-vacuous (synthetic + 99K fixture) | PASS — mutation: removing line 437 → both fail |
-| 2 | Digest-prompt guidance test non-vacuous | PASS — mutation: removing DIGEST block → test fails |
-| 3 | buildExtractionPrompt export + JSON contract assertions | PASS — meaningful substring checks |
-| 4 | Marker test mirrors real cleaning+truncation pipeline (not raw plainText) | PASS |
-| 5 | Full suite 543/0/9, no flakiness, file restored byte-identical after each mutation | PASS |
-| 6 | No happy-path-only gaps on the actual fix; empty-input + absent-field paths already covered by pre-existing tests | PASS |
+| 1 | Deadline guard test non-vacuous | PASS — MUTATION: deleted the `if (Date.now()-startTime >= EXECUTION_BUDGET_MS){...break}` block → "stops the loop and defers remaining threads" went RED (t2/t3 getMessages were called, deferredCount undefined). Source restored, re-green. |
+| 2 | Pre-wait cap test non-vacuous | PASS — MUTATION: replaced the cap-bail with unconditional `Utilities.sleep` → "does NOT sleep a long rate-limit pre-wait" went RED (caught via throw + no-fetch). Source restored, re-green. |
+| 3 | Clock-mock call accounting correct | PASS — startTime consumes tick[0]=0; iter0 guard-check tick[1]=0 (under → process t1); iter1 guard-check tick[2]=budget+1 (over → break). t1 processed, t2/t3 deferred. Verified by asserting per-thread getMessages call state. |
+| 4 | checkRateLimit produces waitTime > cap in pre-wait test | PASS — MAX_CALLS_PER_MINUTE timestamps at `now` → length===MAX → rateLimited, waitTime = 60000-(now-oldest) ≈ 60000 > 20000 cap. |
+| 5 | "budget never exceeded" test is the lower-bound complement (proves guard does not false-trip), correctly stayed GREEN under the delete-guard mutation | PASS — expected behavior; the discriminating test is the budget-exceeded one. |
+| 6 | Backoff-cap test | PASS — spies every sleep value; with current config backoffs (1000/2000/4000) all ≤ cap, so it guards the no-regression case. |
+| 7 | Full suite 577/0/9; source byte-identical after each mutation/restore (git diff stat unchanged) | PASS |
+| 8 | Removed `\|\| 0` (Ernie WARN-1) did not weaken any test — re-ran green | PASS |
 
-## Resolution (post-review)
-WARN-1/WARN-2 addressed: added test "removes text inside MSO comments and VML elements that survives a tag-only strip" (test:~111-124). Engineered so the inner text of `<!--[if mso]>...<![endif]-->` and `<v:roundrect>...</v:roundrect>` survives a generic tag-only strip — only the new comment-strip + VML-strip remove it. Mutation-verified: passes with real code (58/58 focused), fails when the new strip lines are removed. The new comment/VML code is now genuinely regression-guarded. The original (a)/(b) tests remain as fixture-level smoke checks. Full suite now 544/0/9.
-
-## Status: PASS (WARN items resolved via mutation-verified discriminating test)
+## Status: PASS (1 WARN, backstopped by sibling assertions + mutation evidence)
 
 _Signed: Zoe — 2026-06-06T00:00:00Z_

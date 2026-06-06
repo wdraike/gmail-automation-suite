@@ -94,6 +94,7 @@ function processJobEmailsMain() {
       message: `Successfully processed ${batchResult.processedCount} emails and found ${batchResult.totalJobs} jobs`,
       processedCount: batchResult.processedCount,
       totalJobs: batchResult.totalJobs,
+      deferredCount: batchResult.deferredCount,
       jobs: batchResult.allJobs,
     };
 
@@ -428,12 +429,33 @@ function processEmailBatch(threads) {
     processedCount: 0,
     totalJobs: 0,
     allJobs: [],
-    errors: []
+    errors: [],
+    deferredCount: 0
   };
+
+  // Wall-clock deadline guard (fix-processjobemails-timeout). Apps Script consumer
+  // time-based triggers are killed at a 6-min hard cap. We capture a run start time
+  // and stop launching new emails once EXECUTION_BUDGET_MS (~4m50s) elapses, so the
+  // run finishes well under the cap. Date.now() is allowed in feature code (it is
+  // not a platform SDK). Deferred threads keep their 📬 JobAlerts source label and
+  // are picked up by the next hourly run — this is correct work-shedding, not a
+  // fallback (no value is silently substituted).
+  const startTime = Date.now();
+  const EXECUTION_BUDGET_MS = JOB_FINDER_CONFIG.EXECUTION_BUDGET_MS;
 
   try {
     for (let i = 0; i < threads.length; i++) {
       const thread = threads[i];
+
+      // Stop before starting a new email if the budget is exhausted; defer the rest.
+      if (Date.now() - startTime >= EXECUTION_BUDGET_MS) {
+        results.deferredCount = threads.length - i;
+        Logger.log(
+          `Execution budget reached: processed ${results.processedCount}/${threads.length}, ` +
+          `deferring ${results.deferredCount} to next run`
+        );
+        break;
+      }
 
       try {
         const result = processOneEmail(thread, i + 1, threads.length);

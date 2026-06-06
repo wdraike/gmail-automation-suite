@@ -186,13 +186,16 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
     const rateLimitStatus = checkRateLimit();
 
     if (rateLimitStatus.rateLimited) {
-      // If we're rate limited, wait or throw an error
-      if (rateLimitStatus.waitTime > 5000) {
-        // If wait time is too long, throw rate limit error
+      // If we're rate limited, wait or throw an error.
+      // Cap the in-process pre-wait (fix-processjobemails-timeout): sleeping out a
+      // long rate-limit window INSIDE the run burns the Apps Script 6-min budget for
+      // no work. If the wait exceeds MAX_INPROCESS_WAIT_MS, surface RATE_LIMIT_REACHED
+      // so the email is queued for a later run instead of stalling here.
+      if (rateLimitStatus.waitTime > API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS) {
         API_STATE.consecutiveFailures++;
         throw new Error("RATE_LIMIT_REACHED");
       } else {
-        // If wait time is reasonable, actually wait
+        // If wait time is within the cap, actually wait.
         Utilities.sleep(rateLimitStatus.waitTime + 100);
       }
     }
@@ -222,9 +225,22 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
           throw error;
         }
 
-        // Exponential backoff for retries
+        // Exponential backoff for retries.
         const backoffTime =
           API_SERVICE_CONFIG.RETRY_DELAY_MS * Math.pow(2, retries - 1);
+
+        // Cap the in-process backoff sleep (fix-processjobemails-timeout): a single
+        // retry must not sleep for minutes inside the run and blow the Apps Script
+        // 6-min budget. If the computed backoff exceeds MAX_INPROCESS_WAIT_MS, bail
+        // with RATE_LIMIT_REACHED so the email is queued for a later run instead.
+        if (backoffTime > API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS) {
+          Logger.log(
+            `Backoff ${backoffTime}ms exceeds in-process cap ` +
+            `(${API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS}ms); deferring to next run`
+          );
+          throw new Error("RATE_LIMIT_REACHED");
+        }
+
         Logger.log(
           `API call failed, retrying in ${backoffTime}ms (attempt ${retries}/${API_SERVICE_CONFIG.MAX_RETRIES})`
         );

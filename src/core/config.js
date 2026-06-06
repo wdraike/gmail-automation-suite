@@ -64,6 +64,16 @@ const JOB_FINDER_CONFIG = {
   // truth — referenced by getEmailThreadsToProcess in src/features/job-finder/main.js.
   MAX_EMAILS_PER_RUN: 10,
 
+  // Wall-clock execution budget for one processJobEmailsMain run, in milliseconds.
+  // Apps Script consumer time-based triggers are killed at a 6-min (360s) hard cap
+  // ("Exceeded maximum execution time"). 290000ms (~4m50s) leaves margin for the
+  // in-flight email + label/archive writes + cleanup before the cap. The per-email
+  // loop in processEmailBatch (src/features/job-finder/main.js) checks Date.now()
+  // before starting each thread and stops once this budget is reached, deferring the
+  // unprocessed threads to the next hourly run (they keep their 📬 JobAlerts source
+  // label and are naturally re-picked-up). Single source of truth — read in main.js.
+  EXECUTION_BUDGET_MS: 290000,
+
   // Notification settings
   NOTIFICATION_EMAIL: Session.getActiveUser().getEmail(),
 
@@ -98,6 +108,15 @@ const API_SERVICE_CONFIG = {
   MAX_RETRIES: 3,
   RETRY_DELAY_MS: 1000, // Initial retry delay in milliseconds
   CACHE_DURATION_SECONDS: 3600, // 1 hour cache for API responses
+
+  // Cap on any single in-process Utilities.sleep inside callGeminiWithRateLimiting
+  // (rate-limit pre-wait + exponential backoff), in milliseconds. Apps Script
+  // consumer triggers are killed at a 6-min hard cap; sleeping out a full
+  // rate-limit window (up to 60s) or a multi-minute backoff INSIDE the run burns
+  // that budget for no work. When the computed wait/backoff exceeds this cap, the
+  // call surfaces RATE_LIMIT_REACHED instead so the email is queued for a later
+  // run. 20000ms (20s) keeps short, useful waits while preventing long stalls.
+  MAX_INPROCESS_WAIT_MS: 20000,
 };
 
 /**

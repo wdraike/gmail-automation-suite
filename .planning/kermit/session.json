@@ -1,27 +1,15 @@
 {
-  "leg_id": "hexagonal-ports-refactor",
-  "intent": "Route ALL feature code through ports (adapters); no direct Google SDK / Gemini / Properties / Utilities access in src/features. Create missing ports (Gemini, Properties, Utilities). Consolidate Gmail access to GmailAdapter. Make Cookie reviewer strict — enforce hexagonal on all new development.",
-  "scope": "src/features/** (job-finder, email-sorter, email-retention-manager, enhanced-label-manager), src/core/services/** (new gemini/properties/utilities adapters + serviceFactory), cookie skill, architecture invariant doc/ADR, tests-local/**",
-  "status": "complete",
-  "verdict": "PASS",
+  "leg_id": "fix-processjobemails-timeout",
+  "intent": "processJobEmailsMain exceeds the Apps Script 6-min execution limit (time-based trigger failing repeatedly). Add wall-clock deadline guard to the per-email loop (stop launching new emails near ~290s, defer remainder to next hourly run) and cap in-process rate-limit/backoff sleeps so they cannot blow the budget. Keep MAX_EMAILS_PER_RUN=10 (run self-limits via deadline).",
+  "scope": "src/features/job-finder/main.js (per-email loop deadline guard), src/core/api-service.js (cap in-process rate-limit pre-wait + backoff sleeps), src/core/config.js (deadline constant if needed), tests-local/",
+  "status": "in_progress",
   "opened": "2026-06-06T00:00:00Z",
-  "last_update": "2026-06-06T12:55:00Z",
-  "prior_leg": "fix-nojobs-false-negatives (a8854cc, PASS, deployed)",
-  "decisions": {
-    "scope": "all_features",
-    "missing_ports": "create_all (Gemini, Properties, Utilities)",
-    "gmail_dup": "consolidate_to_GmailAdapter",
-    "cookie": "strict_BLOCK_on_direct_SDK_in_features"
-  },
-  "wbs": ".planning/kermit/WBS-hexagonal-ports.md",
-  "driver": "kermit-orchestrator-agent (background) -> Oscar per wave",
-  "waves": {
-    "wave1_ports": { "status": "committed", "commit": "9d31d25", "oscar": "PASS" },
-    "wave2_job_finder": { "status": "committed", "commit": "651e60f", "oscar": "PASS" },
-    "wave3_remaining_features": { "status": "committed", "commit": "298fb28", "oscar": "PASS" },
-    "wave4_enforce": { "status": "committed", "commit": "bff57a1", "oscar": "PASS (Cookie reviewed boundary)" }
-  },
-  "tests_final": "573 passed / 0 failed / 9 skipped",
-  "deployed": true,
-  "handoff": ".planning/HANDOFF.json"
+  "last_update": "2026-06-06T00:00:00Z",
+  "prior_leg": "hexagonal-ports-refactor (da94986/bff57a1, PASS, deployed)",
+  "decision": "deadline_guard_plus_cap_sleeps_keep_MAX_10",
+  "evidence": {
+    "limit": "Apps Script consumer time-based trigger hard cap = 6 min. Error: 'Exceeded maximum execution time'.",
+    "cause": "Prior leg drop-precheck-bump-throughput set MAX_EMAILS_PER_RUN=10 and removed the cheap precheck -> 10 full Gemini extractions/run. In-process sleeps compound: api-service.js:196 Utilities.sleep(rateLimitStatus.waitTime+100) waits out rate-limit window inside execution; exponential backoff Utilities.sleep(backoffTime) on retries; main.js:467 _jfUtils().sleep(500) between emails. No wall-clock deadline -> run exceeds 6 min.",
+    "boundary": "src/CLAUDE.md hexagonal invariant in force: main.js (feature) must use ports for sleep; api-service.js is core (Utilities.sleep allowed there). Date.now() for the deadline is allowed (not a platform SDK)."
+  }
 }

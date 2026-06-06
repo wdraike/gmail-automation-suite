@@ -1,16 +1,14 @@
-# Test Review — 2026-06-06 (fix-nojobs-false-negatives)
+# Test Review — 2026-06-06 (fix-processjobemails-timeout)
 
 ## Summary
-543 passed / 0 failed / 9 skipped across the full suite (baseline was 536 passed — 7 new tests added). Extractor focused suite: 57/57 pass. Coverage on extractor.js 78% lines / 79% branch (above WARN floor; uncovered lines are the live-Gemini call path and logging/source helpers, out of scope for this leg). Mutation check confirms the new zero-width tests genuinely fail when the strip is removed.
+577 passed / 0 failed / 9 skipped across the full suite (baseline was 573 passed — 4 new tests added). Global coverage 54.79 lines / 53.26 branches / 61.17 functions / 54.79 statements — all above the configured thresholds (lines 50 / branches 50 / functions 55 / statements 50). The `|| 0` removal on main.js:97 was re-run and stays green. New tests are behavioral, not shallow.
 
 ## Test Results
 
 | Suite | Tests | Passed | Failed | Skipped | Time |
 |-------|-------|--------|--------|---------|------|
-| job-finder-extractor (focused) | 58 | 58 | 0 | 0 | ~1.3s |
-| full suite | 553 | 544 | 0 | 9 | ~4s |
-
-(Post-Zoe: +1 discriminating test for the MSO-comment/VML strip — see ZOE-REVIEW.md resolution.)
+| job-finder-main + api-service (focused) | 91 | 90 | 0 | 1 | ~2.1s |
+| full suite | 586 | 577 | 0 | 9 | ~5.6s |
 
 ## Failed Tests
 None.
@@ -19,25 +17,24 @@ None.
 
 | File | Line % | Branch % | Status |
 |------|--------|----------|--------|
-| src/features/job-finder/extractor.js | 78% | 79% | PASS (changed lines all covered; uncovered = live-Gemini path + logging helper, intentionally untested per repo convention) |
+| src/features/job-finder/main.js | 76.01 | 68.29 | PASS (deadline-guard branch covered by both new tests; uncovered = trigger setup / init error paths, out of scope) |
+| src/core/api-service.js | 57.53 | 61.41 | PASS (both new sleep-cap branches covered; uncovered = Drive-logging + monitoring helpers, pre-existing) |
+| src/core/config.js | 56.14 | 50.00 | PASS (new constants are data, exercised via the consuming tests) |
 
 ## New Tests (this leg)
 
 | Test | Guards |
 |------|--------|
-| retains Glassdoor tail job markers within the prompt budget | Northrop/Sr. Staff Chief Engineer/Rolling Meadows survive 30000-char window |
-| strips MSO conditional / VML / CSS noise from Glassdoor HTML | no roundrect/mso-/@font-face/v-text-anchor in plainText |
-| strips zero-width characters injected inside words | synthetic obfuscated word reconnects; MUTATION-VERIFIED fails without strip |
-| removes the high-volume zero-width runs from the Glassdoor digest | real 99K fixture has zero ZW chars; MUTATION-VERIFIED |
-| buildExtractionPrompt is exported as a function | export contract |
-| includes digest/aggregator guidance instructing extraction of every block | digest prompt guidance present |
-| preserves the JSON contract and CRITICAL RULES | refactor did not drop JSON shape / rules |
+| processEmailBatch › stops the loop and defers remaining threads once the budget is exceeded | Asserts t1.getMessages called, t2/t3 NOT called, processedCount=1, deferredCount=2. Clock mocked via jest.spyOn(Date,'now') with ramped ticks. |
+| processEmailBatch › processes all threads when the budget is never exceeded | Clock pinned at 0; both threads processed, deferredCount=0 (lower bound proves the guard does not false-trip). |
+| in-process sleep caps › does NOT sleep a long rate-limit pre-wait; throws RATE_LIMIT_REACHED | Fills the per-minute window so waitTime≈60s>cap; asserts throw, every Utilities.sleep ≤ MAX_INPROCESS_WAIT_MS, and UrlFetchApp.fetch NOT reached. |
+| in-process sleep caps › caps each exponential-backoff sleep to MAX_INPROCESS_WAIT_MS | 500 errors exhaust retries; asserts every backoff sleep ≤ cap. |
 
 ## Assertion Strength
-Strong. Tests assert specific substrings and use a negative regex for zero-width residue. Marker test mirrors the production cleaning+truncation pipeline (same `\s+` collapse + 30000 substring) rather than asserting on raw plainText, so it tests the real window Gemini sees. Mutation testing confirmed the zero-width and (by construction) digest tests are not vacuous.
+Strong. Deadline tests assert per-thread side effects (which getMessages were invoked) plus exact counts — they would fail if the guard processed too many or too few threads, or miscounted deferrals. The pre-wait test asserts a three-way invariant (throw + no oversized sleep + no network call), so it cannot pass vacuously. Backoff-cap test spies on every sleep value. Both deadline and pre-wait tests use a mocked clock / forced rate-limit state rather than wall time, so they are deterministic.
 
 ## Flakiness
-None — all transforms are pure/deterministic; no timers, network, or randomness. Re-runs stable.
+None — clock and Utilities.sleep are mocked/spied; no real timers, network, or randomness. Date.now spy restored in afterEach. Re-runs stable.
 
 ## Status: PASS
 

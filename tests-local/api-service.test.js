@@ -37,6 +37,8 @@ const getApiKey = config.getApiKey;
 // Make them global so api-service code can access them
 global.API_SERVICE_CONFIG = API_SERVICE_CONFIG;
 global.EMAIL_SORTER_CONFIG = EMAIL_SORTER_CONFIG;
+// checkRateLimit reads JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE as a global.
+global.JOB_FINDER_CONFIG = JOB_FINDER_CONFIG;
 global.PROPERTY_KEYS = PROPERTY_KEYS;
 global.getApiKey = getApiKey;
 global.setApiKey = setApiKey;
@@ -587,6 +589,60 @@ describe('Gemini API Service - Complete Test Suite', () => {
             .getProperty(PROPERTY_KEYS.RATE_LIMIT_NEXT_RUN);
           expect(nextRun).not.toBeNull();
           expect(Number(nextRun)).toBeGreaterThan(Date.now());
+      });
+
+      // fix-processjobemails-timeout: in-process sleeps must be capped so a
+      // single run cannot burn the 6-min Apps Script budget sleeping. When the
+      // computed pre-wait / backoff exceeds MAX_INPROCESS_WAIT_MS, surface
+      // RATE_LIMIT_REACHED (queue for a later run) instead of sleeping.
+      describe('in-process sleep caps', () => {
+        it('does NOT sleep a long rate-limit pre-wait; throws RATE_LIMIT_REACHED instead', () => {
+          // Fill the per-minute window so checkRateLimit returns rateLimited with
+          // a large waitTime (> MAX_INPROCESS_WAIT_MS but <= old 5000 gate? No:
+          // we want a wait that is reasonable under the OLD code but over the cap).
+          // Force a waitTime between the legacy 5000 gate and the new cap by
+          // stubbing checkRateLimit via API_STATE: oldest call ~ now, so waitTime ~ 60000.
+          const now = Date.now();
+          API_STATE.lastApiCalls = [];
+          for (let i = 0; i < JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE; i++) {
+            API_STATE.lastApiCalls.push(now); // all within the last minute
+          }
+          API_STATE.consecutiveFailures = 0;
+
+          const sleepSpy = jest.spyOn(Utilities, 'sleep');
+          UrlFetchApp.fetch = jest.fn(); // must NOT be reached
+
+          expect(() => callGeminiWithRateLimiting('Test prompt'))
+            .toThrow('RATE_LIMIT_REACHED');
+
+          // No huge sleep, no API call.
+          const slept = sleepSpy.mock.calls.map(c => c[0]);
+          expect(slept.every(ms => ms <= config.API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS)).toBe(true);
+          expect(UrlFetchApp.fetch).not.toHaveBeenCalled();
+
+          sleepSpy.mockRestore();
+        });
+
+        it('caps each exponential-backoff sleep to MAX_INPROCESS_WAIT_MS', () => {
+          API_STATE.lastApiCalls = [];
+          API_STATE.consecutiveFailures = 0;
+
+          // 500 -> generic retryable error, exhausts retries with backoff sleeps.
+          UrlFetchApp.fetch = jest.fn(() => ({
+            getResponseCode: jest.fn(() => 500),
+            getContentText: jest.fn(() => 'Internal Server Error')
+          }));
+
+          const sleepSpy = jest.spyOn(Utilities, 'sleep');
+
+          expect(() => callGeminiWithRateLimiting('Test prompt')).toThrow();
+
+          const slept = sleepSpy.mock.calls.map(c => c[0]);
+          // Every in-process backoff sleep must be capped.
+          expect(slept.every(ms => ms <= config.API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS)).toBe(true);
+
+          sleepSpy.mockRestore();
+        });
       });
 
       it('still retries up to MAX_RETRIES on a non-rate-limit transient error (500)', () => {
