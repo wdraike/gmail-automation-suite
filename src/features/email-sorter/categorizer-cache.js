@@ -3,7 +3,33 @@
  *
  * This file provides a centralized system for storing and retrieving
  * email categorization data, replacing the previous multi-file approach.
+ *
+ * Platform access (Drive, Properties, Gmail) is routed exclusively through
+ * src/core/services ports via the serviceFactory (hexagonal-ports-refactor).
  */
+
+/** Resolve the shared serviceFactory singleton (global in Apps Script, required in Node). */
+function _ccServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _ccDrive() {
+  return _ccServiceFactory().getDriveAdapter();
+}
+
+function _ccProps() {
+  return _ccServiceFactory().getPropertiesAdapter();
+}
+
+function _ccGmail() {
+  return _ccServiceFactory().getGmailAdapter();
+}
 
 /**
  * Global cache object for in-memory access
@@ -149,13 +175,13 @@ function loadCategorizerData(forceRefresh = false) {
     Logger.log("Loading categorizer data from storage");
 
     // Try to get file ID from properties
-    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptProperties = _ccProps();
     const fileId = scriptProperties.getProperty("EMAIL_CATEGORIZER_FILE_ID");
 
     if (fileId) {
       // Try to load from the file
       try {
-        const file = DriveApp.getFileById(fileId);
+        const file = _ccDrive().getFileById(fileId);
         const content = file.getBlob().getDataAsString();
         const data = JSON.parse(content);
 
@@ -209,7 +235,7 @@ function loadCategorizerData(forceRefresh = false) {
     }
 
     // Create a new file with the data
-    const newFile = DriveApp.createFile(
+    const newFile = _ccDrive().createFile(
       "EmailCategorizer.json",
       JSON.stringify(data, null, 2)
     );
@@ -270,7 +296,7 @@ function saveCategorizerData(data = null) {
     data.lastUpdated = new Date().toISOString();
 
     // Get file ID
-    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptProperties = _ccProps();
     const fileId = scriptProperties.getProperty("EMAIL_CATEGORIZER_FILE_ID");
 
     let saved = false;
@@ -278,7 +304,7 @@ function saveCategorizerData(data = null) {
     if (fileId) {
       // Update existing file
       try {
-        const file = DriveApp.getFileById(fileId);
+        const file = _ccDrive().getFileById(fileId);
         file.setContent(JSON.stringify(data, null, 2));
         Logger.log(`Updated categorizer data file: ${file.getName()}`);
         saved = true;
@@ -287,7 +313,7 @@ function saveCategorizerData(data = null) {
 
         // Create a new file
         try {
-          const newFile = DriveApp.createFile(
+          const newFile = _ccDrive().createFile(
             "EmailCategorizer.json",
             JSON.stringify(data, null, 2)
           );
@@ -305,7 +331,7 @@ function saveCategorizerData(data = null) {
     } else {
       // Create a new file
       try {
-        const newFile = DriveApp.createFile(
+        const newFile = _ccDrive().createFile(
           "EmailCategorizer.json",
           JSON.stringify(data, null, 2)
         );
@@ -326,13 +352,13 @@ function saveCategorizerData(data = null) {
       try {
         const backupJson = JSON.stringify(data);
 
-        // Guard: PropertiesService has a 500KB total limit. If the backup
-        // alone exceeds 100KB, skip the in-Properties backup and rely on
+        // Guard: the properties store has a 500KB total limit. If the backup
+        // alone exceeds 100KB, skip the in-properties backup and rely on
         // the Drive file (which was just saved above). TODO: If category
         // data grows large, move backups entirely to Drive or Sheets.
         if (backupJson.length > 100000) {
           Logger.log(
-            `WARN: EMAIL_CATEGORIZER_BACKUP too large (${backupJson.length} bytes). Skipping PropertiesService backup; Drive file is the canonical source.`
+            `WARN: EMAIL_CATEGORIZER_BACKUP too large (${backupJson.length} bytes). Skipping properties-store backup; Drive file is the canonical source.`
           );
         } else {
           scriptProperties.setProperty(
@@ -1115,10 +1141,10 @@ function removeCategoryFromLabel(labelName, categoryKey) {
       let otherLabel = "Other";
 
       try {
-        let gmailOtherLabel = GmailApp.getUserLabelByName(otherLabel);
+        let gmailOtherLabel = _ccGmail().getUserLabelByName(otherLabel);
         if (!gmailOtherLabel) {
           // Create the Other label if it doesn't exist
-          gmailOtherLabel = GmailApp.createLabel(otherLabel);
+          gmailOtherLabel = _ccGmail().createLabel(otherLabel);
           Logger.log(`Created "Other" Gmail label`);
         }
       } catch (labelError) {
@@ -1404,7 +1430,7 @@ function resetCache(keepBackup = true) {
     if (keepBackup) {
       try {
         // Backup to a new file
-        const backupFile = DriveApp.createFile(
+        const backupFile = _ccDrive().createFile(
           `EmailCategorizer_Backup_${new Date()
             .toISOString()
             .replace(/:/g, "-")}.json`,
@@ -1452,7 +1478,7 @@ function resetCache(keepBackup = true) {
  */
 function updateFileIdsFromProperties() {
   try {
-    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptProperties = _ccProps();
 
     // Get the new file ID
     const newFileId = scriptProperties.getProperty("EMAIL_CATEGORIZER_FILE_ID");

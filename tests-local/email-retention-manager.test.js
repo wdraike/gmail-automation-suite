@@ -22,7 +22,16 @@ function resetUtilitiesMock() {
 
 // Load modules using require for proper coverage tracking
 const cacheService = require('../src/core/cache-service.js');
+const { serviceFactory } = require('../src/core/services/index.js');
 const retentionModule = require('../src/features/email-retention-manager.js');
+
+// Gmail/Properties/Utilities access is routed through serviceFactory ports. The
+// tests swap global.GmailApp/PropertiesService/Utilities objects, so adapters must
+// be rebuilt before each test (and after any in-test object swap, which is picked
+// up lazily on first adapter access since reset() clears the cached adapters).
+afterEach(() => {
+  serviceFactory.reset();
+});
 
 // Load generateRuleId function inline (defined in dashboardController.js)
 function generateRuleId() {

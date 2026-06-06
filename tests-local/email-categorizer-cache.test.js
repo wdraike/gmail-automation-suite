@@ -8,7 +8,15 @@ const path = require('path');
 
 // Load modules using require for proper coverage tracking
 const config = require('../src/core/config.js');
+const { serviceFactory } = require('../src/core/services/index.js');
 const emailCategorizerModule = require('../src/features/email-sorter/categorizer-cache.js');
+
+// Drive/Properties/Gmail access is routed through serviceFactory ports. Tests swap
+// the global SDK objects, so cached adapters are cleared after each test and
+// rebuilt lazily on first access against the then-current globals.
+afterEach(() => {
+  serviceFactory.reset();
+});
 
 // Extract all needed functions
 const {

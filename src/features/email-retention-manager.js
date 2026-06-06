@@ -3,10 +3,36 @@
  *
  * A configurable system for automatically deleting old emails based on Gmail labels
  * and user-defined retention periods.
+ *
+ * Platform access (Gmail, Properties, Utilities) is routed exclusively through
+ * src/core/services ports via the serviceFactory (hexagonal-ports-refactor).
  */
 
 // RETENTION_RULES is declared centrally in src/core/config.js to eliminate
 // dangerous load-order dependencies (ARCH-BLOCK-01).
+
+/** Resolve the shared serviceFactory singleton (global in Apps Script, required in Node). */
+function _ermServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _ermGmail() {
+  return _ermServiceFactory().getGmailAdapter();
+}
+
+function _ermProps() {
+  return _ermServiceFactory().getPropertiesAdapter();
+}
+
+function _ermUtils() {
+  return _ermServiceFactory().getUtilitiesAdapter();
+}
 
 /**
  * Initialize the retention manager by loading saved rules
@@ -14,7 +40,7 @@
 function initializeRetentionManager() {
   try {
     // Load saved rules from properties
-    const savedRules = PropertiesService.getScriptProperties().getProperty(
+    const savedRules = _ermProps().getProperty(
       "EMAIL_RETENTION_RULES"
     );
 
@@ -100,7 +126,7 @@ function addRetentionRule(
     // Check if the label exists
     let labelExists = false;
     try {
-      const label = GmailApp.getUserLabelByName(labelName);
+      const label = _ermGmail().getUserLabelByName(labelName);
       labelExists = !!label;
     } catch (e) {
       labelExists = false;
@@ -344,7 +370,7 @@ function saveRetentionRules() {
     }
     
     // Save to script properties
-    PropertiesService.getScriptProperties().setProperty(
+    _ermProps().setProperty(
       "EMAIL_RETENTION_RULES",
       JSON.stringify(RETENTION_RULES)
     );
@@ -447,7 +473,7 @@ function processRetentionRule(rule) {
     }
     
     // Get the Gmail label
-    const label = GmailApp.getUserLabelByName(rule.labelName);
+    const label = _ermGmail().getUserLabelByName(rule.labelName);
     
     if (!label) {
       Logger.log(`Label "${rule.labelName}" not found, skipping rule`);
@@ -470,7 +496,7 @@ function processRetentionRule(rule) {
     Logger.log(`Searching for emails with query: ${query}`);
     
     // Get all threads matching the query
-    const threads = GmailApp.search(query, 0, 500);  // Limit to 500 threads at a time
+    const threads = _ermGmail().search(query, 0, 500);  // Limit to 500 threads at a time
     
     if (threads.length === 0) {
       Logger.log(`No emails found for "${rule.labelName}" older than ${rule.retentionDays} days`);
@@ -506,7 +532,7 @@ function processRetentionRule(rule) {
           case "archive":
             // If target label is specified, add it
             if (rule.targetLabel) {
-              const targetLabel = GmailApp.getUserLabelByName(rule.targetLabel);
+              const targetLabel = _ermGmail().getUserLabelByName(rule.targetLabel);
               if (targetLabel) {
                 thread.addLabel(targetLabel);
                 Logger.log(`Added label "${rule.targetLabel}" to thread: ${thread.getFirstMessageSubject()}`);
@@ -599,7 +625,7 @@ function runAllRetentionRules() {
         }
         
         // Brief pause between rules to avoid hitting quotas
-        Utilities.sleep(100);
+        _ermUtils().sleep(100);
       } catch (ruleError) {
         Logger.log(`Error processing rule ${rule.id}: ${ruleError}`);
         results.push({
@@ -613,7 +639,7 @@ function runAllRetentionRules() {
     }
     
     // Record the execution in script properties
-    PropertiesService.getScriptProperties().setProperty(
+    _ermProps().setProperty(
       "LAST_RUN_runAllRetentionRules",
       new Date().toISOString()
     );
@@ -890,7 +916,7 @@ function getRetentionForLabels(labelNames) {
 function getAllGmailLabels() {
   try {
     // Use the Gmail Service instead of getGmailLabels to avoid dependency
-    const gmailLabels = GmailService.labels.getAllLabels();
+    const gmailLabels = _ermGmail().getAllLabels();
 
     const labelInfo = [];
 
@@ -1020,7 +1046,7 @@ function setupDefaultRetentionRules() {
     
     // Sample rule for newsletters (only if the label exists)
     try {
-      const newsletterLabel = GmailApp.getUserLabelByName("Newsletters");
+      const newsletterLabel = _ermGmail().getUserLabelByName("Newsletters");
       if (newsletterLabel) {
         addRetentionRule(
           "Newsletters",
@@ -1037,7 +1063,7 @@ function setupDefaultRetentionRules() {
     
     // Sample rule for promotions (only if the label exists)
     try {
-      const promotionsLabel = GmailApp.getUserLabelByName("Promotions");
+      const promotionsLabel = _ermGmail().getUserLabelByName("Promotions");
       if (promotionsLabel) {
         addRetentionRule(
           "Promotions",
@@ -1073,7 +1099,7 @@ function setupDefaultRetentionRules() {
 function logRetentionActivity(message, ruleId = null) {
   try {
     // Get existing log
-    const logJson = PropertiesService.getScriptProperties().getProperty(
+    const logJson = _ermProps().getProperty(
       "RETENTION_ACTIVITY_LOG"
     );
     let log = logJson ? JSON.parse(logJson) : [];
@@ -1096,7 +1122,7 @@ function logRetentionActivity(message, ruleId = null) {
     const serialized = JSON.stringify(log);
 
     // Guard: if this single property is already > 100KB, aggressively
-    // truncate oldest entries to avoid silent truncation by PropertiesService.
+    // truncate oldest entries to avoid silent truncation by the properties store.
     if (serialized.length > 100000) {
       Logger.log(
         `WARN: RETENTION_ACTIVITY_LOG exceeded 100KB (${serialized.length} bytes). Truncating to last 10 entries.`
@@ -1105,7 +1131,7 @@ function logRetentionActivity(message, ruleId = null) {
     }
 
     // Save updated log
-    PropertiesService.getScriptProperties().setProperty(
+    _ermProps().setProperty(
       "RETENTION_ACTIVITY_LOG",
       JSON.stringify(log)
     );
@@ -1126,7 +1152,7 @@ function logRetentionActivity(message, ruleId = null) {
 function getRetentionActivityLog(maxEntries = 50) {
   try {
     // Try to get the log from properties
-    const logJson = PropertiesService.getScriptProperties().getProperty(
+    const logJson = _ermProps().getProperty(
       "RETENTION_ACTIVITY_LOG"
     );
 
@@ -1205,7 +1231,7 @@ function getRetentionManagerDiagnostics() {
     
     // Check last run
     try {
-      const lastRun = PropertiesService.getScriptProperties().getProperty("LAST_RUN_runAllRetentionRules");
+      const lastRun = _ermProps().getProperty("LAST_RUN_runAllRetentionRules");
       diagnostics.lastRun = lastRun;
     } catch (e) {
       diagnostics.lastRunError = e.toString();
@@ -1214,7 +1240,7 @@ function getRetentionManagerDiagnostics() {
     // Check storage
     try {
       // Check properties
-      const propRules = PropertiesService.getScriptProperties().getProperty("EMAIL_RETENTION_RULES");
+      const propRules = _ermProps().getProperty("EMAIL_RETENTION_RULES");
       diagnostics.storageStatus.properties = propRules !== null;
       
       // Check cache

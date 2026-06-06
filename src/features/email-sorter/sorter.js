@@ -1,4 +1,29 @@
 /**
+ * Email Sorter
+ * Platform access (Gmail, Properties) is routed exclusively through
+ * src/core/services ports via the serviceFactory (hexagonal-ports-refactor).
+ */
+
+/** Resolve the shared serviceFactory singleton (global in Apps Script, required in Node). */
+function _esServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _esGmail() {
+  return _esServiceFactory().getGmailAdapter();
+}
+
+function _esProps() {
+  return _esServiceFactory().getPropertiesAdapter();
+}
+
+/**
  * Call the Gemini API to determine a category for an email
  *
  * @param {string} emailAddress - The sender's email address
@@ -217,7 +242,7 @@ function sanitizeCategoryName(category) {
  * Add a file locking check to the categorizeEmails function to avoid conflicts
  */
 function checkLockBeforeProcessing() {
-  const scriptProperties = PropertiesService.getScriptProperties();
+  const scriptProperties = _esProps();
   const currentLock = scriptProperties.getProperty("EMAIL_SORTER_LOCK");
 
   if (currentLock) {
@@ -291,7 +316,7 @@ function categorizeEmails() {
     const maxCalls = EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE;
 
     // Get unread emails from inbox
-    const threads = GmailApp.getInboxThreads(0, 50);
+    const threads = _esGmail().getInboxThreads(0, 50);
 
     // Track results
     const results = {
@@ -538,10 +563,10 @@ function moveEmailToFolder(thread, folderName) {
   }
 
   // Get or create the label
-  let label = GmailApp.getUserLabelByName(cleanFolderName);
+  let label = _esGmail().getUserLabelByName(cleanFolderName);
   if (!label) {
     try {
-      label = GmailApp.createLabel(cleanFolderName);
+      label = _esGmail().createLabel(cleanFolderName);
       Logger.log(`Created new label: ${cleanFolderName}`);
     } catch (error) {
       Logger.log(`Failed to create label "${cleanFolderName}": ${error}`);
@@ -588,9 +613,9 @@ function createNewCategory(category, emailAddress, domain, subject) {
   }
 
   // Create Gmail label if needed
-  if (!GmailApp.getUserLabelByName(folderName)) {
+  if (!_esGmail().getUserLabelByName(folderName)) {
     try {
-      GmailApp.createLabel(folderName);
+      _esGmail().createLabel(folderName);
       Logger.log(`Created new label: ${folderName}`);
     } catch (labelError) {
       Logger.log(`Failed to create label "${folderName}": ${labelError}`);
@@ -647,8 +672,8 @@ function setupEmailSorter() {
             categoryKey.charAt(0).toUpperCase() + categoryKey.slice(1);
         }
 
-        if (!GmailApp.getUserLabelByName(folderName)) {
-          GmailApp.createLabel(folderName);
+        if (!_esGmail().getUserLabelByName(folderName)) {
+          _esGmail().createLabel(folderName);
           Logger.log(`Created label: ${folderName}`);
         }
       } catch (labelError) {

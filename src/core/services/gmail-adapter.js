@@ -38,6 +38,13 @@ class GmailAdapter {
   }
 
   /**
+   * Get inbox threads
+   */
+  getInboxThreads(start = 0, max = 50) {
+    return this.gmail.getInboxThreads(start, max);
+  }
+
+  /**
    * Send an email
    */
   sendEmail(recipient, subject, body, options = {}) {
@@ -60,6 +67,52 @@ class GmailAdapter {
       label = this.createLabel(name);
     }
     return label;
+  }
+
+  /**
+   * Get all user labels with caching + system labels.
+   *
+   * Relocated verbatim from the legacy GmailLabelService.getAllLabels so feature
+   * code can consolidate onto GmailAdapter. The 5-minute CacheService cache, the
+   * prepended system labels, and the `return []` on error are pre-existing behavior
+   * preserved exactly (not a new fallback).
+   *
+   * @param {boolean} forceRefresh - Force refresh the cache
+   * @returns {Array<Object>} Array of label objects with name and type
+   */
+  getAllLabels(forceRefresh = false) {
+    const cacheKey = 'GMAIL_LABELS_CACHE';
+    const cacheExpiry = 300; // 5 minutes
+
+    if (!forceRefresh) {
+      const cached = CacheService.getScriptCache().get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    }
+
+    try {
+      const labels = this.gmail.getUserLabels();
+
+      const labelData = labels.map(label => ({
+        name: label.getName(),
+        type: 'user'
+      }));
+
+      // Add system labels
+      const systemLabels = ['INBOX', 'STARRED', 'IMPORTANT', 'SENT', 'DRAFT', 'SPAM', 'TRASH'];
+      systemLabels.forEach(name => {
+        labelData.unshift({ name, type: 'system' });
+      });
+
+      // Cache the results
+      CacheService.getScriptCache().put(cacheKey, JSON.stringify(labelData), cacheExpiry);
+
+      return labelData;
+    } catch (error) {
+      Logger.log(`Error getting labels: ${error}`);
+      return [];
+    }
   }
 
   /**

@@ -3,6 +3,7 @@
  * Tests for src/features/enhanced-label-manager.js
  */
 
+const { serviceFactory } = require('../src/core/services/index.js');
 const labelManager = require('../src/features/enhanced-label-manager.js');
 
 // Helper to create a fluent mock that returns itself for every method call
@@ -58,6 +59,8 @@ describe('Enhanced Label Manager', () => {
     originalCardService = global.CardService;
     setupCardServiceMock();
     jest.clearAllMocks();
+    // Rebuild GmailAdapter so it binds to the current global.GmailApp mocks.
+    serviceFactory.reset();
   });
 
   afterEach(() => {

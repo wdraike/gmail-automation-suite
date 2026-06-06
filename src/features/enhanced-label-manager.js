@@ -1,3 +1,24 @@
+/**
+ * Enhanced Label Manager
+ * Gmail label access is routed through GmailAdapter (serviceFactory) — no direct
+ * platform SDK references (hexagonal-ports-refactor).
+ */
+
+/** Resolve the shared serviceFactory singleton (global in Apps Script, required in Node). */
+function _elmServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _elmGmail() {
+  return _elmServiceFactory().getGmailAdapter();
+}
+
 function showEnhancedLabelManager() {
   const card = CardService.newCardBuilder().setHeader(
     CardService.newCardHeader()
@@ -209,7 +230,7 @@ function selectLabel(e) {
   }
 
   // Get the label information
-  const label = GmailApp.getUserLabelByName(selectedLabel);
+  const label = _elmGmail().getUserLabelByName(selectedLabel);
   if (!label) {
     return CardService.newActionResponseBuilder()
       .setNotification(
@@ -445,7 +466,7 @@ function createNewLabel(e) {
 
   try {
     // Check if label already exists
-    if (GmailApp.getUserLabelByName(fullLabelPath)) {
+    if (_elmGmail().getUserLabelByName(fullLabelPath)) {
       return CardService.newActionResponseBuilder()
         .setNotification(
           CardService.newNotification().setText(
@@ -459,7 +480,7 @@ function createNewLabel(e) {
     if (fullLabelPath.includes("/")) {
       createLabelHierarchy(fullLabelPath);
     } else {
-      GmailApp.createLabel(fullLabelPath);
+      _elmGmail().createLabel(fullLabelPath);
     }
 
     return CardService.newActionResponseBuilder()
@@ -561,7 +582,7 @@ function renameLabel(e) {
 
   try {
     // Get the label
-    const label = GmailApp.getUserLabelByName(labelName);
+    const label = _elmGmail().getUserLabelByName(labelName);
 
     if (!label) {
       return CardService.newActionResponseBuilder()
@@ -574,7 +595,7 @@ function renameLabel(e) {
     }
 
     // Check if target name already exists
-    if (GmailApp.getUserLabelByName(newLabelName)) {
+    if (_elmGmail().getUserLabelByName(newLabelName)) {
       return CardService.newActionResponseBuilder()
         .setNotification(
           CardService.newNotification().setText(
@@ -634,7 +655,7 @@ function confirmDeleteLabel(e) {
   );
 
   // Get thread count for this label
-  const label = GmailApp.getUserLabelByName(labelName);
+  const label = _elmGmail().getUserLabelByName(labelName);
   if (label) {
     const threads = label.getThreads(0, 1);
     if (threads.length > 0) {
@@ -693,7 +714,7 @@ function deleteLabel(e) {
 
   try {
     // Get the label
-    const label = GmailApp.getUserLabelByName(labelName);
+    const label = _elmGmail().getUserLabelByName(labelName);
 
     if (!label) {
       return CardService.newActionResponseBuilder()
