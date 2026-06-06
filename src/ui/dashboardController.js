@@ -19,8 +19,44 @@
  * The client-side functions rely on global HTML/DOM state (allCategories,
  * labelCategories) and should ideally be extracted into a separate
  * dashboard-events.html template in the future.
+ *
+ * Platform access (Gmail, Properties, Drive, Utilities) is routed exclusively
+ * through src/core/services ports via the serviceFactory seam. No direct Google
+ * SDK references live in the server-side functions of this file
+ * (full-hexagonal-conversion, Wave 2). The client-side DOM handlers
+ * (setupCategoryDropZones, createCategoryPill) run in the browser and use
+ * document/console, which are not platform SDKs.
  * ==============================================================================
  */
+
+/**
+ * Resolve the shared serviceFactory singleton.
+ */
+function _dcServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _dcGmail() {
+  return _dcServiceFactory().getGmailAdapter();
+}
+
+function _dcProps() {
+  return _dcServiceFactory().getPropertiesAdapter();
+}
+
+function _dcDrive() {
+  return _dcServiceFactory().getDriveAdapter();
+}
+
+function _dcUtils() {
+  return _dcServiceFactory().getUtilitiesAdapter();
+}
 
 /**
  * Function to retrieve all labels, categories, and their associations
@@ -31,8 +67,8 @@ function getAllLabelsAndCategories() {
     // Initialize the categorizer cache first
     initializeCategorizerCache();
     
-    // Use the new Gmail service for labels
-    const gmailLabels = GmailService.labels.getAllLabels();
+    // Use the Gmail adapter for labels
+    const gmailLabels = _dcGmail().getAllLabels();
 
     // Get all categories from the email categorizer data
     const categories = getCategoryDefinitions();
@@ -84,7 +120,7 @@ function getAllLabelsAndCategories() {
 function createLabel(labelName) {
   try {
     // Check if label already exists
-    if (GmailApp.getUserLabelByName(labelName)) {
+    if (_dcGmail().getUserLabelByName(labelName)) {
       return {
         success: false,
         message: `Label "${labelName}" already exists`,
@@ -96,7 +132,7 @@ function createLabel(labelName) {
       // This should call your existing createLabelHierarchy function
       createLabelHierarchy(labelName);
     } else {
-      GmailApp.createLabel(labelName);
+      _dcGmail().createLabel(labelName);
     }
 
     return {
@@ -120,8 +156,8 @@ function createLabel(labelName) {
  */
 function saveSettings(settings) {
   try {
-    // Store settings in script properties
-    const scriptProperties = PropertiesService.getScriptProperties();
+    // Store settings in script properties (via PropertiesAdapter)
+    const scriptProperties = _dcProps();
 
     // Save each setting
     scriptProperties.setProperty(
@@ -168,7 +204,7 @@ function saveSettings(settings) {
  */
 function forceClearLabelCategoryMappings() {
   try {
-    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptProperties = _dcProps();
 
     // Delete existing mapping property
     scriptProperties.deleteProperty("LABEL_CATEGORIES_MAP");
@@ -233,7 +269,7 @@ function moveGmailLabel(currentPath, newPath) {
     }
 
     // Check if the source label exists
-    const sourceLabel = GmailApp.getUserLabelByName(currentPath);
+    const sourceLabel = _dcGmail().getUserLabelByName(currentPath);
     if (!sourceLabel) {
       return {
         success: false,
@@ -242,7 +278,7 @@ function moveGmailLabel(currentPath, newPath) {
     }
 
     // Check if the target path already exists to avoid conflicts
-    const targetLabel = GmailApp.getUserLabelByName(newPath);
+    const targetLabel = _dcGmail().getUserLabelByName(newPath);
     if (targetLabel) {
       return {
         success: false,
@@ -268,7 +304,7 @@ function moveGmailLabel(currentPath, newPath) {
 
     // Get or create the target label
     const newLabel =
-      GmailApp.getUserLabelByName(newPath) || GmailApp.createLabel(newPath);
+      _dcGmail().getUserLabelByName(newPath) || _dcGmail().createLabel(newPath);
 
     // Apply the new label to all threads
     for (const thread of threads) {
@@ -311,13 +347,14 @@ function moveGmailLabel(currentPath, newPath) {
 function createLabelHierarchy(labelPath) {
   const parts = labelPath.split("/");
   let currentPath = "";
+  const gmail = _dcGmail();
   for (let i = 0; i < parts.length; i++) {
     currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
-    if (!GmailApp.getUserLabelByName(currentPath)) {
-      GmailApp.createLabel(currentPath);
+    if (!gmail.getUserLabelByName(currentPath)) {
+      gmail.createLabel(currentPath);
     }
   }
-  return GmailApp.getUserLabelByName(labelPath);
+  return gmail.getUserLabelByName(labelPath);
 }
 
 /**
@@ -335,6 +372,8 @@ function createLabelHierarchyForMove(labelPath) {
     // Get just the parent path (everything except the last part)
     const parentPath = parts.slice(0, -1).join("/");
 
+    const gmail = _dcGmail();
+
     // First ensure the parent path exists
     if (parentPath) {
       let currentPath = "";
@@ -346,18 +385,18 @@ function createLabelHierarchyForMove(labelPath) {
           i === 0 ? parentParts[0] : `${currentPath}/${parentParts[i]}`;
 
         // Create this level if it doesn't exist
-        if (!GmailApp.getUserLabelByName(currentPath)) {
-          GmailApp.createLabel(currentPath);
+        if (!gmail.getUserLabelByName(currentPath)) {
+          gmail.createLabel(currentPath);
           Logger.log(`Created parent label: ${currentPath}`);
         }
       }
     }
 
     // Now the full path can be created since the parent exists
-    if (!GmailApp.getUserLabelByName(labelPath)) {
-      return GmailApp.createLabel(labelPath);
+    if (!gmail.getUserLabelByName(labelPath)) {
+      return gmail.createLabel(labelPath);
     } else {
-      return GmailApp.getUserLabelByName(labelPath);
+      return gmail.getUserLabelByName(labelPath);
     }
   } catch (error) {
     Logger.log(`Error creating label hierarchy for move: ${error}`);
@@ -383,7 +422,7 @@ function renameGmailLabel(currentName, newName) {
     }
 
     // Check if the source label exists
-    const label = GmailApp.getUserLabelByName(currentName);
+    const label = _dcGmail().getUserLabelByName(currentName);
     if (!label) {
       return {
         success: false,
@@ -392,7 +431,7 @@ function renameGmailLabel(currentName, newName) {
     }
 
     // Check if the target name already exists to avoid conflicts
-    const existingLabel = GmailApp.getUserLabelByName(newName);
+    const existingLabel = _dcGmail().getUserLabelByName(newName);
     if (existingLabel) {
       return {
         success: false,
@@ -722,12 +761,12 @@ function moveCategoryBetweenLabels(categoryKey, sourceLabel, targetLabel) {
 function checkStorageUpdated() {
   try {
     // Check file storage
-    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptProperties = _dcProps();
     const fileId = scriptProperties.getProperty("EMAIL_CATEGORIZER_FILE_ID");
 
     if (fileId) {
       try {
-        const file = DriveApp.getFileById(fileId);
+        const file = _dcDrive().getFileById(fileId);
         const lastUpdated = file.getLastUpdated();
         return {
           success: true,
@@ -974,7 +1013,7 @@ function processBatchedChanges(changes) {
  * The main retention logic uses email-retention-manager.js
  */
 function generateRuleId() {
-  return "rule_" + Utilities.getUuid().replace(/-/g, "").substring(0, 8);
+  return "rule_" + _dcUtils().getUuid().replace(/-/g, "").substring(0, 8);
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)

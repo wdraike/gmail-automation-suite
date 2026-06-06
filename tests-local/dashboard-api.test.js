@@ -4,6 +4,10 @@
  */
 
 const dashboardApi = require('../src/ui/dashboard-api.js');
+// Gmail/Properties/Utilities/Gemini access is routed through serviceFactory
+// ports; the real adapters delegate to the global SDK mocks (setup.js). Tests
+// drive those globals and reset the factory each test.
+const { serviceFactory } = require('../src/core/services/index.js');
 
 // Mock global dependencies from other modules
 global.getAllLabelsAndCategories = jest.fn(() => ({
@@ -34,14 +38,8 @@ global.processBatchedChanges = jest.fn(() => ({
 global.saveSettings = jest.fn(() => ({ success: true, message: 'saved' }));
 global.verifyGeminiApiKey = jest.fn(() => ({ valid: true, message: 'ok' }));
 global.getLastRunTime = jest.fn(() => 'Never');
+// callGeminiApi is the global the GeminiAdapter delegates to.
 global.callGeminiApi = jest.fn(() => ({ success: true, categories: ['work'] }));
-global.GmailService = {
-  labels: { getAllLabels: jest.fn(() => [{ type: 'user', name: 'Work' }]) },
-  threads: {
-    getThreadsFromLabel: jest.fn(() => []),
-    getThreadMetadata: jest.fn(() => ({ id: 't1', subject: 'Test' }))
-  }
-};
 global.UnifiedCacheService = {
   labelCategories: { getAll: jest.fn(() => ({})) },
   emailCategories: { getAll: jest.fn(() => ({})) },
@@ -51,6 +49,8 @@ global.UnifiedCacheService = {
 describe('Dashboard API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Fresh adapters bound to current global SDK mocks.
+    serviceFactory.reset();
   });
 
   describe('getDashboardData', () => {
@@ -158,6 +158,85 @@ describe('Dashboard API', () => {
       const result = dashboardApi.processBatchChanges([{ op: 'add' }]);
       expect(result.success).toBe(true);
       expect(result.data.processedCount).toBe(2);
+    });
+  });
+
+  describe('getDashboardStatistics (port-routed Gmail)', () => {
+    it('counts user labels via GmailAdapter.getAllLabels', () => {
+      // GmailAdapter.getAllLabels reads getUserLabels and prepends system labels.
+      global.CacheService.getScriptCache().removeAll([]);
+      global.GmailApp.getUserLabels = jest.fn(() => [
+        { getName: () => 'Work' },
+        { getName: () => 'Personal' },
+      ]);
+      const stats = dashboardApi.getDashboardStatistics();
+      // 2 user labels (system labels are type 'system', excluded from count)
+      expect(stats.labels.total).toBe(2);
+      expect(global.GmailApp.getUserLabels).toHaveBeenCalled();
+    });
+  });
+
+  describe('getLastRunTime (port-routed Properties + Utilities/Session)', () => {
+    it('returns "Never" when no LAST_RUN property exists', () => {
+      global.PropertiesService.getScriptProperties().deleteProperty('LAST_RUN_categorizeEmails');
+      expect(dashboardApi.getLastRunTime('categorizeEmails')).toBe('Never');
+    });
+
+    it('formats the date via UtilitiesAdapter when property exists', () => {
+      global.PropertiesService.getScriptProperties().setProperty(
+        'LAST_RUN_categorizeEmails',
+        '2026-01-01T10:00:00Z'
+      );
+      global.Utilities.formatDate = jest.fn(() => 'Jan 01, 10:00');
+      global.Session = { getScriptTimeZone: jest.fn(() => 'GMT') };
+      const result = dashboardApi.getLastRunTime('categorizeEmails');
+      expect(result).toBe('Jan 01, 10:00');
+      expect(global.Utilities.formatDate).toHaveBeenCalled();
+      expect(global.Session.getScriptTimeZone).toHaveBeenCalled();
+    });
+  });
+
+  describe('testEmailCategorization (port-routed Gemini)', () => {
+    it('rejects missing email text', () => {
+      const result = dashboardApi.testEmailCategorization('');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('required');
+    });
+
+    it('delegates to GeminiAdapter.call and returns categories', () => {
+      global.callGeminiApi.mockReturnValue({ success: true, categories: ['work'], response: 'raw' });
+      const result = dashboardApi.testEmailCategorization('some email');
+      expect(global.callGeminiApi).toHaveBeenCalledWith(expect.any(String), 'test_categorization');
+      expect(result.success).toBe(true);
+      expect(result.categories).toEqual(['work']);
+    });
+  });
+
+  describe('getEmailThreads (port-routed Gmail threads)', () => {
+    it('rejects missing label name', () => {
+      const result = dashboardApi.getEmailThreads('');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('required');
+    });
+
+    it('returns thread metadata via GmailAdapter', () => {
+      const thread = {
+        getMessages: () => [
+          { getDate: () => new Date('2026-01-01'), getFrom: () => 'a@b.com', getAttachments: () => [] },
+        ],
+        getId: () => 't1',
+        getFirstMessageSubject: () => 'Hello',
+        isUnread: () => false,
+        isImportant: () => false,
+        getLabels: () => [],
+      };
+      const label = { getThreads: jest.fn(() => [thread]) };
+      global.GmailApp.getUserLabelByName = jest.fn(() => label);
+
+      const result = dashboardApi.getEmailThreads('Work', 10);
+      expect(result.success).toBe(true);
+      expect(result.data.threadCount).toBe(1);
+      expect(result.data.threads[0].id).toBe('t1');
     });
   });
 

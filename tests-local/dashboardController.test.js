@@ -11,40 +11,36 @@ global.setupEmailCategorizationTrigger = jest.fn();
 global.setupRetentionTrigger = jest.fn();
 global.getGmailLabels = jest.fn(() => []);
 
-global.GmailService = {
-  labels: {
-    getAllLabels: jest.fn(() => ["Work", "Personal"]),
-    getLabelSafe: jest.fn((name) => ({
-      getName: jest.fn(() => name),
-      getThreads: jest.fn(() => []),
-      addToThread: jest.fn(),
-      removeFromThread: jest.fn(),
-      deleteLabel: jest.fn(),
-    })),
-    getOrCreateLabel: jest.fn((name) => ({
-      getName: jest.fn(() => name),
-      addToThread: jest.fn(),
-      removeFromThread: jest.fn(),
-    })),
-  },
-};
-
 global.UnifiedCacheService = {
   retentionRules: { getAll: jest.fn(() => []) },
 };
 
 const dashboardController = require("../src/ui/dashboardController.js");
+// Gmail/Properties/Drive/Utilities access is routed through serviceFactory
+// ports; the real adapters delegate to the global SDK mocks (setup.js). Tests
+// drive those globals and reset the factory each test.
+const { serviceFactory } = require("../src/core/services/index.js");
 
 describe("dashboardController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    serviceFactory.reset();
+    // GmailAdapter.getAllLabels caches in CacheService; clear so each test's
+    // getUserLabels mock is exercised deterministically.
+    global.CacheService.getScriptCache().remove("GMAIL_LABELS_CACHE");
   });
 
   describe("getAllLabelsAndCategories", () => {
     it("returns labels, categories, labelCategories and retentionRules", () => {
+      // GmailAdapter.getAllLabels reads getUserLabels + prepends system labels.
+      global.GmailApp.getUserLabels = jest.fn(() => [
+        { getName: () => "Work" },
+        { getName: () => "Personal" },
+      ]);
       const result = dashboardController.getAllLabelsAndCategories();
       expect(result.success).toBe(true);
-      expect(result.labels).toEqual(["Work", "Personal"]);
+      expect(result.labels.some((l) => l.name === "Work")).toBe(true);
+      expect(result.labels.some((l) => l.name === "Personal")).toBe(true);
       expect(result.categories).toEqual({ work: { label: "Work", name: "Work" } });
       expect(result.retentionRules).toEqual([]);
       expect(global.initializeCategorizerCache).toHaveBeenCalled();

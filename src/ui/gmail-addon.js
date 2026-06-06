@@ -1,6 +1,33 @@
 /**
  * Comprehensive Gmail add-on with all possible entry points
+ *
+ * Platform access (Gmail, Properties) is routed exclusively through
+ * src/core/services ports via the serviceFactory seam. No direct Google SDK
+ * references live in this file (full-hexagonal-conversion, Wave 2).
  */
+
+/**
+ * Resolve the shared serviceFactory singleton.
+ * In Apps Script it is the global from src/core/services/index.js (concatenated
+ * into global scope). In Node it is required for testability.
+ */
+function _addonServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _addonGmail() {
+  return _addonServiceFactory().getGmailAdapter();
+}
+
+function _addonProps() {
+  return _addonServiceFactory().getPropertiesAdapter();
+}
 
 /**
  * Return the deployed web app URL for the dashboard.
@@ -43,7 +70,7 @@ function createCategoryCard(e) {
   try {
     // Get message details
     const messageId = e.messageMetadata.messageId;
-    const message = GmailApp.getMessageById(messageId);
+    const message = _addonGmail().getMessageById(messageId);
     const thread = message.getThread();
 
     // Extract sender and subject
@@ -634,7 +661,7 @@ function onGmailMessage(e) {
 function writeLog(message) {
   try {
     const timestamp = new Date().toISOString();
-    const props = PropertiesService.getScriptProperties();
+    const props = _addonProps();
 
     // Get existing log
     let log = props.getProperty("ADDON_LOG") || "";
@@ -666,14 +693,14 @@ function writeLog(message) {
  * Read the persisted log
  */
 function readPersistedLog() {
-  return PropertiesService.getScriptProperties().getProperty("ADDON_LOG") || "No logs found";
+  return _addonProps().getProperty("ADDON_LOG") || "No logs found";
 }
 
 /**
  * Clear the persisted log
  */
 function clearPersistedLog() {
-  PropertiesService.getScriptProperties().deleteProperty("ADDON_LOG");
+  _addonProps().deleteProperty("ADDON_LOG");
   return "Log cleared";
 }
 

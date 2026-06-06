@@ -5,6 +5,10 @@
 
 // Dependencies used by gmail-addon.js that are defined in other modules
 const addon = require('../src/ui/gmail-addon.js');
+// Gmail + Properties access is routed through serviceFactory ports; the real
+// adapters delegate to the global GmailApp / PropertiesService mocks (setup.js),
+// so tests drive those globals and reset the factory each test.
+const { serviceFactory } = require('../src/core/services/index.js');
 
 // Helper to create a fluent mock that returns itself for every method call
 function createFluentMock(returnValue) {
@@ -64,6 +68,8 @@ describe('Gmail Add-on', () => {
     originalCardService = global.CardService;
     setupCardServiceMock();
     jest.clearAllMocks();
+    // Fresh adapters bound to the current global SDK mocks each test.
+    serviceFactory.reset();
   });
 
   afterEach(() => {

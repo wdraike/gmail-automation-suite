@@ -2,7 +2,41 @@
  * Dashboard API Module
  * Clean API endpoints for dashboard client-server communication
  * All functions return JSON-serializable objects for consistent API responses
+ *
+ * Platform access (Gmail, Properties, Utilities/Session, Gemini) is routed
+ * exclusively through src/core/services ports via the serviceFactory seam. No
+ * direct Google SDK references live in this file (full-hexagonal-conversion,
+ * Wave 2). UnifiedCacheService is an app-level service and is used directly.
  */
+
+/**
+ * Resolve the shared serviceFactory singleton.
+ */
+function _apiServiceFactory() {
+  if (typeof serviceFactory !== 'undefined') {
+    return serviceFactory;
+  }
+  if (typeof require !== 'undefined') {
+    return require('../core/services/index.js').serviceFactory;
+  }
+  throw new Error('serviceFactory is not available');
+}
+
+function _apiGmail() {
+  return _apiServiceFactory().getGmailAdapter();
+}
+
+function _apiProps() {
+  return _apiServiceFactory().getPropertiesAdapter();
+}
+
+function _apiUtils() {
+  return _apiServiceFactory().getUtilitiesAdapter();
+}
+
+function _apiGemini() {
+  return _apiServiceFactory().getGeminiAdapter();
+}
 
 /**
  * Handles GET requests for the web app.
@@ -389,7 +423,7 @@ function getDashboardStatistics() {
     };
     
     // Get label statistics
-    const labels = GmailService.labels.getAllLabels();
+    const labels = _apiGmail().getAllLabels();
     stats.labels.total = labels.filter(l => l.type === 'user').length;
     
     const labelCategories = UnifiedCacheService.labelCategories.getAll();
@@ -422,10 +456,11 @@ function getDashboardStatistics() {
  */
 function getLastRunTime(functionName) {
   try {
-    const lastRun = PropertiesService.getScriptProperties().getProperty(`LAST_RUN_${functionName}`);
+    const lastRun = _apiProps().getProperty(`LAST_RUN_${functionName}`);
     if (lastRun) {
       const date = new Date(lastRun);
-      return Utilities.formatDate(date, Session.getScriptTimeZone(), "MMM dd, HH:mm");
+      const utils = _apiUtils();
+      return utils.formatDate(date, utils.getScriptTimeZone(), "MMM dd, HH:mm");
     }
     return "Never";
   } catch (error) {
@@ -452,7 +487,7 @@ function testEmailCategorization(emailText) {
     
 Email: ${emailText}`;
     
-    const result = callGeminiApi(prompt, "test_categorization");
+    const result = _apiGemini().call(prompt, "test_categorization");
     
     if (result.success) {
       return {
@@ -490,8 +525,9 @@ function getEmailThreads(labelName, maxThreads = 50) {
       };
     }
     
-    const threads = GmailService.threads.getThreadsFromLabel(labelName, 0, maxThreads);
-    const threadData = threads.map(thread => GmailService.threads.getThreadMetadata(thread));
+    const gmail = _apiGmail();
+    const threads = gmail.getThreadsFromLabel(labelName, 0, maxThreads);
+    const threadData = threads.map(thread => gmail.getThreadMetadata(thread));
     
     return {
       success: true,
