@@ -376,10 +376,8 @@ function cleanGeminiResponse(response) {
  * @throws {Error} If the API call fails
  */
 function callGemini(prompt) {
-  // Get API key from Script Properties
-  const API_KEY = PropertiesService.getScriptProperties().getProperty(
-    PROPERTY_KEYS.API_KEY
-  );
+  // Get API key (prefers git-ignored local secret override, else Script Property)
+  const API_KEY = getApiKey();
 
   if (!prompt) {
     throw new Error("Empty prompt provided");

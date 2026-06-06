@@ -1,17 +1,18 @@
 {
-  "leg_id": "leg3-formatting-cleanup",
-  "intent": "Phase 3 formatting normalization (salary as Number, native row banding, location normalization) + carried-forward Leg 1 alignment cleanup (remove Careers URL cols from csv-handler.js, test-csv-parsing.js)",
-  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/sheets-handler.js, src/features/job-finder/csv-handler.js, src/dev/test-csv-parsing.js, tests-local/",
+  "leg_id": "drop-precheck-bump-throughput",
+  "intent": "Drop the isJobListingEmail precheck (false-negative source); lower confidence filter 0.5->0.3 with drop logging; raise throughput (MAX_EMAILS_PER_RUN 2->10, trigger 3h->1h)",
+  "scope": "src/features/job-finder/extractor.js, src/features/job-finder/main.js, src/core/config.js, tests-local/",
   "status": "complete",
-  "verdict": "WARN",
-  "plan_file": ".planning/PLAN-sheet-alignment-cleanup.md",
-  "test_gate": "jest suite GREEN for touched files before commit; baseline 577 pass / 6 fail / 9 skip — no new failures",
-  "jest_before": "577 passed / 6 failed / 9 skipped",
-  "jest_after": "590 passed / 6 failed / 9 skipped",
-  "backlog_items": [
-    "addJobToSpreadsheet rowData `|| \"\"` coerces numeric 0 salary to \"\" (sheets-handler.js:54-57)",
-    "normalizeLocation trailing/double-comma behavior untested (extractor.js)"
-  ],
-  "opened": "2026-06-05T00:00:00Z",
-  "last_update": "2026-06-05T00:00:00Z"
+  "verdict": "PASS",
+  "commit": "fea3cbe",
+  "deployed": true,
+  "jest": "536 passed / 0 failed / 9 skipped",
+  "manual_step": "Re-run setupJobFinderTrigger() in Apps Script editor to apply hourly interval (live trigger still 3h until then). MAX_EMAILS_PER_RUN=10 takes effect immediately.",
+  "decisions": {
+    "precheck": "drop_entirely",
+    "confidence_filter": "lower_to_0.3_and_log_drops",
+    "throughput": "MAX_EMAILS_PER_RUN=10, trigger everyHours(1)"
+  },
+  "opened": "2026-06-06T00:00:00Z",
+  "last_update": "2026-06-06T00:00:00Z"
 }

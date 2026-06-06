@@ -1,35 +1,30 @@
-# Zoe Review — 2026-06-05 (leg3 formatting cleanup — adversarial audit of Telly)
+# Zoe Review — 2026-06-06 (drop-precheck-bump-throughput)
 
 ## Summary
-4 challenges probed empirically. Found + FIXED 1 false pass (no-striping test asserted only a single colour literal). 1 WARN backlog (normalizeLocation trailing/double-comma untested). cleanSalaryValue and the native-banding tests are robust and load-bearing. No remaining false passes.
+No false passes found. I mutation-tested the confidence tests by reverting the source to old behavior (threshold 0.5, log removed) — the three behavior-locking tests FAILED against the mutant, proving they genuinely exercise the change. Rate-limit, precheck-removal, and throughput assertions all verified real.
 
 ## Telly Audit
 
 ### BLOCK Findings
-| # | Finding | Evidence | Status |
-|---|---------|----------|--------|
-| — | None remaining after fix | — | — |
-
-### Fixed During Audit
-| # | Finding | Evidence | Fix |
-|---|---------|----------|-----|
-| 1 | FALSE PASS: "formatJobRow does NOT stripe" only asserted `'#f8f9fa'` absent. Mutation injecting `setBackground("#abcdef")` striping still PASSED. | sheets-handler.test.js no-striping test | Tightened to assert `bgColors.toHaveLength(0)` — ANY per-row background fails. Re-verified: passes on correct code, FAILS under different-colour striping mutation. |
+| # | Finding | Evidence | File | Remediation |
+|---|---------|----------|------|-------------|
+| – | None | – | – | – |
 
 ### WARN Findings
-| # | Finding | Evidence | Remediation |
-|---|---------|----------|-------------|
-| 1 | normalizeLocation trailing-comma ("Austin, " -> "Austin,") and double-comma ("A,,B" -> "A, , B") behavior is unspecified and untested. Not wrong per the conservative spec (separator standardization only, no dangling-comma stripping), and real Gemini output rarely has these. | direct node probe | Backlog: add edge tests or decide whether to strip dangling commas. |
+| # | Finding | Evidence | File | Remediation |
+|---|---------|----------|------|-------------|
+| – | None | – | – | – |
 
-### PASS Verifications
-| # | Check | Evidence |
-|---|-------|----------|
-| 1 | cleanSalaryValue rejects partial-numeric | "120k","$120,000/yr","100000 USD","1.2.3","1e5","-50000" all -> "". Regex `/^\d+(\.\d+)?$/` is strict. |
-| 2 | cleanSalaryValue Number tests load-bearing | string-return mutation fails 4 typeof tests |
-| 3 | Native banding tests NOT mock artifacts | removing production applyRowBanding call fails both banding tests |
-| 4 | Banding idempotency load-bearing | removing the getBandings().remove() dedup fails the idempotency test |
-| 5 | normalizeLocation collapses tab/newline whitespace | "New\tYork,\nNY" -> "New York, NY" |
-| 6 | Full suite no new failures | 590p / 6f (pre-existing) / 9s |
+### PASS Verifications (adversarial)
+| # | Challenge | Method | Result |
+|---|-----------|--------|--------|
+| 1 | Does "WRITES 0.4" prove 0.5->0.3, not pass trivially? | Mutated source threshold back to 0.5 -> test FAILED (jobCount 0 vs 1) | PASS (mutant killed) |
+| 2 | Does the confidence-dropped LOG assertion assert real output? | Removed Logger.log line in source -> test FAILED on `/Confidence-dropped/` + `/Ad@Noise/` regex | PASS (mutant killed) |
+| 3 | Does rate-limit test prove rateLimit label AND NOT NoJobs? | Reads lines 429-430: `expect(addLabel).toHaveBeenCalledWith(rateLimitLabelObj)` AND `.not.toHaveBeenCalledWith(noJobsLabelObj)` + `wasRateLimited===true` | PASS |
+| 4 | Precheck genuinely removed, no orphan mock forcing true? | grep: 0 `isJobListingEmail` mocks (only 1 comment); no `global.isJobListingEmail` assignment remains; extractor export drops it | PASS |
+| 5 | Is (0,10) / trim-to-10 real, not a 2-passthrough? | `toHaveBeenCalledWith(0, 10)` exact match; trim test uses 12 threads (10 new + 2 rl) -> asserts length 10 with rl1/rl2 prepended | PASS |
+| 6 | Extraction RATE_LIMIT_REACHED coverage retained after precheck removal? | grep: 2 in extractor test, 13 in api-service test | PASS |
 
 ## Status: PASS
 
-_Signed: Zoe — 2026-06-05T00:00:00Z_
+_Signed: Zoe — 2026-06-06T00:00:00Z_

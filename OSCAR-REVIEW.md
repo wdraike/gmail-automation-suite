@@ -1,45 +1,40 @@
-# Oscar Review — 2026-06-05 (leg3-formatting-cleanup, job-finder Phase 3)
+# Oscar Review — 2026-06-06 (drop-precheck-bump-throughput)
 
-## Verdict: WARN
+## Verdict: PASS
 
 ## Summary
-Work complete and ready to commit. Phase 3 formatting normalization (salary→Number, native row banding replacing per-row striping, conservative location normalization) plus carried-forward Leg 1 alignment cleanup (Careers URL columns removed from the CSV path). All reviewers PASS; Zoe found and fixed 1 false-pass test inline. 2 items deferred to backlog. Full suite 590 passed / 6 pre-existing failures / 9 skipped — zero new failures.
+All checks passed. Ready to commit. The isJobListingEmail pre-check is fully removed, confidence gate lowered 0.5->0.3 with dropped-job logging, and throughput bumped (MAX_EMAILS_PER_RUN 2->10, trigger 3h->1h). Rate-limit safety verified intact. Zoe mutation-killed the confidence tests.
 
 ## Agent Findings
 
 ### Ernie (code quality) — PASS
-- No Critical. 1 WARN: `addJobToSpreadsheet` rowData `job["Minimum Salary"] || ""` would coerce a `0` Number to "" now that salary is numeric (latent; salaries >0, so not a live bug) — flagged, NOT fixed (changing the coercion is an unapproved logic change out of scope). 2 Info: CSV still omits Employment/Work/Experience cols (separate pre-existing divergence, documented inline); getMaxRows()-wide banding range is correct for GAS.
+No Critical, no Warning. Two Info notes (NoJobs fallthrough is intended; baseValid iterated twice, negligible). Rate-limit propagation and catch block unchanged. No unapproved fallbacks.
 
-### Telly (tests) — PASS
-- 13 net-new tests across 3 suites; 121/121 green in touched suites. Full suite 590p/6f(pre-existing)/9s, zero new failures. Mutation-verified salary-Number tests and banding-idempotency test are load-bearing.
+### Telly (test coverage) — PASS
+536 passed / 0 failed / 9 skipped. Every changed behavior mapped to a covering test. isJobListingEmail tests removed (0 refs); extraction RATE_LIMIT_REACHED retained.
 
 ### Zoe (adversarial) — PASS
-- Probed 4 challenges. Found + FIXED 1 FALSE PASS: the no-striping test asserted only `'#f8f9fa'` absent and would pass if striping switched to any other colour; tightened to `bgColors.toHaveLength(0)` and re-verified it now fails under a different-colour striping mutation. Confirmed native-banding tests exercise real production calls (not mock artifacts) and cleanSalaryValue correctly rejects partial-numeric ("120k", "$120,000/yr", etc.). 1 WARN: normalizeLocation trailing/double-comma behavior untested.
+Mutation test: reverted threshold to 0.5 and removed the log line — the 0.4-write, 0.2-drop+log, and exactly-0.3 tests all FAILED against the mutant (killed). Rate-limit dual-assertion, precheck-removal, and (0,10)/trim-to-10 all verified real.
 
 ## Fix Loop
-- No bert iterations required (no BLOCK). Zoe's false-pass fixed inline during audit.
+- No iterations needed. All reviewers PASS on first pass.
 
 ## Completeness
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
-| Tests passing (no new failures) | PASS |
-| Docs updated (if API changed) | N/A (GAS internal; JSDoc present on new helpers) |
-| Security review run (if auth/payment) | N/A (no security-sensitive files) |
-| No dead staged files | PASS |
+| Tests passing (536/0/9) | PASS |
+| Docs updated (no API change) | N/A |
+| Security review run (no security files) | N/A |
+| No dead/empty staged files | PASS |
 | No unapproved fallbacks | PASS |
 
-## Backlog Items (WARN)
-| Finding | File |
-|---------|------|
-| `addJobToSpreadsheet` rowData `job["Minimum Salary"]/["Maximum Salary"] \|\| ""` coerces a numeric 0 to "" — consider explicit `=== "" ? "" : value` guard now salary is a Number | sheets-handler.js:54-57 |
-| normalizeLocation trailing-comma / double-comma behavior unspecified + untested — add edge tests or decide on dangling-comma stripping | extractor.js normalizeLocation |
-
 ## Kermit Report
-Verdict: WARN
+Verdict: PASS
 Completeness gaps: none
-Backlog items: 2
+Backlog items: 0
 Ready to commit: yes
+Manual step required: live installed trigger does NOT change until user re-runs setupJobFinderTrigger() in the Apps Script editor.
 
 ## Status: PASS
-_Signed: Oscar — 2026-06-05T00:00:00Z_
+_Signed: Oscar — 2026-06-06T00:00:00Z_

@@ -1,11 +1,23 @@
 {
-  "last_leg": "fix-gemini-429-pipeline",
-  "verdict": "WARN",
+  "last_leg": "fix-failures-delete-csv-deadcode",
+  "verdict": "PASS",
   "completed": "2026-06-05",
-  "summary": "Fixed Gemini 429/503 pipeline bug. callGemini now throws RATE_LIMIT_REACHED on 429/503 and on RESOURCE_EXHAUSTED/error.code 429; isJobListingEmail precheck re-throws RATE_LIMIT_REACHED (and other API failures) instead of returning false, so emails are queued via markEmailAsRateLimited instead of silently archived as no-jobs. Root cause of empty-sheet + lost-emails resolved. TDD RED-first; 10 new tests. Oscar WARN (ernie/telly/zoe all PASS).",
-  "next": "WARN-21 deferred (test {success:true,response:undefined} returns false). WARN-20 still open. NOT yet clasp pushed — Kermit/user handles deploy.",
+  "test_suite": "537 passed / 0 failed / 9 skipped — all failures eliminated. 9 skips are intentional (8 real-Gemini-API describe.skip, 1 hard-to-mock it.skip).",
+  "csv_layer": "DELETED — csv-handler.js + workflow-test.js + 2 dev csv scaffolds + 2 csv test files removed (orphaned dead code, zero callers). Deployed via clasp push.",
+  "live_trigger_cleanup_needed": "Check Apps Script editor > Triggers and delete any installed importPendingJobCsvs trigger (handler no longer exists).",
+  "prior_leg": "execute-sheet-alignment-cleanup",
+  "prior_verdict": "WARN",
+  "prior_completed": "2026-06-05",
+  "summary": "Sheet export alignment hardened + formatting cleaned in 3 legs (commits eed614c, 777a4e4, 84e3728), all deployed via clasp push. Removed Careers URL columns (sheet now 18 cols, CSV 15) and dead dedup code; consolidated to one header-writing path; added auditAndRepairSheetHeaders() that reconciles a drifted live sheet to canonical SHEET_COLUMNS by header NAME (drops obsolete, inserts missing, throws loudly on unreconcilable data) + standalone auditJobSheetHeaders() entrypoint; salary now stored as Number; native row banding replaces row%2 striping; added normalizeLocation. 590 jest pass / 6 pre-existing failures.",
+  "next": "REQUIRED runtime step: open Apps Script editor, run auditJobSheetHeaders() ONCE to migrate the existing live sheet headers to the 18-col canonical set. Then run processJobEmailsMain and confirm via diagnostic Logger.log (resolved spreadsheet id/url/tab, committed bf19c62) that rows land under correct headers.",
   "backlog_items": [
-    "WARN-20: add regression test assetsolutions.com not filtered",
-    "WARN-21: test isJobListingEmail {success:true, response:undefined} returns false (not throw)"
-  ]
+    "salary numeric-0 || \"\" coercion (latent, salaries >0)",
+    "normalizeLocation trailing/double-comma edge cases untested",
+    "auditAndRepairSheetHeaders duplicate live-header name soft-drop (first-occurrence-wins)",
+    "JSDoc throw-condition doc drift in audit fn (sheets-handler.js:141)",
+    "initializeJobFinder setupSheetHeaders(sheet) call not asserted in test",
+    "WARN-20: regression test assetsolutions.com not filtered",
+    "WARN-21: test isJobListingEmail {success:true, response:undefined} returns false"
+  ],
+  "prior_leg_this_session": "fix-gemini-429-pipeline (bf19c62) — Gemini 429/503 silent email-loss fix, deployed."
 }

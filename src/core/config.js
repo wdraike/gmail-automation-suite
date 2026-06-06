@@ -101,10 +101,16 @@ const API_SERVICE_CONFIG = {
 };
 
 /**
- * Gets the API key from script properties.
+ * Gets the API key.
+ * Prefers the git-ignored local secret override (src/core/local-secrets.js,
+ * pulled from GCP Secret Manager and pushed via clasp); falls back to the
+ * API_KEY Script Property when the override is absent (e.g. fresh clone / tests).
  * @returns {string} The API key or null if not set.
  */
 function getApiKey() {
+  if (typeof GEMINI_API_KEY_OVERRIDE !== 'undefined' && GEMINI_API_KEY_OVERRIDE) {
+    return GEMINI_API_KEY_OVERRIDE;
+  }
   return PropertiesService.getScriptProperties().getProperty(
     PROPERTY_KEYS.API_KEY
   );

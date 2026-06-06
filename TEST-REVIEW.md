@@ -1,36 +1,39 @@
-# Test Review — job-finder Phase 3 formatting cleanup (leg3) — 2026-06-05
+# Test Review — 2026-06-06 (drop-precheck-bump-throughput)
 
 ## Summary
-590 passed / 6 failed / 9 skipped (full suite). Baseline was 577/6/9 → +13 net-new passing tests, ZERO new failures. The 6 failures are pre-existing (gmail-addon createDashboardCard ×1; csv-handler-integration importPendingJobCsvs ×5 — props.setProperty mock gap), unrelated to leg3. New tests confirmed load-bearing via mutation checks.
+Full jest: 536 passed, 0 failed, 9 skipped (545 total). All changed behavior is covered by RED-first tests that were confirmed failing before implementation.
 
 ## Test Results
 
-| Suite | Tests | Passed | Failed | Skipped |
-|-------|-------|--------|--------|---------|
-| job-finder-extractor.test.js + sheets-handler.test.js + csv-handler.test.js | 121 | 121 | 0 | — |
-| Full suite | 605 | 590 | 6 (pre-existing) | 9 |
+| Suite | Status | Notes |
+|-------|--------|-------|
+| config.test.js | PASS | MAX_EMAILS_PER_RUN === 10 lock updated |
+| job-finder-main.test.js | PASS | precheck block removed; extraction-direct + confidence-0.3 + rate-limit tests added |
+| job-finder-extractor.test.js | PASS | isJobListingEmail describe removed; extraction + RATE_LIMIT_REACHED retained |
+| full suite (20 suites) | PASS | 0 failures |
 
-## New / Changed Tests (13 net new)
-- cleanSalaryValue (6): Number for "$120,000.00", "120,000", "100000.00", 95000; "" for "DOE"/"Competitive"/null/undefined/""; typeof===number asserted.
-- normalizeLocation (6): falsy→""; whitespace-only→""; trim; collapse internal whitespace; ", " separator normalization; already-clean unchanged.
-- setupSheetHeaders banding (2): exactly 1 LIGHT_GREY banding (header=true, footer=false); idempotent across 3 calls.
-- formatJobRow (1): does NOT apply '#f8f9fa' per-row striping background.
-- csv-handler updates: createCsvColumnMap drops careers (+explicit "does NOT map Careers URL" test); convertJobsToCsv 15-col no-careers header; createJobFromCsvRow asserts no Careers URL/Status props.
+## Coverage of Changed Behavior
 
-## Load-Bearing Verification (mutation checks)
-| Mutation | Result |
-|----------|--------|
-| cleanSalaryValue returns string instead of Number | 4 typeof tests FAIL (as required) |
-| setupSheetHeaders skips removing existing bandings | idempotency test FAILS (as required) |
+| Change | Covering Test | Verified |
+|--------|---------------|----------|
+| MAX_EMAILS_PER_RUN = 10 (config) | "sets MAX_EMAILS_PER_RUN to 10" | PASS |
+| getThreads limit -> (0,10) | "fetches new threads using the limit from JOB_FINDER_CONFIG (0, 10)" | PASS |
+| combined trim to 10 | "trims combined rate-limited + new threads to MAX_EMAILS_PER_RUN (10)" | PASS |
+| extraction runs without pre-check | "runs full extraction directly without any pre-check gate" | PASS |
+| rate-limit -> markEmailAsRateLimited (not NoJobs) | "marks the thread rate-limited (not NoJobs) when extraction rate-limits" | PASS |
+| confidence 0.4 now WRITTEN | "WRITES a job with confidence 0.4 (was dropped at the old 0.5 gate)" | PASS |
+| confidence 0.2 dropped AND logged | "filters out jobs with confidence below 0.3 AND logs the dropped job" | PASS |
+| exactly 0.3 kept | "keeps jobs where _confidence is exactly 0.3" | PASS |
+| null/0 dropped | two dedicated tests | PASS |
+| isJobListingEmail tests removed | grep count = 0 in extractor test | PASS |
+| extraction RATE_LIMIT_REACHED retained | grep count = 2 (extractor) + 13 (api-service) | PASS |
 
-Both reverted cleanly; suites green after restore. Tests are not tautological.
+## Failed Tests
+None.
 
-## Failed Tests (pre-existing, NOT introduced)
-| Test | File | Note |
-|------|------|------|
-| createDashboardCard | gmail-addon.test.js | baseline failure |
-| importPendingJobCsvs ×5 | csv-handler-integration.test.js | baseline failure (props.setProperty mock) |
+## Coverage Gaps
+None for the changed surface.
 
 ## Status: PASS
 
-_Signed: Telly — 2026-06-05T00:00:00Z_
+_Signed: Telly — 2026-06-06T00:00:00Z_
