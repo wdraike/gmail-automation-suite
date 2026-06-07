@@ -33,6 +33,17 @@ describe('CacheAdapter', () => {
       const adapter = new CacheAdapter();
       expect(adapter.cacheService).toBe(global.CacheService);
     });
+
+    it('falls back to undefined when no CacheService global exists', () => {
+      const saved = global.CacheService;
+      delete global.CacheService;
+      try {
+        const adapter = new CacheAdapter();
+        expect(adapter.cacheService).toBeUndefined();
+      } finally {
+        global.CacheService = saved;
+      }
+    });
   });
 
   describe('get / put / remove / removeAll', () => {

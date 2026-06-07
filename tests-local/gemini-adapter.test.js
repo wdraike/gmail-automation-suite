@@ -31,6 +31,17 @@ describe('GeminiAdapter', () => {
         global.callGeminiApi = original;
       }
     });
+
+    it('falls back to undefined when no callGeminiApi global exists', () => {
+      const original = global.callGeminiApi;
+      delete global.callGeminiApi;
+      try {
+        const a = new GeminiAdapter();
+        expect(a.callGeminiApi).toBeUndefined();
+      } finally {
+        global.callGeminiApi = original;
+      }
+    });
   });
 
   describe('call', () => {

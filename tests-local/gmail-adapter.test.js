@@ -299,4 +299,107 @@ describe('GmailAdapter', () => {
       expect(adapter.getThreadMetadata(thread)).toBeNull();
     });
   });
+
+  describe('constructor + default params', () => {
+    it('defaults to the global GmailApp when no arg is given', () => {
+      const prevGmail = global.GmailApp;
+      global.GmailApp = { getThreadById: jest.fn(() => 'thread') };
+      const a = new GmailAdapter();
+      expect(a.getThreadById('id')).toBe('thread');
+      global.GmailApp = prevGmail;
+    });
+
+    it('getInboxThreads uses default start/max when omitted', () => {
+      mockGmailApp.getInboxThreads = jest.fn(() => ['t']);
+      const out = adapter.getInboxThreads();
+      expect(mockGmailApp.getInboxThreads).toHaveBeenCalledWith(0, 50);
+      expect(out).toEqual(['t']);
+    });
+  });
+
+  describe('getOrCreateLabel reuses existing intermediate levels', () => {
+    it('does not recreate a nested level that already exists', () => {
+      // "Work" exists; "Work/Projects" does not -> only the missing level is created.
+      const existing = { getName: () => 'Work' };
+      mockGmailApp.getUserLabelByName = jest.fn((name) => {
+        if (name === 'Work') return existing;          // intermediate exists -> `if(!...)` FALSE
+        if (name === 'Work/Projects') return null;     // leaf missing first, then created
+        return null;
+      });
+      const created = { getName: () => 'Work/Projects' };
+      mockGmailApp.createLabel = jest.fn(() => created);
+      adapter.getOrCreateLabel('Work/Projects');
+      // "Work" was NOT created (already existed); only "Work/Projects" created.
+      expect(mockGmailApp.createLabel).toHaveBeenCalledWith('Work/Projects');
+      expect(mockGmailApp.createLabel).not.toHaveBeenCalledWith('Work');
+    });
+  });
+
+  describe('getThreadsFromLabel inner catch', () => {
+    it('returns [] when the found label getThreads throws', () => {
+      global.Logger = { log: jest.fn() };
+      const label = { getThreads: jest.fn(() => { throw new Error('threads boom'); }) };
+      mockGmailApp.getUserLabelByName = jest.fn(() => label);
+      expect(adapter.getThreadsFromLabel('Work', 0, 10)).toEqual([]);
+    });
+  });
+
+  describe('searchByLabel / searchUnreadByLabel', () => {
+    it('searchByLabel issues a label: query', () => {
+      mockGmailApp.search = jest.fn(() => ['t1']);
+      const out = adapter.searchByLabel('Work', 0, 5);
+      expect(mockGmailApp.search).toHaveBeenCalledWith('label:Work', 0, 5);
+      expect(out).toEqual(['t1']);
+    });
+
+    it('searchByLabel uses default pagination', () => {
+      mockGmailApp.search = jest.fn(() => []);
+      adapter.searchByLabel('Work');
+      expect(mockGmailApp.search).toHaveBeenCalledWith('label:Work', 0, 500);
+    });
+
+    it('searchUnreadByLabel issues a label:...is:unread query', () => {
+      mockGmailApp.search = jest.fn(() => ['u1']);
+      const out = adapter.searchUnreadByLabel('Work', 0, 5);
+      expect(mockGmailApp.search).toHaveBeenCalledWith('label:Work is:unread', 0, 5);
+      expect(out).toEqual(['u1']);
+    });
+
+    it('searchUnreadByLabel uses default pagination', () => {
+      mockGmailApp.search = jest.fn(() => []);
+      adapter.searchUnreadByLabel('Work');
+      expect(mockGmailApp.search).toHaveBeenCalledWith('label:Work is:unread', 0, 500);
+    });
+  });
+
+  describe('batchProcessThreads', () => {
+    it('processes all threads in batches and returns the results', async () => {
+      global.Utilities = { sleep: jest.fn() };
+      const threads = [1, 2, 3, 4, 5, 6];
+      const processor = jest.fn(async (t) => t * 10);
+      const results = await adapter.batchProcessThreads(threads, processor, 2, 100);
+      expect(results).toEqual([10, 20, 30, 40, 50, 60]);
+      expect(processor).toHaveBeenCalledTimes(6);
+      // Sleeps between batches (after batch 1 and batch 2, not after the last).
+      expect(Utilities.sleep).toHaveBeenCalledTimes(2);
+      expect(Utilities.sleep).toHaveBeenCalledWith(100);
+    });
+
+    it('does not sleep when delayMs is 0', async () => {
+      global.Utilities = { sleep: jest.fn() };
+      const results = await adapter.batchProcessThreads([1, 2, 3], async (t) => t, 1, 0);
+      expect(results).toEqual([1, 2, 3]);
+      expect(Utilities.sleep).not.toHaveBeenCalled();
+    });
+
+    it('uses default batch size and delay', async () => {
+      global.Utilities = { sleep: jest.fn() };
+      const threads = Array.from({ length: 7 }, (_, i) => i);
+      const results = await adapter.batchProcessThreads(threads, async (t) => t);
+      expect(results.length).toBe(7);
+      // 7 threads, batchSize 5 -> two batches -> one inter-batch sleep.
+      expect(Utilities.sleep).toHaveBeenCalledTimes(1);
+      expect(Utilities.sleep).toHaveBeenCalledWith(1000);
+    });
+  });
 });

@@ -17,6 +17,18 @@ describe('HttpAdapter', () => {
       const adapter = new HttpAdapter();
       expect(adapter.urlFetchApp).toBe(global.UrlFetchApp);
     });
+
+    it('falls back to undefined when no UrlFetchApp global exists', () => {
+      // Exercises the `: undefined` arm of the constructor default's typeof guard.
+      const saved = global.UrlFetchApp;
+      delete global.UrlFetchApp;
+      try {
+        const adapter = new HttpAdapter();
+        expect(adapter.urlFetchApp).toBeUndefined();
+      } finally {
+        global.UrlFetchApp = saved;
+      }
+    });
   });
 
   describe('fetch', () => {

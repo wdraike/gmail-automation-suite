@@ -155,6 +155,13 @@ describe('Service Adapters - Integration Tests', () => {
       expect(adapter1).toBe(adapter2);
     });
 
+    it('returns the cached singleton on the second getGeminiAdapter call', () => {
+      const factory = new ServiceFactory({ callGeminiApi: jest.fn() });
+      const a1 = factory.getGeminiAdapter();
+      const a2 = factory.getGeminiAdapter(); // hits the `if (!this._geminiAdapter)` false branch
+      expect(a1).toBe(a2);
+    });
+
     it('should allow dependency injection of mock services', () => {
       const mockGmailApp = {
         search: jest.fn(() => []),
@@ -230,6 +237,20 @@ describe('Service Adapters - Integration Tests', () => {
 
       expect(http1).not.toBe(http2);
       expect(cache1).not.toBe(cache2);
+    });
+
+    it('injects mock SpreadsheetApp / DriveApp / Utilities via the services map', () => {
+      const mockSpreadsheetApp = { openById: jest.fn() };
+      const mockDriveApp = { getFileById: jest.fn() };
+      const mockUtilities = { sleep: jest.fn() };
+      const factory = new ServiceFactory({
+        SpreadsheetApp: mockSpreadsheetApp,
+        DriveApp: mockDriveApp,
+        Utilities: mockUtilities,
+      });
+      expect(factory.getSpreadsheetAdapter().spreadsheetApp).toBe(mockSpreadsheetApp);
+      expect(factory.getDriveAdapter().drive).toBe(mockDriveApp);
+      expect(factory.getUtilitiesAdapter().utilities).toBe(mockUtilities);
     });
 
     it('should allow creating multiple independent factory instances', () => {
