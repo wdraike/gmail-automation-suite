@@ -678,15 +678,6 @@ function writeLog(message) {
       log = log.substring(log.length - 5000);
     }
 
-    // Extra guard: if total properties usage is approaching the 500KB limit,
-    // clear older entries more aggressively before saving.
-    /* istanbul ignore next -- `log` is always a string here (initialized via `|| ""` on read and only ever string-concatenated), so the `|| ""` fallback is unreachable defensive code. */
-    const estimatedSize = (log || "").length + 200; // rough overhead
-    /* istanbul ignore next -- DEAD GUARD: the 5000-char cap above bounds `log` to <=5000, so estimatedSize (<=5200) can never exceed 100000. Kept as a documented defensive marker; see backlog (full-test-coverage leg) to remove or re-scope the threshold. */
-    if (estimatedSize > 100000) {
-      log = log.substring(log.length - 2000);
-    }
-
     // Save log
     props.setProperty("ADDON_LOG", log);
   } catch (e) {

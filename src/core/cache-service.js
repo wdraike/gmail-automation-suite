@@ -375,11 +375,11 @@ const LabelCategoriesCache = {
   getAll() {
     return UnifiedCacheCore.getOrCompute(
       CACHE_CONFIG.KEYS.LABEL_CATEGORIES,
-      () => {
-        const prop = _csProps().getProperty('LABEL_CATEGORIES_MAP');
-        /* istanbul ignore next -- the truthy branch is unreachable: CACHE_CONFIG.KEYS.LABEL_CATEGORIES === 'LABEL_CATEGORIES_MAP', so getOrCompute's prior get() already read this exact property; the computeFn only runs on a miss, at which point this read also returns null. */
-        return prop ? JSON.parse(prop) : {};
-      },
+      // computeFn runs only on a getOrCompute miss. Because
+      // CACHE_CONFIG.KEYS.LABEL_CATEGORIES === 'LABEL_CATEGORIES_MAP', the prior
+      // get() already read this exact property and found it empty, so a re-read
+      // here would always be empty too — the mapping is simply absent. Return {}.
+      () => ({}),
       CACHE_CONFIG.DURATIONS.LONG,
       CACHE_CONFIG.STORAGE.PROPERTIES
     );

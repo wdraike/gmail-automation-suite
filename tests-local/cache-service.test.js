@@ -690,9 +690,14 @@ describe('Cache Service - Complete Test Suite', () => {
       };
     }
 
-    it('getAll falls back to LABEL_CATEGORIES_MAP property', () => {
+    it('getAll reads the LABEL_CATEGORIES_MAP property when present', () => {
       global.PropertiesService = propStore({ LABEL_CATEGORIES_MAP: JSON.stringify({ Work: ['work'] }) });
       expect(LabelCategoriesCache.getAll()).toEqual({ Work: ['work'] });
+    });
+
+    it('getAll returns {} when the LABEL_CATEGORIES_MAP property is absent (miss path)', () => {
+      global.PropertiesService = propStore({});
+      expect(LabelCategoriesCache.getAll()).toEqual({});
     });
 
     it('getForLabel returns categories for a label, [] when missing', () => {
