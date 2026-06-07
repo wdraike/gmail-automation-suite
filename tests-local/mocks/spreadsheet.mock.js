@@ -56,6 +56,11 @@ class MockRange {
     return this;
   }
 
+  setFormula(formula) {
+    this.formula = formula;
+    return this;
+  }
+
   setFontWeight(weight) {
     this.fontWeights = Array(this.numRows).fill(Array(this.numCols).fill(weight));
     return this;

@@ -400,6 +400,56 @@ describe('Sheets Handler - Unit Tests', () => {
       expect(sheet.getLastRow()).toBe(1);
     });
 
+    it('treats a sheet with rows but zero columns as empty (lastColumn guard)', () => {
+      // getLastRow() >= 1 but getLastColumn() === 0 -> the `lastColumn < 1` operand
+      // of the empty-sheet guard is evaluated (not short-circuited by lastRow).
+      const setupCalls = [];
+      const stubSheet = {
+        getLastRow: () => 1,
+        getLastColumn: () => 0,
+        getRange: () => ({
+          setValues: () => stubSheet.getRange(),
+          setFontWeight: () => stubSheet.getRange(),
+          setBackground: () => stubSheet.getRange(),
+          setFontColor: () => stubSheet.getRange(),
+          getValues: () => [[]],
+        }),
+        setFrozenRows: () => { setupCalls.push('freeze'); },
+        getMaxRows: () => 10,
+        getBandings: () => [],
+        setColumnWidth: () => {},
+      };
+      const result = auditAndRepairSheetHeaders(stubSheet);
+      expect(result.repaired).toBe(false);
+      expect(result.reason).toBe('empty');
+    });
+
+    it('remaps a null source cell to an empty string (value null-coalesce arm)', () => {
+      const reordered = [...FINAL_COLUMNS].reverse();
+      const reorderedRow = reordered.map(h => `val:${h}`);
+      reorderedRow[0] = null; // a null source cell -> the `value === null` true arm
+      const sheet = makeSheetWith(reordered, [reorderedRow]);
+      const result = auditAndRepairSheetHeaders(sheet);
+      expect(result.repaired).toBe(true);
+      // The column that was null in the source becomes "" in the canonical grid.
+      const row = readDataRow(sheet, 0);
+      const nulledHeaderName = reordered[0]; // last canonical column (reversed first)
+      expect(row[FINAL_COLUMNS.indexOf(nulledHeaderName)]).toBe('');
+    });
+
+    it('tolerates a data row wider than the live header row (empty trailing cells)', () => {
+      // Live headers narrower than a data row; the extra trailing cell is empty so
+      // the blank-header check passes, exercising the `c < liveHeaders.length ? : ""`
+      // false arm without throwing.
+      const reordered = [...FINAL_COLUMNS].reverse();
+      const sheet = makeSheetWith(reordered, []);
+      // Write a data row one cell WIDER than the header row, trailing cell empty.
+      const wideRow = [...reordered.map(h => `v:${h}`), ''];
+      sheet.getRange(2, 1, 1, wideRow.length).setValues([wideRow]);
+      const result = auditAndRepairSheetHeaders(sheet);
+      expect(result.repaired).toBe(true);
+    });
+
     it('throws loudly when data sits under an unnamed (blank) header column', () => {
       // A column with a BLANK header name but actual data underneath cannot be
       // name-mapped to any target column -> the value would be silently dropped.
@@ -437,6 +487,230 @@ describe('Sheets Handler - Unit Tests', () => {
       setupSheetHeaders(sheet);
 
       expect(sheet.getBandings().length).toBe(1);
+    });
+  });
+
+  describe('addJobToSpreadsheet defaults + ternaries', () => {
+    it('fills every column with its empty/Unknown default for a bare job, using fn params', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+      // Bare job (no fields) -> exercises every `job["X"] || default` right arm and
+      // the emailDate/emailSource/emailTitle/jobsInEmail parameter ternaries.
+      const ok = addJobToSpreadsheet({}, new Date('2026-01-01'), 'indeed', 'Subject', 3);
+      expect(ok).toBe(true);
+      const row = sheet.getRange(2, 1, 1, FINAL_COLUMNS.length).getValues()[0];
+      const idx = (name) => FINAL_COLUMNS.indexOf(name);
+      expect(row[idx('Company')]).toBe('');
+      expect(row[idx('Employment Type')]).toBe('Unknown');
+      expect(row[idx('Work Arrangement')]).toBe('Unknown');
+      expect(row[idx('Experience Level')]).toBe('Unknown');
+      expect(row[idx('Email Source')]).toBe('indeed');
+      expect(row[idx('Email Title')]).toBe('Subject');
+      expect(row[idx('Jobs Found In Email')]).toBe(3);
+      expect(row[idx('Email Received Date')]).not.toBe('');
+    });
+
+    it('leaves Email Received Date empty when no emailDate is provided', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+      addJobToSpreadsheet({}); // emailDate null -> `emailDate ? ... : ""` false arm
+      const row = sheet.getRange(2, 1, 1, FINAL_COLUMNS.length).getValues()[0];
+      expect(row[FINAL_COLUMNS.indexOf('Email Received Date')]).toBe('');
+    });
+
+    it('leaves Jobs Found In Email empty when neither the job field nor the param is set', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+      // jobsInEmail=0 (falsy) + no job field -> the final `|| ""` arm.
+      addJobToSpreadsheet({}, null, '', '', 0);
+      const row = sheet.getRange(2, 1, 1, FINAL_COLUMNS.length).getValues()[0];
+      expect(row[FINAL_COLUMNS.indexOf('Jobs Found In Email')]).toBe('');
+    });
+
+    it('returns the empty-string default for a SHEET_COLUMN not in the switch', () => {
+      const saved = global.JOB_FINDER_CONFIG.SHEET_COLUMNS;
+      global.JOB_FINDER_CONFIG.SHEET_COLUMNS = [...saved, 'Unhandled Column'];
+      try {
+        const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+        global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+        const sheet = spreadsheet.insertSheet('Job Listings');
+        setupSheetHeaders(sheet);
+        const ok = addJobToSpreadsheet({ Company: 'Acme' });
+        expect(ok).toBe(true);
+        const row = sheet.getRange(2, 1, 1, global.JOB_FINDER_CONFIG.SHEET_COLUMNS.length).getValues()[0];
+        // The unhandled column hits the switch `default: return ""`.
+        expect(row[global.JOB_FINDER_CONFIG.SHEET_COLUMNS.indexOf('Unhandled Column')]).toBe('');
+      } finally {
+        global.JOB_FINDER_CONFIG.SHEET_COLUMNS = saved;
+      }
+    });
+  });
+
+  describe('getJobStatistics edge cases', () => {
+    it('returns an error object when no spreadsheet is configured', () => {
+      global.getJobFinderSpreadsheetId.mockReturnValue('');
+      const stats = getJobStatistics();
+      expect(stats.error).toContain('No spreadsheet');
+    });
+
+    it('returns zeroed stats when the sheet is empty (only headers)', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet); // header row only, no data
+      const stats = getJobStatistics();
+      expect(stats.totalJobs).toBe(0);
+      expect(stats.bySource).toEqual({});
+    });
+
+    it('counts companies/locations/salary and groups by source for populated data', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-spreadsheet-id');
+      global.SpreadsheetApp.addSpreadsheet(spreadsheet);
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      setupSheetHeaders(sheet);
+      addJobToSpreadsheet({ Company: 'Acme', Location: 'NYC', 'Minimum Salary': 100, 'Email Source': 'indeed' });
+      addJobToSpreadsheet({ Company: 'Acme', Location: 'SF', 'Email Source': 'indeed' }); // no salary, dup company
+      addJobToSpreadsheet({ Company: 'Beta', Location: 'NYC' }); // no source -> "Unknown"
+      // A row with NO company and NO location -> the `if (row[companyCol])` /
+      // `if (row[locationCol])` FALSE arms.
+      addJobToSpreadsheet({ 'Email Source': 'glassdoor' });
+      const stats = getJobStatistics();
+      expect(stats.totalJobs).toBe(4);
+      expect(stats.companies).toBe(2);   // Acme, Beta (blank not counted)
+      expect(stats.locations).toBe(2);   // NYC, SF (blank not counted)
+      expect(stats.withSalary).toBe(1);
+      expect(stats.bySource.indeed).toBe(2);
+      expect(stats.bySource.Unknown).toBe(1);
+      expect(stats.bySource.glassdoor).toBe(1);
+    });
+
+    it('returns an error object when the spreadsheet access throws (catch)', () => {
+      global.getJobFinderSpreadsheetId.mockReturnValue('test-spreadsheet-id');
+      global.SpreadsheetApp.openById = jest.fn(() => { throw new Error('open boom'); });
+      serviceFactory.reset();
+      const stats = getJobStatistics();
+      expect(stats.error).toContain('open boom');
+    });
+  });
+
+  describe('formatDateTime catch', () => {
+    it('falls back to date.toString() when the Utilities port throws', () => {
+      global.Utilities = { formatDate: jest.fn(() => { throw new Error('fmt boom'); }) };
+      global.Session = { getScriptTimeZone: jest.fn(() => 'GMT') };
+      serviceFactory.reset();
+      const d = new Date('2026-01-01T00:00:00Z');
+      expect(formatDateTime(d)).toBe(d.toString());
+    });
+  });
+
+  describe('setColumnWidths unknown header', () => {
+    it('applies the 100px default width for an unmapped header', () => {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      const setColumnWidth = jest.fn();
+      sheet.setColumnWidth = setColumnWidth;
+      // sheetsHandler.setColumnWidths is exported.
+      sheetsHandler.setColumnWidths(sheet, ['Company', 'Totally Unmapped']);
+      expect(setColumnWidth).toHaveBeenCalledWith(1, 150); // Company mapped
+      expect(setColumnWidth).toHaveBeenCalledWith(2, 100); // unmapped -> default 100
+    });
+  });
+
+  describe('formatJobRow salary + URL formatting', () => {
+    function sheetWithRow(rowValues) {
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      sheet.getRange(1, 1, 1, FINAL_COLUMNS.length).setValues([FINAL_COLUMNS]);
+      sheet.getRange(2, 1, 1, rowValues.length).setValues([rowValues]);
+      return sheet;
+    }
+
+    it('formats numeric salary cells and a hyperlink URL without error', () => {
+      // Captures setNumberFormat / setFormula calls across every range the
+      // function touches (the mock returns a fresh range per getRange call, so we
+      // wrap getRange to record the relevant setter invocations).
+      const idx = (n) => FINAL_COLUMNS.indexOf(n);
+      const row = FINAL_COLUMNS.map(() => '');
+      row[idx('Minimum Salary')] = 100000;
+      row[idx('Maximum Salary')] = 150000;
+      row[idx('Job URL')] = 'https://acme.com/jobs/1';
+      const sheet = sheetWithRow(row);
+
+      const numberFormats = [];
+      const formulas = [];
+      const origGetRange = sheet.getRange.bind(sheet);
+      jest.spyOn(sheet, 'getRange').mockImplementation((...args) => {
+        const r = origGetRange(...args);
+        const origFmt = r.setNumberFormat.bind(r);
+        const origFormula = r.setFormula ? r.setFormula.bind(r) : null;
+        r.setNumberFormat = (f) => { numberFormats.push(f); return origFmt(f); };
+        if (origFormula) r.setFormula = (f) => { formulas.push(f); return origFormula(f); };
+        return r;
+      });
+
+      realFormatJobRow(sheet, 2);
+      sheet.getRange.mockRestore();
+
+      // Both salary cells were numeric -> currency format applied twice.
+      expect(numberFormats.filter(f => f === '$#,##0').length).toBe(2);
+      // The http URL produced a HYPERLINK formula.
+      expect(formulas.some(f => /^=HYPERLINK\("https:\/\/acme\.com\/jobs\/1"/.test(f))).toBe(true);
+    });
+
+    it('skips salary formatting for non-numeric salary values', () => {
+      const idx = (n) => FINAL_COLUMNS.indexOf(n);
+      const row = FINAL_COLUMNS.map(() => '');
+      row[idx('Minimum Salary')] = 'Competitive'; // non-numeric -> isNaN -> skip
+      row[idx('Job URL')] = 'mailto:x@y.com';     // not http -> skip hyperlink
+      const sheet = sheetWithRow(row);
+      const numberFormats = [];
+      const origGetRange = sheet.getRange.bind(sheet);
+      jest.spyOn(sheet, 'getRange').mockImplementation((...args) => {
+        const r = origGetRange(...args);
+        const origFmt = r.setNumberFormat.bind(r);
+        r.setNumberFormat = (f) => { numberFormats.push(f); return origFmt(f); };
+        return r;
+      });
+      realFormatJobRow(sheet, 2);
+      sheet.getRange.mockRestore();
+      expect(numberFormats).not.toContain('$#,##0');
+    });
+
+    it('swallows errors thrown during formatting (catch)', () => {
+      const sheet = {
+        getLastColumn: () => { throw new Error('cols boom'); }
+      };
+      expect(() => realFormatJobRow(sheet, 2)).not.toThrow();
+    });
+
+    it('skips salary/url formatting when those columns are absent from the header row', () => {
+      // Header row has none of Minimum/Maximum Salary or Job URL -> indexOf is -1,
+      // so minSalaryCol/maxSalaryCol/jobUrlCol are 0 -> every `if (col > 0)` FALSE.
+      const spreadsheet = new MockSpreadsheet('Jobs', 'test-id');
+      const sheet = spreadsheet.insertSheet('Job Listings');
+      sheet.getRange(1, 1, 1, 2).setValues([['Company', 'Job Title']]);
+      sheet.getRange(2, 1, 1, 2).setValues([['Acme', 'Dev']]);
+      expect(() => realFormatJobRow(sheet, 2)).not.toThrow();
+    });
+  });
+
+  describe('serviceFactory seam (GAS-global branch)', () => {
+    afterEach(() => { delete global.serviceFactory; });
+    it('resolves the GAS-global serviceFactory when present', () => {
+      global.serviceFactory = serviceFactory;
+      global.getJobFinderSpreadsheetId.mockReturnValue('');
+      // getJobStatistics -> _shSheets() only after the id check; use formatDateTime
+      // which calls _shUtils() to exercise the seam.
+      global.Utilities = { formatDate: jest.fn(() => 'D'), getScriptTimeZone: jest.fn(() => 'GMT') };
+      serviceFactory.reset();
+      global.serviceFactory = serviceFactory;
+      expect(formatDateTime(new Date('2026-01-01'))).toBe('D');
     });
   });
 

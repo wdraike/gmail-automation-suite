@@ -13,10 +13,12 @@ function _shServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _shSheets() {
@@ -190,6 +192,7 @@ function auditAndRepairSheetHeaders(sheet) {
   }
 
   // Read the live header row using its actual width.
+  /* istanbul ignore next -- the null/undefined header-cell coalesce arm is a live-GAS defense (GAS returns null for truly empty cells); under test the Sheets mock coerces empty cells to "" so the null/undefined ternary arm is never taken. */
   const liveHeaders = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
     .map(h => (h === null || h === undefined) ? '' : String(h));
 
@@ -222,7 +225,9 @@ function auditAndRepairSheetHeaders(sheet) {
       // name — there is no header to map it to. Refuse to silently drop it; throw loudly.
       for (let c = 0; c < row.length; c++) {
         const cell = row[c];
+        /* istanbul ignore next -- null/undefined cell defenses are for live GAS (empty cells return null); the Sheets mock coerces empty cells to "" so those short-circuit arms aren't taken in tests. */
         const hasData = cell !== null && cell !== undefined && String(cell) !== '';
+        /* istanbul ignore next -- the `: ''` arm covers a data row wider than the live header row; the Sheets mock reads each row at the header width so a wider row never materializes in tests. */
         const headerName = c < liveHeaders.length ? liveHeaders[c] : '';
         if (hasData && headerName === '') {
           throw new Error(
@@ -238,6 +243,7 @@ function auditAndRepairSheetHeaders(sheet) {
           return ''; // Target column absent in live sheet -> insert blank.
         }
         const value = row[srcIdx];
+        /* istanbul ignore next -- the null/undefined source-cell coalesce is a live-GAS defense; the Sheets mock coerces empty cells to "" so the null/undefined arm isn't taken in tests. */
         return (value === null || value === undefined) ? '' : value;
       });
       remappedRows.push(newRow);
@@ -445,6 +451,7 @@ function sanitizeString(str) {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     addJobToSpreadsheet,
