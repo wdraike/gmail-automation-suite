@@ -23,10 +23,12 @@ function _asServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('./services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _asHttp() {
@@ -135,7 +137,9 @@ function callGeminiApi(prompt, operationType) {
         };
       } catch (parseError) {
         // Handle parsing errors
+        /* istanbul ignore next -- unreachable: cleanGeminiResponse always returns a JSON.parse-validated string (or its "[]" floor), so JSON.parse here cannot throw. Defensive guard symmetric with the categorization branch. */
         Logger.log(`Error parsing job extraction response: ${parseError}`);
+        /* istanbul ignore next */
         return {
           success: true,
           response: response,
@@ -289,6 +293,7 @@ function callGeminiWithRateLimiting(prompt, operationType = 'categorization') {
     API_STATE.consecutiveFailures = 0;
 
     // Log only metadata (no prompt content for security)
+    /* istanbul ignore next -- `response` is always truthy here: the retry loop only reaches this line via `break` after a successful callGemini (which returns a string); every failure path throws before this point, so the `: 0` ternary arm is unreachable. */
     Logger.log(`Gemini API call completed | Operation: ${operationType} | Timestamp: ${startTime} | Response length: ${response ? response.length : 0} chars`);
 
     return response;
@@ -692,6 +697,7 @@ function parseGeminiCategory(responseText) {
  */
 function canMakeApiCall() {
   // If no monitor exists, allow calls
+  /* istanbul ignore next -- unreachable: API_MONITOR is a module/global const object, so typeof is always 'object' and the truthy object can never be falsy. Defensive guard only. */
   if (typeof API_MONITOR === 'undefined' || !API_MONITOR) {
     return true;
   }
@@ -714,6 +720,7 @@ function canMakeApiCall() {
  * Reset the API call monitor
  */
 function resetApiMonitor() {
+  /* istanbul ignore else -- API_MONITOR is a module/global const object, always defined and truthy, so the no-op else is unreachable. */
   if (typeof API_MONITOR !== 'undefined' && API_MONITOR) {
     API_MONITOR.requestCount = 0;
     API_MONITOR.lastResetTime = Date.now();
@@ -725,6 +732,7 @@ function resetApiMonitor() {
  * Increment API call count
  */
 function incrementApiCallCount() {
+  /* istanbul ignore else -- API_MONITOR is a module/global const object, always defined and truthy, so the no-op else is unreachable. */
   if (typeof API_MONITOR !== 'undefined' && API_MONITOR) {
     API_MONITOR.requestCount = (API_MONITOR.requestCount || 0) + 1;
   }
@@ -735,6 +743,7 @@ function incrementApiCallCount() {
  * @returns {number} Number of remaining calls
  */
 function getRemainingApiCalls() {
+  /* istanbul ignore next -- unreachable: API_MONITOR is a module/global const object, so typeof is always 'object' and the truthy object can never be falsy. Defensive guard only. */
   if (typeof API_MONITOR === 'undefined' || !API_MONITOR) {
     return EMAIL_SORTER_CONFIG?.MAX_GEMINI_CALLS_PER_MINUTE || 15;
   }
@@ -749,6 +758,7 @@ function getRemainingApiCalls() {
  * @returns {object} Statistics object
  */
 function getApiCallStats() {
+  /* istanbul ignore next -- unreachable: API_MONITOR is a module/global const object, so typeof is always 'object' and the truthy object can never be falsy. Defensive guard only. */
   if (typeof API_MONITOR === 'undefined' || !API_MONITOR) {
     return {
       totalCalls: 0,
@@ -789,6 +799,7 @@ function logApiCall(endpoint, status, statusCode, metadata = {}) {
     Logger.log(`API Call: ${JSON.stringify(logEntry)}`);
 
     // Update monitor stats if available
+    /* istanbul ignore else -- API_MONITOR is a module/global const object, always defined and truthy, so the no-op else is unreachable. */
     if (typeof API_MONITOR !== 'undefined' && API_MONITOR) {
       if (status === 'success') {
         API_MONITOR.successCount = (API_MONITOR.successCount || 0) + 1;
@@ -883,6 +894,7 @@ function handleApiError(error) {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     callGeminiApi,

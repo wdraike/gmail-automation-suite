@@ -11,6 +11,8 @@ const {
   checkRateLimit,
   cleanGeminiResponse,
   callGemini,
+  logGeminiInteraction,
+  saveGeminiInteractionToDrive,
   parseGeminiCategory,
   canMakeApiCall,
   incrementApiCallCount,
@@ -849,6 +851,533 @@ describe('Gemini API Service - Complete Test Suite', () => {
 
           expect(formatted).toContain('429');
       });
+
+      it('returns the unknown-error message when error is null/undefined', () => {
+          expect(handleApiError(null)).toBe('Unknown error occurred');
+          expect(handleApiError(undefined)).toBe('Unknown error occurred');
+      });
+
+      it('uses statusCode when there is no code, and labels UNKNOWN when neither', () => {
+          expect(handleApiError({ statusCode: 502, message: 'gateway' }))
+            .toContain('[502]');
+          expect(handleApiError({ message: 'no code at all' }))
+            .toContain('[UNKNOWN]');
+      });
+
+      it('formats a bare string error', () => {
+          const formatted = handleApiError('a plain string error');
+          // No message/typeof-string-on-object path -> the `typeof error === string` branch.
+          expect(formatted).toContain('a plain string error');
+      });
+
+      it('falls back to a generic message for an object with neither message nor string', () => {
+          const formatted = handleApiError({ code: 418 });
+          expect(formatted).toContain('[418]');
+          expect(formatted).toContain('An error occurred');
+      });
+
+      it('appends API-key guidance for a 401 / api-key error', () => {
+          const formatted = handleApiError({ code: 401, message: 'unauthorized' });
+          expect(formatted).toContain('check your API key');
+      });
+
+      it('appends API-key guidance when the message mentions an api key (no code)', () => {
+          const formatted = handleApiError({ message: 'Invalid API key supplied' });
+          expect(formatted).toContain('check your API key');
+      });
+
+      it('appends rate-limit guidance for a 429 / rate-limit error', () => {
+          const formatted = handleApiError({ code: 429, message: 'too many' });
+          expect(formatted).toContain('Rate limit exceeded');
+      });
+    });
+
+    describe('isRetryableError — additional branches', () => {
+      it('returns false for a falsy error', () => {
+          expect(isRetryableError(null)).toBe(false);
+          expect(isRetryableError(undefined)).toBe(false);
+      });
+
+      it('matches on statusCode when there is no code', () => {
+          expect(isRetryableError({ statusCode: 504 })).toBe(true);
+      });
+
+      it('matches on a retryable substring in the message', () => {
+          expect(isRetryableError({ message: 'connection reset' })).toBe(true);
+          expect(isRetryableError({ message: 'request timeout' })).toBe(true);
+      });
+
+      it('returns false for a non-retryable code and message', () => {
+          expect(isRetryableError({ code: 403, message: 'forbidden' })).toBe(false);
+      });
+
+      it('handles an error object with no message at all (message-fallback branch)', () => {
+          // No code, no statusCode, no message -> reaches `(error.message || '')`.
+          expect(isRetryableError({})).toBe(false);
+      });
+    });
+  });
+
+  describe('callGeminiApi (top-level dispatcher)', () => {
+    beforeEach(() => {
+      setApiKey('test-api-key');
+      API_STATE.lastApiCalls = [];
+      API_STATE.consecutiveFailures = 0;
+    });
+
+    function mock200(text) {
+      UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: jest.fn(() => 200),
+        getContentText: jest.fn(() => JSON.stringify({
+          candidates: [{ content: { parts: [{ text }] } }]
+        }))
+      }));
+    }
+
+    it('parses jobs for job_extraction and returns success + jobs', () => {
+      mock200('[{"company":"Acme","title":"Dev"}]');
+      const result = callGeminiApi('prompt', 'job_extraction');
+      expect(result.success).toBe(true);
+      expect(result.jobs).toEqual([{ company: 'Acme', title: 'Dev' }]);
+      expect(result.response).toContain('Acme');
+    });
+
+    it('returns empty jobs (salvage floor) when the job_extraction response has no JSON', () => {
+      // cleanGeminiResponse floors unparseable text to "[]", so jobs parse to [].
+      mock200('totally not json');
+      const result = callGeminiApi('prompt', 'job_extraction');
+      expect(result.success).toBe(true);
+      expect(result.jobs).toEqual([]);
+    });
+
+    it('extracts a JSON array of categories for test_categorization', () => {
+      mock200('Here are the categories: ["work","finance"]');
+      const result = callGeminiApi('prompt', 'test_categorization');
+      expect(result.success).toBe(true);
+      expect(result.categories).toEqual(['work', 'finance']);
+    });
+
+    it('falls back to line-splitting categories when no JSON array present', () => {
+      // Leading bullets/numbers are stripped by the cleanup regex; a trailing
+      // quote on the last line is preserved (regex only strips leading chars).
+      mock200('- Work\n2. Finance\nPersonal');
+      const result = callGeminiApi('prompt', 'test_categorization');
+      expect(result.success).toBe(true);
+      expect(result.categories).toEqual(['Work', 'Finance', 'Personal']);
+    });
+
+    it('returns empty categories + parseError when category JSON array is malformed', () => {
+      // jsonMatch finds the bracketed text but it is not valid JSON -> JSON.parse throws.
+      mock200('Categories: [work, finance,]'); // unquoted tokens -> invalid JSON
+      const result = callGeminiApi('prompt', 'test_categorization');
+      expect(result.success).toBe(true);
+      expect(result.categories).toEqual([]);
+      expect(result.parseError).toBeDefined();
+    });
+
+    it('records a successful categorization in API_MONITOR', () => {
+      API_MONITOR.totalCalls = 0;
+      API_MONITOR.successfulCalls = 0;
+      mock200('["work"]');
+      callGeminiApi('prompt', 'test_categorization');
+      expect(API_MONITOR.status).toBe('up');
+      expect(API_MONITOR.successfulCalls).toBeGreaterThan(0);
+    });
+
+    it('returns a generic success for unknown operation types', () => {
+      mock200('some freeform text');
+      const result = callGeminiApi('prompt', 'something_else');
+      expect(result).toEqual({ success: true, response: 'some freeform text' });
+    });
+
+    it('records failure and returns success:false when the call throws', () => {
+      API_MONITOR.failedCalls = 0;
+      UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: jest.fn(() => 500),
+        getContentText: jest.fn(() => 'boom')
+      }));
+      const result = callGeminiApi('prompt', 'test_categorization');
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(API_MONITOR.failedCalls).toBeGreaterThan(0);
+    });
+  });
+
+  describe('API_MONITOR methods', () => {
+    it('recordSuccess sets status up and bumps counters', () => {
+      API_MONITOR.totalCalls = 0;
+      API_MONITOR.successfulCalls = 0;
+      API_MONITOR.recordSuccess();
+      expect(API_MONITOR.status).toBe('up');
+      expect(API_MONITOR.totalCalls).toBe(1);
+      expect(API_MONITOR.successfulCalls).toBe(1);
+      expect(API_MONITOR.lastCheck).toBeInstanceOf(Date);
+    });
+
+    it('recordFailure sets status rate_limited and bumps rateLimitHits for RATE_LIMIT_REACHED', () => {
+      API_MONITOR.totalCalls = 0;
+      API_MONITOR.failedCalls = 0;
+      API_MONITOR.rateLimitHits = 0;
+      API_MONITOR.recordFailure(new Error('RATE_LIMIT_REACHED'));
+      expect(API_MONITOR.status).toBe('rate_limited');
+      expect(API_MONITOR.rateLimitHits).toBe(1);
+      expect(API_MONITOR.failedCalls).toBe(1);
+    });
+
+    it('recordFailure sets status down for a non-rate-limit error (and for no error)', () => {
+      API_MONITOR.recordFailure(new Error('other'));
+      expect(API_MONITOR.status).toBe('down');
+      API_MONITOR.recordFailure(null);
+      expect(API_MONITOR.status).toBe('down');
+    });
+
+    it('recordEmailProcessed logs the category', () => {
+      const mockLogger = jest.spyOn(Logger, 'log');
+      API_MONITOR.recordEmailProcessed('work');
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('work'));
+      mockLogger.mockRestore();
+    });
+
+    it('getStatus reports success rate and stats', () => {
+      API_MONITOR.status = 'up';
+      API_MONITOR.lastCheck = new Date();
+      API_MONITOR.totalCalls = 4;
+      API_MONITOR.successfulCalls = 3;
+      API_MONITOR.rateLimitHits = 1;
+      const status = API_MONITOR.getStatus();
+      expect(status.apiStatus).toBe('up');
+      expect(status.lastCheck).toBe(API_MONITOR.lastCheck.toISOString());
+      expect(status.stats.successRate).toBe(75);
+      expect(status.stats.rateLimitHits).toBe(1);
+    });
+
+    it('getStatus reports 0 success rate and null lastCheck when there are no calls', () => {
+      API_MONITOR.status = 'unknown';
+      API_MONITOR.lastCheck = null;
+      API_MONITOR.totalCalls = 0;
+      const status = API_MONITOR.getStatus();
+      expect(status.stats.successRate).toBe(0);
+      expect(status.lastCheck).toBeNull();
+    });
+  });
+
+  describe('cleanGeminiResponse — salvage branches', () => {
+    it('salvages a JSON object embedded in surrounding prose', () => {
+      const messy = 'Sure! Here you go: {"category":"work"} hope that helps';
+      const cleaned = cleanGeminiResponse(messy);
+      expect(JSON.parse(cleaned)).toEqual({ category: 'work' });
+    });
+
+    it('salvages a JSON array when object salvage fails', () => {
+      const messy = 'preamble [1, 2, 3] trailing words';
+      const cleaned = cleanGeminiResponse(messy);
+      expect(JSON.parse(cleaned)).toEqual([1, 2, 3]);
+    });
+
+    it('returns "[]" fallback when nothing parseable can be salvaged', () => {
+      const cleaned = cleanGeminiResponse('no json here at all, just words');
+      expect(cleaned).toBe('[]');
+    });
+
+    it('returns "[]" when an object-like match is still invalid and there is no array', () => {
+      // Has braces but invalid JSON inside, and no [] array to fall back to.
+      const cleaned = cleanGeminiResponse('{ this is { not } valid json }');
+      expect(cleaned).toBe('[]');
+    });
+  });
+
+  describe('callGemini — guard clauses', () => {
+    it('throws on an empty prompt', () => {
+      setApiKey('test-api-key');
+      expect(() => callGemini('')).toThrow('Empty prompt');
+    });
+
+    it('throws when the API key is missing', () => {
+      // Clear the key so getApiKey() returns falsy.
+      setApiKey('');
+      expect(() => callGemini('a prompt')).toThrow('API key is missing');
+    });
+  });
+
+  describe('checkRateLimit — error path', () => {
+    it('defaults to not-rate-limited when the internal logic throws', () => {
+      const original = JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE;
+      // Force the comparison inside checkRateLimit to blow up by replacing the
+      // array with something whose .filter throws.
+      const savedCalls = API_STATE.lastApiCalls;
+      API_STATE.lastApiCalls = { filter: () => { throw new Error('boom'); } };
+      try {
+        const status = checkRateLimit();
+        expect(status).toEqual({ rateLimited: false, waitTime: 0 });
+      } finally {
+        API_STATE.lastApiCalls = savedCalls;
+        JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE = original;
+      }
+    });
+  });
+
+  describe('callGeminiWithRateLimiting — backoff cap log', () => {
+    it('logs and throws RATE_LIMIT_REACHED when an exponential backoff exceeds the in-process cap', () => {
+      API_STATE.lastApiCalls = [];
+      API_STATE.consecutiveFailures = 0;
+      const savedDelay = API_SERVICE_CONFIG.RETRY_DELAY_MS;
+      // Force the very first retry's backoff (RETRY_DELAY_MS * 2^0) to exceed the cap.
+      API_SERVICE_CONFIG.RETRY_DELAY_MS = API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS + 1;
+      const mockLogger = jest.spyOn(Logger, 'log');
+      // 500 -> generic retryable error enters the retry loop.
+      UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: jest.fn(() => 500),
+        getContentText: jest.fn(() => 'err')
+      }));
+      try {
+        expect(() => callGeminiWithRateLimiting('prompt')).toThrow('RATE_LIMIT_REACHED');
+        expect(mockLogger).toHaveBeenCalledWith(
+          expect.stringContaining('exceeds in-process cap')
+        );
+      } finally {
+        API_SERVICE_CONFIG.RETRY_DELAY_MS = savedDelay;
+        mockLogger.mockRestore();
+      }
+    });
+  });
+
+  describe('monitoring functions — no-monitor / catch branches', () => {
+    // canMakeApiCall, getRemainingApiCalls, getApiCallStats all have a
+    // `typeof API_MONITOR === 'undefined' || !API_MONITOR` early branch. Temporarily
+    // null the exported monitor reference to reach it (the functions read the
+    // module-scope binding, so we drive the branch via the falsy-guard path using
+    // a stand-in: these functions reference the const API_MONITOR, so instead we
+    // assert the populated-monitor branches plus logApiCall's failure handling).
+
+    it('getApiCallStats returns the populated-monitor stats object', () => {
+      API_MONITOR.totalCalls = 5;
+      API_MONITOR.successCount = 2;
+      API_MONITOR.failureCount = 1;
+      API_MONITOR.requestCount = 3;
+      API_MONITOR.lastResetTime = Date.now();
+      const stats = getApiCallStats();
+      expect(stats.totalCalls).toBe(5);
+      expect(stats.currentPeriodCalls).toBe(3);
+      expect(stats.resetTime).toBeInstanceOf(Date);
+    });
+
+    it('canMakeApiCall falls back to 15 when the config cap is unset', () => {
+      const saved = EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE;
+      EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE = 0; // falsy -> `|| 15`
+      try {
+        resetApiMonitor();
+        // requestCount (0) < 15 -> true.
+        expect(canMakeApiCall()).toBe(true);
+      } finally {
+        EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE = saved;
+      }
+    });
+
+    it('getRemainingApiCalls falls back to 15 when the config cap is unset', () => {
+      const saved = EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE;
+      EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE = 0; // falsy -> `|| 15`
+      try {
+        resetApiMonitor();
+        expect(getRemainingApiCalls()).toBe(15);
+      } finally {
+        EMAIL_SORTER_CONFIG.MAX_GEMINI_CALLS_PER_MINUTE = saved;
+      }
+    });
+
+    it('getApiCallStats returns null resetTime when lastResetTime is falsy', () => {
+      API_MONITOR.lastResetTime = 0;
+      const stats = getApiCallStats();
+      expect(stats.resetTime).toBeNull();
+    });
+
+    it('logApiCall returns false when JSON serialization throws (catch branch)', () => {
+      // A circular object makes JSON.stringify throw inside logApiCall.
+      const circular = {};
+      circular.self = circular;
+      const result = logApiCall('endpoint', 'success', 200, { bad: circular });
+      expect(result).toBe(false);
+    });
+
+    it('logApiCall increments failureCount on a non-success status', () => {
+      API_MONITOR.failureCount = 0;
+      API_MONITOR.totalCalls = 0;
+      logApiCall('endpoint', 'error', 500);
+      expect(API_MONITOR.failureCount).toBe(1);
+      expect(API_MONITOR.totalCalls).toBe(1);
+    });
+  });
+
+  describe('logGeminiInteraction', () => {
+    beforeEach(() => {
+      PropertiesService.getScriptProperties().deleteAllProperties();
+    });
+
+    it('persists errors to the GEMINI_ERRORS property (capped at 10)', () => {
+      // Seed with 10 existing errors so the next push triggers the shift cap.
+      const existing = Array.from({ length: 10 }, (_, i) => ({ n: i }));
+      PropertiesService.getScriptProperties()
+        .setProperty('GEMINI_ERRORS', JSON.stringify(existing));
+      logGeminiInteraction('error', { operationType: 'cat', error: 'oops' });
+      const stored = JSON.parse(
+        PropertiesService.getScriptProperties().getProperty('GEMINI_ERRORS')
+      );
+      expect(stored.length).toBe(10);
+      // Oldest ({n:0}) shifted out; newest entry appended.
+      expect(stored[0]).toEqual({ n: 1 });
+      expect(stored[stored.length - 1].type).toBe('error');
+    });
+
+    it('starts a fresh error list when none exists yet', () => {
+      logGeminiInteraction('error', { error: 'first' });
+      const stored = JSON.parse(
+        PropertiesService.getScriptProperties().getProperty('GEMINI_ERRORS')
+      );
+      expect(stored.length).toBe(1);
+    });
+
+    it('routes request/response interactions to Drive', () => {
+      const folder = {
+        createFile: jest.fn(() => ({
+          getUrl: jest.fn(() => 'u'),
+          getId: jest.fn(() => 'fid')
+        }))
+      };
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => folder }));
+      logGeminiInteraction('request', { operationType: 'cat', prompt: 'p' });
+      expect(folder.createFile).toHaveBeenCalled();
+    });
+
+    it('swallows errors thrown inside the interaction logging (outer catch)', () => {
+      // Make JSON.stringify throw via a circular content object on a non-drive type.
+      const circular = {};
+      circular.self = circular;
+      expect(() => logGeminiInteraction('error', circular)).not.toThrow();
+    });
+  });
+
+  describe('saveGeminiInteractionToDrive', () => {
+    const TS = '2026-01-02T03:04:05.678Z';
+
+    beforeEach(() => {
+      PropertiesService.getScriptProperties().deleteAllProperties();
+    });
+
+    it('creates a new request file in an existing folder and stores the file id', () => {
+      const created = { getUrl: jest.fn(() => 'url'), getId: jest.fn(() => 'file-123') };
+      const folder = { createFile: jest.fn(() => created) };
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => folder }));
+
+      saveGeminiInteractionToDrive('request', { operationType: 'cat', prompt: 'hello' }, TS);
+
+      expect(folder.createFile).toHaveBeenCalled();
+      const safeTs = TS.replace(/:/g, '-').replace(/\./g, '-');
+      expect(
+        PropertiesService.getScriptProperties().getProperty(`GEMINI_FILE_${safeTs}`)
+      ).toBe('file-123');
+    });
+
+    it('creates the folder when it does not exist yet', () => {
+      const created = { getUrl: jest.fn(() => 'url'), getId: jest.fn(() => 'file-9') };
+      const folder = { createFile: jest.fn(() => created) };
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => false, next: jest.fn() }));
+      DriveApp.createFolder = jest.fn(() => folder);
+
+      saveGeminiInteractionToDrive('request', { operationType: 'cat' }, TS);
+
+      expect(DriveApp.createFolder).toHaveBeenCalledWith('Gemini API Debug Logs');
+      expect(folder.createFile).toHaveBeenCalled();
+    });
+
+    it('uses "unknown" operation and the JSON content fallback when operationType/prompt are absent', () => {
+      const created = { getUrl: jest.fn(() => 'url'), getId: jest.fn(() => 'file-x') };
+      const folder = { createFile: jest.fn(() => created) };
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => folder }));
+      // No operationType and no prompt -> exercises the `|| 'unknown'` and
+      // `|| JSON.stringify(content,...)` fallbacks in the request branch.
+      saveGeminiInteractionToDrive('request', { foo: 'bar' }, TS);
+      const writtenContent = folder.createFile.mock.calls[0][1];
+      expect(writtenContent).toContain('Operation: unknown');
+      expect(writtenContent).toContain('"foo": "bar"');
+    });
+
+    it('uses response fallbacks when responseLength/responseText are absent', () => {
+      const safeTs = TS.replace(/:/g, '-').replace(/\./g, '-');
+      PropertiesService.getScriptProperties().setProperty(`GEMINI_FILE_${safeTs}`, 'file-r');
+      const file = {
+        getBlob: jest.fn(() => ({ getDataAsString: jest.fn(() => '(waiting for response...)') })),
+        setContent: jest.fn(),
+        getUrl: jest.fn(() => 'url')
+      };
+      DriveApp.getFileById = jest.fn(() => file);
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => ({ createFile: jest.fn() }) }));
+      saveGeminiInteractionToDrive('response', {}, TS);
+      const updated = file.setContent.mock.calls[0][0];
+      expect(updated).toContain('LENGTH: unknown chars');
+      expect(updated).toContain('Response text not available');
+    });
+
+    it('does nothing for an interaction type that is neither request nor response', () => {
+      const folder = { createFile: jest.fn() };
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => folder }));
+      DriveApp.getFileById = jest.fn();
+      // type 'other' falls through both branches without touching files.
+      saveGeminiInteractionToDrive('other', { operationType: 'cat' }, TS);
+      expect(folder.createFile).not.toHaveBeenCalled();
+    });
+
+    it('updates the existing file with the response when a file id is stored', () => {
+      const safeTs = TS.replace(/:/g, '-').replace(/\./g, '-');
+      PropertiesService.getScriptProperties().setProperty(`GEMINI_FILE_${safeTs}`, 'file-77');
+
+      const file = {
+        getBlob: jest.fn(() => ({ getDataAsString: jest.fn(() => 'before (waiting for response...) after') })),
+        setContent: jest.fn(),
+        getUrl: jest.fn(() => 'url')
+      };
+      DriveApp.getFileById = jest.fn(() => file);
+      // folder lookup still happens before the response branch.
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => ({ createFile: jest.fn() }) }));
+
+      saveGeminiInteractionToDrive('response', { responseLength: 12, responseText: 'RESP' }, TS);
+
+      expect(file.setContent).toHaveBeenCalledWith(expect.stringContaining('RESP'));
+      // Cleanup property removed.
+      expect(
+        PropertiesService.getScriptProperties().getProperty(`GEMINI_FILE_${safeTs}`)
+      ).toBeNull();
+    });
+
+    it('logs a warning when no request file is found for a response', () => {
+      const mockLogger = jest.spyOn(Logger, 'log');
+      DriveApp.getFoldersByName = jest.fn(() => ({ hasNext: () => true, next: () => ({ createFile: jest.fn() }) }));
+      // No GEMINI_FILE_ property set -> fileId is null.
+      saveGeminiInteractionToDrive('response', { responseText: 'x' }, TS);
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('No request file found'));
+      mockLogger.mockRestore();
+    });
+
+    it('swallows Drive errors (outer catch)', () => {
+      DriveApp.getFoldersByName = jest.fn(() => { throw new Error('drive down'); });
+      expect(() => saveGeminiInteractionToDrive('request', { operationType: 'cat' }, TS)).not.toThrow();
+    });
+  });
+
+  describe('serviceFactory seam (GAS-global branch)', () => {
+    afterEach(() => { delete global.serviceFactory; });
+
+    it('resolves the GAS-global serviceFactory when present', () => {
+      // Exercises the `typeof serviceFactory !== "undefined"` true branch in _asServiceFactory.
+      global.serviceFactory = serviceFactory;
+      setApiKey('test-api-key');
+      API_STATE.lastApiCalls = [];
+      UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: jest.fn(() => 200),
+        getContentText: jest.fn(() => JSON.stringify({
+          candidates: [{ content: { parts: [{ text: '{"category":"work"}' }] } }]
+        }))
+      }));
+      const result = callGemini('a prompt');
+      expect(result).toBe('{"category":"work"}');
     });
   });
 });
