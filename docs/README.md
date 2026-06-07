@@ -6,65 +6,53 @@
 
 **Essential Documentation:**
 - ⭐ [FILE-STRUCTURE.md](FILE-STRUCTURE.md) - Project organization
+- ⭐ [ARCHITECTURE.md](../ARCHITECTURE.md) - Hexagonal ports/adapters model
 - ⭐ [DEPLOYMENT.md](DEPLOYMENT.md) - Setup & deployment
-- ⭐ [IMPROVEMENT-RECOMMENDATIONS.md](IMPROVEMENT-RECOMMENDATIONS.md) - Future improvements
 
 **Debugging & Testing:**
 - [GEMINI-DEBUG-LOGGING.md](GEMINI-DEBUG-LOGGING.md) - Debug API calls
-- [TESTING-SUMMARY.md](TESTING-SUMMARY.md) - Test coverage & approach
+- [testing/TESTING-OVERVIEW.md](testing/TESTING-OVERVIEW.md) - Test approach (100% coverage gate)
 
-**Reference:**
-- [REORGANIZATION-SUMMARY.md](REORGANIZATION-SUMMARY.md) - Recent changes
+**Accessibility:**
+- [UX-REVIEW.md](UX-REVIEW.md) - Lasting a11y record
 
 ---
 
-## Documentation Files (25 total)
+## Active Documentation
 
-All documentation is current, relevant, and actively maintained.
-
-### Structure (2 files)
+### Structure
 - `FILE-STRUCTURE.md` - How files are organized
-- `REORGANIZATION-SUMMARY.md` - What changed recently
+- `../ARCHITECTURE.md` - Hexagonal architecture (ports + adapters)
 
-### Getting Started (2 files)
+### Getting Started
 - `DEPLOYMENT.md` - How to deploy
 - `GAS-COMPATIBILITY.md` - Google Apps Script compatibility notes
+- `guides/QUICK-START.md` - Quick start guide
+- `guides/retention-dependency-tree.md` - Retention dependency tree
 
-### Improvements (1 file)
-- `IMPROVEMENT-RECOMMENDATIONS.md` - Performance & quality roadmap
-
-### Testing & Debugging (13 files)
-- `TESTING-SUMMARY.md` - Testing approach
+### Testing & Debugging
 - `GEMINI-DEBUG-LOGGING.md` - Debug Gemini API
-- `TEST-COVERAGE-PLAN.md` - Coverage plan
 - `testing/TESTING-OVERVIEW.md` - Testing overview
 - `testing/VSCODE-TESTING.md` - VS Code testing guide
 - `testing/TESTABLE-CODE-PATTERNS.md` - Writing testable code
 - `testing/TEST-RUNNER-README.md` - Test runner guide
 - `testing/INTEGRATION-TESTING.md` - Integration testing
 - `testing/NO-REAL-API-CALLS.md` - Proof of mocking
-- `coverage/COVERAGE-FIX-SUMMARY.md` - Coverage fix summary
-- `coverage/COVERAGE-IMPROVEMENT-PLAN.md` - Coverage improvement plan
-- `coverage/COVERAGE-PROGRESS.md` - Coverage progress tracking
-- `coverage/IMPLEMENTATION-STATUS.md` - Implementation status
 
-### Historical (3 files)
-- `PHASE-1-COMPLETION.md` - Phase 1 milestone (historical)
-- `PHASE-2-COMPLETE.md` - Phase 2 milestone (historical)
-- `PHASE-2-PROGRESS.md` - Phase 2 progress (historical)
+### Accessibility
+- `UX-REVIEW.md` - Lasting a11y record (relocated from repo root)
 
-### Guides (2 files)
-- `guides/QUICK-START.md` - Quick start guide
-- `guides/retention-dependency-tree.md` - Retention dependency tree
-
-### Navigation (1 file)
+### Navigation
 - `INDEX.md` - Complete documentation index
 
 ---
 
-**Removed Files (Outdated/Redundant):**
-- ❌ CLEANUP-REPORT.md (info merged into other docs)
-- ❌ COMPLETION-SUMMARY.md (outdated milestone report)
-- ❌ TEST-DRIVE-LOGGING.md (merged into GEMINI-DEBUG-LOGGING.md)
-- ❌ GEMINI-API-REFACTOR.md (changes documented in code)
-- ❌ README.md duplicate (kept in root only)
+## Archived Documentation
+
+Point-in-time and superseded docs live under [`archive/`](archive/):
+
+- `archive/PHASE-1-COMPLETION.md`, `archive/PHASE-2-COMPLETE.md`, `archive/PHASE-2-PROGRESS.md` - milestone reports
+- `archive/REORGANIZATION-SUMMARY.md` - historical file-move changelog
+- `archive/IMPROVEMENT-RECOMMENDATIONS.md` - earlier improvement roadmap
+- `archive/TESTING-SUMMARY.md`, `archive/TEST-COVERAGE-PLAN.md` - pre-100%-gate testing notes
+- `archive/TEST-REGISTRY.md`, `archive/TRACEABILITY-MATRIX.md`, `archive/TEST-RUN-LOG.md` - 2026-05-25 UI review tracking (superseded by the 100% suite)

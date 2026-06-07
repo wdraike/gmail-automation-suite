@@ -221,8 +221,7 @@ npm run test:integration
 - [NO-REAL-API-CALLS.md](NO-REAL-API-CALLS.md) - Proof of mocking
 
 ### Reference
-- [TESTING-SUMMARY.md](../TESTING-SUMMARY.md) - Complete testing infrastructure
-- [IMPLEMENTATION-STATUS.md](../coverage/IMPLEMENTATION-STATUS.md) - Implementation details
+- [TESTING-SUMMARY.md](../archive/TESTING-SUMMARY.md) - Historical testing infrastructure notes (archived)
 
 ---
 
