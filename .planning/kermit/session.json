@@ -33,14 +33,15 @@
       "src/features/email-sorter/categorizer-cache.js (9dbd2e7)",
       "src/core/config.js (1abad69)",
       "src/ui/dashboard-api.js (2b92aae)",
-      "src/features/job-finder/extractor.js (39af0f4)"
+      "src/features/job-finder/extractor.js (39af0f4)",
+      "src/features/job-finder/main.js (b2f13de)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
     "backlog": [
       "gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope",
       "cache-service.js LabelCategoriesCache: KEYS.LABEL_CATEGORIES collides with its own fallback prop name 'LABEL_CATEGORIES_MAP', making the computeFn truthy branch dead"
     ],
-    "next": "features/job-finder/main.js",
+    "next": "core/services/gmail-adapter.js + adapter branch backfill",
     "env_note": "VSCode Jest --watch runner contends worker pool; use `npx jest --runInBand` for reliable runs"
   }
 }
