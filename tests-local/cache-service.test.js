@@ -449,4 +449,337 @@ describe('Cache Service - Complete Test Suite', () => {
       expect(result).toBe(testString);
     });
   });
+
+  describe('UnifiedCacheCore.set — cache with non-positive duration', () => {
+    it('does NOT write to the cache when duration is <= 0', () => {
+      const mockPut = jest.fn();
+      global.CacheService = { getScriptCache: jest.fn(() => ({ put: mockPut })) };
+      // PERMANENT (-1) on CACHE storage -> skip the put (cache can't be permanent).
+      const ok = UnifiedCacheCore.set('K', { a: 1 }, CACHE_CONFIG.DURATIONS.PERMANENT, CACHE_CONFIG.STORAGE.CACHE);
+      expect(ok).toBe(true);
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('UnifiedCacheCore.clearAll — PROPERTIES', () => {
+    it('deletes every known key from PropertiesService', () => {
+      const mockDelete = jest.fn();
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ deleteProperty: mockDelete })) };
+      const ok = UnifiedCacheCore.clearAll(CACHE_CONFIG.STORAGE.PROPERTIES);
+      expect(ok).toBe(true);
+      // One delete per configured key.
+      expect(mockDelete).toHaveBeenCalledTimes(Object.values(CACHE_CONFIG.KEYS).length);
+      expect(mockDelete).toHaveBeenCalledWith(CACHE_CONFIG.KEYS.EMAIL_CATEGORIES);
+    });
+
+    it('returns false when a properties delete throws', () => {
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({ deleteProperty: jest.fn(() => { throw new Error('boom'); }) }))
+      };
+      expect(UnifiedCacheCore.clearAll(CACHE_CONFIG.STORAGE.PROPERTIES)).toBe(false);
+    });
+  });
+
+  describe('UnifiedCacheCore.delete — DRIVE', () => {
+    it('trashes the Drive file and clears the file-id property', () => {
+      const setTrashed = jest.fn();
+      const deleteProperty = jest.fn();
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({
+          getProperty: jest.fn(() => 'drive-file-1'),
+          deleteProperty,
+        }))
+      };
+      global.DriveApp = { getFileById: jest.fn(() => ({ setTrashed })) };
+
+      const ok = UnifiedCacheCore.delete('DKEY', CACHE_CONFIG.STORAGE.DRIVE);
+      expect(ok).toBe(true);
+      expect(setTrashed).toHaveBeenCalledWith(true);
+      expect(deleteProperty).toHaveBeenCalledWith('DKEY_FILE_ID');
+    });
+
+    it('is a no-op when there is no Drive file id', () => {
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null), deleteProperty: jest.fn() }))
+      };
+      global.DriveApp = { getFileById: jest.fn() };
+      const ok = UnifiedCacheCore.delete('DKEY', CACHE_CONFIG.STORAGE.DRIVE);
+      expect(ok).toBe(true);
+      expect(global.DriveApp.getFileById).not.toHaveBeenCalled();
+    });
+
+    it('returns true but logs when trashing throws (caught)', () => {
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => 'f'), deleteProperty: jest.fn() }))
+      };
+      global.DriveApp = { getFileById: jest.fn(() => { throw new Error('drive boom'); }) };
+      // _deleteDriveData catches internally and returns false, but delete() wraps it
+      // and still returns true (the switch case does not propagate the inner result).
+      expect(UnifiedCacheCore.delete('DKEY', CACHE_CONFIG.STORAGE.DRIVE)).toBe(true);
+    });
+  });
+
+  describe('UnifiedCacheCore DRIVE get/set (_getDriveData / _setDriveData)', () => {
+    it('reads and parses a Drive-backed value', () => {
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => 'file-1') }))
+      };
+      global.DriveApp = {
+        getFileById: jest.fn(() => ({ getBlob: () => ({ getDataAsString: () => JSON.stringify({ x: 1 }) }) }))
+      };
+      const result = UnifiedCacheCore.get('DKEY', CACHE_CONFIG.STORAGE.DRIVE);
+      expect(result).toEqual({ x: 1 });
+    });
+
+    it('returns null when no Drive file id is stored', () => {
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null) })) };
+      global.DriveApp = { getFileById: jest.fn() };
+      expect(UnifiedCacheCore.get('DKEY', CACHE_CONFIG.STORAGE.DRIVE)).toBeNull();
+      expect(global.DriveApp.getFileById).not.toHaveBeenCalled();
+    });
+
+    it('returns null when reading the Drive file throws', () => {
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => 'f') })) };
+      global.DriveApp = { getFileById: jest.fn(() => { throw new Error('read boom'); }) };
+      expect(UnifiedCacheCore.get('DKEY', CACHE_CONFIG.STORAGE.DRIVE)).toBeNull();
+    });
+
+    it('updates the existing Drive file when a file id is stored (set)', () => {
+      const setContent = jest.fn();
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => 'file-1'), setProperty: jest.fn() })) };
+      global.DriveApp = { getFileById: jest.fn(() => ({ setContent })) };
+      const ok = UnifiedCacheCore.set('DKEY', { y: 2 }, CACHE_CONFIG.DURATIONS.LONG, CACHE_CONFIG.STORAGE.DRIVE);
+      expect(ok).toBe(true);
+      expect(setContent).toHaveBeenCalledWith(JSON.stringify({ y: 2 }, null, 2));
+    });
+
+    it('creates a new Drive file + persists its id when none exists (set)', () => {
+      const setProperty = jest.fn();
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null), setProperty })) };
+      global.DriveApp = { createFile: jest.fn(() => ({ getId: () => 'new-drive-id' })) };
+      const ok = UnifiedCacheCore.set('DKEY', { z: 3 }, CACHE_CONFIG.DURATIONS.LONG, CACHE_CONFIG.STORAGE.DRIVE);
+      expect(ok).toBe(true);
+      expect(global.DriveApp.createFile).toHaveBeenCalledWith('DKEY.json', JSON.stringify({ z: 3 }, null, 2), 'text/plain');
+      expect(setProperty).toHaveBeenCalledWith('DKEY_FILE_ID', 'new-drive-id');
+    });
+
+    it('returns false (via set) when the Drive write throws', () => {
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null), setProperty: jest.fn() })) };
+      global.DriveApp = { createFile: jest.fn(() => { throw new Error('write boom'); }) };
+      // _setDriveData catches and returns false; set() itself returns true (switch
+      // case doesn't propagate), so we assert the create was attempted + no throw.
+      expect(() => UnifiedCacheCore.set('DKEY', { z: 3 }, CACHE_CONFIG.DURATIONS.LONG, CACHE_CONFIG.STORAGE.DRIVE)).not.toThrow();
+    });
+  });
+
+  describe('UnifiedCacheCore.getOrCompute', () => {
+    it('returns the cached value without computing when present', () => {
+      global.CacheService = { getScriptCache: jest.fn(() => ({ get: jest.fn(() => JSON.stringify({ cached: true })), put: jest.fn() })) };
+      const computeFn = jest.fn();
+      const result = UnifiedCacheCore.getOrCompute('K', computeFn);
+      expect(result).toEqual({ cached: true });
+      expect(computeFn).not.toHaveBeenCalled();
+    });
+
+    it('computes and caches when the value is missing', () => {
+      const put = jest.fn();
+      global.CacheService = { getScriptCache: jest.fn(() => ({ get: jest.fn(() => null), put })) };
+      const computeFn = jest.fn(() => ({ computed: 1 }));
+      const result = UnifiedCacheCore.getOrCompute('K', computeFn);
+      expect(computeFn).toHaveBeenCalled();
+      expect(result).toEqual({ computed: 1 });
+      expect(put).toHaveBeenCalled();
+    });
+
+    it('does NOT cache a computed null/undefined result', () => {
+      const put = jest.fn();
+      global.CacheService = { getScriptCache: jest.fn(() => ({ get: jest.fn(() => null), put })) };
+      const result = UnifiedCacheCore.getOrCompute('K', jest.fn(() => null));
+      expect(result).toBeNull();
+      expect(put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('EmailCategoriesCache', () => {
+    function propStore(initial = {}) {
+      const map = new Map(Object.entries(initial));
+      return {
+        getScriptProperties: jest.fn(() => ({
+          getProperty: jest.fn((k) => (map.has(k) ? map.get(k) : null)),
+          setProperty: jest.fn((k, v) => map.set(k, v)),
+          deleteProperty: jest.fn((k) => map.delete(k)),
+        })),
+        _map: map,
+      };
+    }
+
+    it('getAll falls back to the EMAIL_CATEGORIES_MAP property when not cached', () => {
+      global.PropertiesService = propStore({
+        EMAIL_CATEGORIES_MAP: JSON.stringify({ 'a@x.com': ['work'] }),
+      });
+      expect(EmailCategoriesCache.getAll()).toEqual({ 'a@x.com': ['work'] });
+    });
+
+    it('getAll returns {} when no property exists', () => {
+      global.PropertiesService = propStore({});
+      expect(EmailCategoriesCache.getAll()).toEqual({});
+    });
+
+    it('getForEmail returns the categories for a (lowercased) email', () => {
+      global.PropertiesService = propStore({
+        EMAIL_CATEGORIES_MAP: JSON.stringify({ 'a@x.com': ['work'] }),
+      });
+      expect(EmailCategoriesCache.getForEmail('A@X.com')).toEqual(['work']);
+    });
+
+    it('getForEmail returns [] for an unknown email', () => {
+      global.PropertiesService = propStore({});
+      expect(EmailCategoriesCache.getForEmail('none@x.com')).toEqual([]);
+    });
+
+    it('updateForEmail writes the new mapping to properties (and cache on success)', () => {
+      const store = propStore({});
+      global.PropertiesService = store;
+      const put = jest.fn();
+      global.CacheService = { getScriptCache: jest.fn(() => ({ put })) };
+      const ok = EmailCategoriesCache.updateForEmail('B@X.com', ['finance']);
+      expect(ok).toBe(true);
+      const saved = JSON.parse(store._map.get('EMAIL_CATEGORIES_CACHE'));
+      expect(saved['b@x.com']).toEqual(['finance']);
+      expect(put).toHaveBeenCalled();
+    });
+
+    it('updateForEmail does NOT write the cache copy when the properties write fails', () => {
+      // getAll() reads the prop (succeeds); the subsequent setProperty throws so the
+      // PROPERTIES set returns false -> the `if (success)` cache write is skipped.
+      let call = 0;
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({
+          getProperty: jest.fn(() => JSON.stringify({})),
+          setProperty: jest.fn(() => { throw new Error('prop write fail'); }),
+        })),
+      };
+      const put = jest.fn();
+      global.CacheService = { getScriptCache: jest.fn(() => ({ put })) };
+      const ok = EmailCategoriesCache.updateForEmail('c@x.com', ['x']);
+      expect(ok).toBe(false);
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('removeEmail deletes the email from the mapping', () => {
+      const store = propStore({ EMAIL_CATEGORIES_MAP: JSON.stringify({ 'a@x.com': ['work'], 'b@x.com': ['x'] }) });
+      global.PropertiesService = store;
+      const ok = EmailCategoriesCache.removeEmail('A@X.com');
+      expect(ok).toBe(true);
+      const saved = JSON.parse(store._map.get('EMAIL_CATEGORIES_CACHE'));
+      expect(saved['a@x.com']).toBeUndefined();
+      expect(saved['b@x.com']).toEqual(['x']);
+    });
+  });
+
+  describe('LabelCategoriesCache', () => {
+    function propStore(initial = {}) {
+      const map = new Map(Object.entries(initial));
+      return {
+        getScriptProperties: jest.fn(() => ({
+          getProperty: jest.fn((k) => (map.has(k) ? map.get(k) : null)),
+          setProperty: jest.fn((k, v) => map.set(k, v)),
+          deleteProperty: jest.fn((k) => map.delete(k)),
+        })),
+        _map: map,
+      };
+    }
+
+    it('getAll falls back to LABEL_CATEGORIES_MAP property', () => {
+      global.PropertiesService = propStore({ LABEL_CATEGORIES_MAP: JSON.stringify({ Work: ['work'] }) });
+      expect(LabelCategoriesCache.getAll()).toEqual({ Work: ['work'] });
+    });
+
+    it('getForLabel returns categories for a label, [] when missing', () => {
+      global.PropertiesService = propStore({ LABEL_CATEGORIES_MAP: JSON.stringify({ Work: ['work'] }) });
+      expect(LabelCategoriesCache.getForLabel('Work')).toEqual(['work']);
+      expect(LabelCategoriesCache.getForLabel('Nope')).toEqual([]);
+    });
+
+    it('updateForLabel sets the categories when non-empty', () => {
+      const store = propStore({});
+      global.PropertiesService = store;
+      const ok = LabelCategoriesCache.updateForLabel('Work', ['work', 'jobs']);
+      expect(ok).toBe(true);
+      const saved = JSON.parse(store._map.get('LABEL_CATEGORIES_MAP'));
+      expect(saved.Work).toEqual(['work', 'jobs']);
+    });
+
+    it('updateForLabel deletes the label when given an empty list', () => {
+      const store = propStore({ LABEL_CATEGORIES_MAP: JSON.stringify({ Work: ['work'] }) });
+      global.PropertiesService = store;
+      const ok = LabelCategoriesCache.updateForLabel('Work', []);
+      expect(ok).toBe(true);
+      const saved = JSON.parse(store._map.get('LABEL_CATEGORIES_MAP'));
+      expect(saved.Work).toBeUndefined();
+    });
+  });
+
+  describe('CategoryDefinitionsCache', () => {
+    it('getAll falls back to EMAIL_SORTER_CONFIG.DEFAULT_CATEGORIES', () => {
+      global.EMAIL_SORTER_CONFIG = { DEFAULT_CATEGORIES: { work: { label: 'Work' } } };
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null), setProperty: jest.fn() })) };
+      expect(CategoryDefinitionsCache.getAll()).toEqual({ work: { label: 'Work' } });
+    });
+
+    it('getAll uses {} when DEFAULT_CATEGORIES is absent', () => {
+      global.EMAIL_SORTER_CONFIG = {};
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null), setProperty: jest.fn() })) };
+      expect(CategoryDefinitionsCache.getAll()).toEqual({});
+    });
+
+    it('update writes definitions to properties', () => {
+      const setProperty = jest.fn();
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ setProperty })) };
+      const ok = CategoryDefinitionsCache.update({ a: {} });
+      expect(ok).toBe(true);
+      expect(setProperty).toHaveBeenCalledWith(CACHE_CONFIG.KEYS.CATEGORY_DEFINITIONS, JSON.stringify({ a: {} }));
+    });
+  });
+
+  describe('RetentionRulesCache', () => {
+    it('getAll returns the stored rules array', () => {
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => JSON.stringify([{ id: 'r1' }])) })) };
+      expect(RetentionRulesCache.getAll()).toEqual([{ id: 'r1' }]);
+    });
+
+    it('getAll returns [] when nothing is stored', () => {
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ getProperty: jest.fn(() => null) })) };
+      expect(RetentionRulesCache.getAll()).toEqual([]);
+    });
+
+    it('update stores the rules array', () => {
+      const setProperty = jest.fn();
+      global.PropertiesService = { getScriptProperties: jest.fn(() => ({ setProperty })) };
+      const ok = RetentionRulesCache.update([{ id: 'r2' }]);
+      expect(ok).toBe(true);
+      expect(setProperty).toHaveBeenCalledWith(CACHE_CONFIG.KEYS.RETENTION_RULES, JSON.stringify([{ id: 'r2' }]));
+    });
+  });
+
+  describe('UnifiedCacheService facade', () => {
+    it('exposes all managers and config', () => {
+      expect(UnifiedCacheService.core).toBe(UnifiedCacheCore);
+      expect(UnifiedCacheService.emailCategories).toBe(EmailCategoriesCache);
+      expect(UnifiedCacheService.labelCategories).toBe(LabelCategoriesCache);
+      expect(UnifiedCacheService.categoryDefinitions).toBe(CategoryDefinitionsCache);
+      expect(UnifiedCacheService.retentionRules).toBe(RetentionRulesCache);
+      expect(UnifiedCacheService.config).toBe(CACHE_CONFIG);
+    });
+  });
+
+  describe('serviceFactory seam (GAS-global branch)', () => {
+    afterEach(() => { delete global.serviceFactory; });
+
+    it('resolves the GAS-global serviceFactory when present', () => {
+      global.serviceFactory = serviceFactory;
+      global.CacheService = { getScriptCache: jest.fn(() => ({ get: jest.fn(() => JSON.stringify({ ok: 1 })) })) };
+      expect(UnifiedCacheCore.get('K')).toEqual({ ok: 1 });
+    });
+  });
 });

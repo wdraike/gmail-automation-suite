@@ -24,10 +24,14 @@
       "src/core/services/spreadsheet-adapter.js (4b7f5ea)",
       "src/ui/dashboardController.js (f3544b9)",
       "src/ui/gmail-addon.js (961654f)",
-      "src/utils/label-cache.js (pending commit)"
+      "src/utils/label-cache.js (bd348af)",
+      "src/core/cache-service.js (pending commit)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
-    "backlog": ["gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope"],
-    "next": "core/cache-service.js"
+    "backlog": [
+      "gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope",
+      "cache-service.js LabelCategoriesCache: KEYS.LABEL_CATEGORIES collides with its own fallback prop name 'LABEL_CATEGORIES_MAP', making the computeFn truthy branch dead"
+    ],
+    "next": "features/email-retention-manager.js"
   }
 }

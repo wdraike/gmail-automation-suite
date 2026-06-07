@@ -17,10 +17,12 @@ function _csServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('./services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _csCache() {
@@ -375,6 +377,7 @@ const LabelCategoriesCache = {
       CACHE_CONFIG.KEYS.LABEL_CATEGORIES,
       () => {
         const prop = _csProps().getProperty('LABEL_CATEGORIES_MAP');
+        /* istanbul ignore next -- the truthy branch is unreachable: CACHE_CONFIG.KEYS.LABEL_CATEGORIES === 'LABEL_CATEGORIES_MAP', so getOrCompute's prior get() already read this exact property; the computeFn only runs on a miss, at which point this read also returns null. */
         return prop ? JSON.parse(prop) : {};
       },
       CACHE_CONFIG.DURATIONS.LONG,
@@ -491,6 +494,7 @@ const UnifiedCacheService = {
 };
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CACHE_CONFIG,
