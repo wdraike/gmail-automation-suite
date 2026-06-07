@@ -797,57 +797,25 @@ describe("job-finder main", () => {
       expect(result.message).toContain("rate limit");
     });
 
-    it("sends a notification and returns failure on an unexpected error", () => {
-      // getEmailThreadsToProcess throws a non-rate-limit error AFTER init succeeds.
-      global.PropertiesService.getScriptProperties().setProperty("JOB_FINDER_SPREADSHEET_ID", "ss1");
-      const thread = makeThread();
-      setLabels({ "📬 JobAlerts": { getName: () => "📬 JobAlerts", getThreads: jest.fn(() => [thread]) } });
-      global.extractJobDetailsSimple = jest.fn(() => [{ "Company": "Acme", "Job Title": "Dev", _confidence: 0.9 }]);
-      global.isValidJobListing = jest.fn(() => true);
-      // addJobToSpreadsheet throwing inside processOneEmail is caught there; instead
-      // make markEmailAsProcessed succeed but force the batch to throw a generic error
-      // by making extractEmailContent throw a non-rate error that bubbles? processOneEmail
-      // catches non-rate errors. So drive the OUTER catch via a thrown error in
-      // processEmailBatch's sleep — simplest: make _jfUtils().sleep throw is hard.
-      // Instead: force getEmailThreadsToProcess to return success but processEmailBatch
-      // to throw by making threads a getter that throws on .length after success.
-      // Simpler reachable path: throw from sendNotificationEmail is not it. Use a
-      // thread whose getThreads returns an object that breaks processEmailBatch's for-loop.
-      global.Utilities.sleep = jest.fn();
-      // Make processOneEmail rate-limit on first thread to bubble; but that's the rate path.
-      // Use two threads where the second triggers a generic batch error via processOneEmail
-      // returning then sleep — not reachable. Accept the notify path via a forced throw:
-      global.addJobToSpreadsheet = jest.fn(() => true);
-      // Force the top-level catch: make Logger.log throw once inside processJobEmailsMain
-      // after batch — not clean. Instead verify the notify path through a thrown
-      // non-rate error from processEmailBatch by stubbing it unavailable:
-      const origExtract = global.extractTextFromHtml;
-      global.extractTextFromHtml = jest.fn(() => { throw new Error("html parser exploded"); });
-      // extractEmailContent rethrows -> processOneEmail catches (non-rate) -> marks processed,
-      // returns {success:false,error}. Batch records error, does NOT throw. So no outer catch.
-      // Restore and assert the batch-error accounting path instead.
-      global.extractTextFromHtml = origExtract;
-      // This scenario is covered by processEmailBatch error-accounting tests below.
-      expect(true).toBe(true);
-    });
-  });
-
-  describe("processJobEmailsMain top-level error + notification", () => {
-    it("notifies and returns failure when initialize throws past its guard", () => {
-      // initializeJobFinder has its own try/catch returning {success:false}, so the
-      // top-level catch is driven by getEmailThreadsToProcess... which also catches.
-      // Reachable outer-catch path: processEmailBatch throws a non-rate error.
+    it("processes the batch even when a per-email content error occurs (no top-level throw)", () => {
+      // A generic (non-rate) extraction error is caught inside processOneEmail
+      // (marks the thread processed, returns {success:false,error}); the batch
+      // records the error and continues, so processJobEmailsMain still returns a
+      // success result with 0 processed. The top-level generic-notify catch is
+      // unreachable (all callees catch their own errors) and is istanbul-ignored
+      // in source with that justification.
       global.PropertiesService.getScriptProperties().setProperty("JOB_FINDER_SPREADSHEET_ID", "ss1");
       const thread = {
         getMessages: () => { throw new Error("boom-generic"); },
+        addLabel: jest.fn(), removeLabel: jest.fn(), moveToArchive: jest.fn()
       };
       setLabels({ "📬 JobAlerts": { getName: () => "📬 JobAlerts", getThreads: jest.fn(() => [thread]) } });
-      // processOneEmail -> extractEmailContent throws -> caught in processOneEmail
-      // (non-rate) -> marks processed -> returns {success:false}. Batch records error.
-      // So processJobEmailsMain still returns success:true with 0 processed.
+      global.Utilities.sleep = jest.fn();
       const result = main.processJobEmailsMain();
       expect(result.success).toBe(true);
       expect(result.processedCount).toBe(0);
+      // The notify path was NOT taken (no top-level error).
+      expect(global.sendNotificationEmail).not.toHaveBeenCalled();
     });
   });
 
