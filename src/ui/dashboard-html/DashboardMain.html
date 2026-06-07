@@ -1,6 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard — Gmail Tools</title>
     <base target="_top" />
     <link
       rel="stylesheet"
@@ -21,7 +24,7 @@
 
         <div id="labelsView" class="dashboard-container grid grid-cols-2 gap-4 h-full">
           <!-- Column 1: Label Tree (now resizable) -->
-          <div class="dashboard-column resizable">
+          <nav aria-label="Gmail labels" class="dashboard-column resizable">
             <div class="column-header">
               <h2 class="text-gray-700 font-semibold">Labels</h2>
               <div class="flex space-x-2">
@@ -75,6 +78,7 @@
                 id="labelSearchInput"
                 class="w-full pl-8 pr-8 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="Search labels..."
+                aria-label="Search labels"
               />
               <button
                 id="clearLabelSearch"
@@ -106,10 +110,10 @@
             </div>
             <!-- Add the resizer div -->
             <div class="resizer"></div>
-          </div>
-        
+          </nav>
+
           <!-- Column 2: Categories -->
-          <div class="dashboard-column">
+          <section aria-label="Categories" class="dashboard-column">
             <div class="column-header">
               <h2 class="text-gray-700 font-semibold">Categories</h2>
               <button
@@ -139,6 +143,7 @@
                 id="categorySearchInput"
                 class="w-full pl-8 pr-8 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="Search categories, domains or emails..."
+                aria-label="Search categories, domains or emails"
               />
               <button
                 id="clearCategorySearch"
@@ -168,7 +173,7 @@
                 Loading categories...
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
         <!-- Settings View (hidden by default) -->
@@ -189,6 +194,7 @@
                       id="apiKeyInput"
                       class="flex-1 p-2 border rounded"
                       placeholder="Enter Gemini API key"
+                      aria-label="Gemini API Key"
                     />
                     <button
                       id="showApiKeyBtn"
@@ -249,6 +255,7 @@
                   <select
                     id="dynamicCategoriesEnabled"
                     class="w-full p-2 border rounded"
+                    aria-label="Dynamic Categories"
                   >
                     <option value="true">Enabled</option>
                     <option value="false">Disabled</option>

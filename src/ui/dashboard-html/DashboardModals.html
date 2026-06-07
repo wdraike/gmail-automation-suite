@@ -4,11 +4,17 @@
   id="newCategoryModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-20"
 >
-  <div class="bg-white rounded-lg shadow-lg w-96 relative">
+  <div
+    class="bg-white rounded-lg shadow-lg w-96 relative"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="newCategoryModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Create New Category</h3>
+      <h3 id="newCategoryModalTitle" class="text-lg font-medium">Create New Category</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -37,6 +43,7 @@
           type="text"
           class="w-full border rounded px-3 py-2"
           placeholder="e.g. work_related"
+          aria-label="Category Key (lowercase, no spaces)"
         />
         <p class="text-xs text-gray-500 mt-1">
           This is the internal category identifier used for classification
@@ -52,6 +59,7 @@
           type="text"
           class="w-full border rounded px-3 py-2"
           placeholder="e.g. Work Related"
+          aria-label="Display Name"
         />
         <p class="text-xs text-gray-500 mt-1">
           Emails in this category will be assigned to this Gmail label
@@ -62,7 +70,7 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Associated Gmail Label
         </label>
-        <select id="categoryLabel" class="w-full border rounded px-3 py-2">
+        <select id="categoryLabel" class="w-full border rounded px-3 py-2" aria-label="Associated Gmail Label">
           <option value="">-- Select a Label --</option>
           <!-- Labels will be populated dynamically -->
         </select>
@@ -93,11 +101,17 @@
   id="deleteConfirmModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-20"
 >
-  <div class="bg-white rounded-lg shadow-lg w-96 relative">
+  <div
+    class="bg-white rounded-lg shadow-lg w-96 relative"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="deleteConfirmModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Confirm Deletion</h3>
+      <h3 id="deleteConfirmModalTitle" class="text-lg font-medium">Confirm Deletion</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -152,11 +166,17 @@
   id="editCategoryModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-20"
 >
-  <div class="bg-white rounded-lg shadow-lg w-96 relative">
+  <div
+    class="bg-white rounded-lg shadow-lg w-96 relative"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="editCategoryModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Edit Category</h3>
+      <h3 id="editCategoryModalTitle" class="text-lg font-medium">Edit Category</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -185,6 +205,7 @@
           type="text"
           class="w-full border rounded px-3 py-2 bg-gray-100"
           readonly
+          aria-label="Category Key"
         />
       </div>
 
@@ -196,6 +217,7 @@
           id="editCategoryDisplayName"
           type="text"
           class="w-full border rounded px-3 py-2"
+          aria-label="Display Name"
         />
       </div>
 
@@ -221,11 +243,17 @@
   id="addItemModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-20"
 >
-  <div class="bg-white rounded-lg shadow-lg w-96 relative">
+  <div
+    class="bg-white rounded-lg shadow-lg w-96 relative"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="addItemModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Add Item to Category</h3>
+      <h3 id="addItemModalTitle" class="text-lg font-medium">Add Item to Category</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -249,7 +277,7 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Target Category
         </label>
-        <select id="itemCategorySelect" class="w-full border rounded px-3 py-2">
+        <select id="itemCategorySelect" class="w-full border rounded px-3 py-2" aria-label="Target Category">
           <!-- Categories will be populated here -->
         </select>
       </div>
@@ -285,6 +313,7 @@
           type="text"
           class="w-full border rounded px-3 py-2"
           placeholder="Enter domain or email address"
+          aria-label="Domain or email value"
         />
       </div>
 
@@ -310,11 +339,17 @@
   id="retentionPolicyModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
 >
-  <div class="bg-white rounded-lg shadow-lg w-full max-w-lg mx-4 relative max-h-screen overflow-y-auto">
+  <div
+    class="bg-white rounded-lg shadow-lg w-full max-w-lg mx-4 relative max-h-screen overflow-y-auto"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="retentionPolicyModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Label Retention Policy</h3>
+      <h3 id="retentionPolicyModalTitle" class="text-lg font-medium">Label Retention Policy</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -346,6 +381,7 @@
           max="3650"
           value="30"
           class="w-full border rounded px-3 py-2"
+          aria-label="Retention Period (days)"
         />
         <p class="text-xs text-gray-500 mt-1">
           Emails older than this many days will be automatically processed
@@ -356,7 +392,7 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Action After Retention Period
         </label>
-        <select id="retentionAction" class="w-full border rounded px-3 py-2">
+        <select id="retentionAction" class="w-full border rounded px-3 py-2" aria-label="Action After Retention Period">
           <option value="delete">Delete emails</option>
           <option value="archive">Archive emails</option>
         </select>
@@ -366,7 +402,7 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Target Label (for archive action)
         </label>
-        <select id="targetLabelSelect" class="w-full border rounded px-3 py-2">
+        <select id="targetLabelSelect" class="w-full border rounded px-3 py-2" aria-label="Target Label (for archive action)">
           <!-- Labels will be populated here -->
         </select>
       </div>
@@ -380,7 +416,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Frequency
             </label>
-            <select id="scheduleFrequency" class="w-full border rounded px-3 py-2">
+            <select id="scheduleFrequency" class="w-full border rounded px-3 py-2" aria-label="Schedule Frequency">
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
             </select>
@@ -390,7 +426,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Run Time (Hour)
             </label>
-            <select id="scheduleHour" class="w-full border rounded px-3 py-2">
+            <select id="scheduleHour" class="w-full border rounded px-3 py-2" aria-label="Run Time (Hour)">
               <option value="0">12 AM (Midnight)</option>
               <option value="1">1 AM</option>
               <option value="2" selected>2 AM</option>
@@ -456,11 +492,17 @@
   id="addDomainEmailModal"
   class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-30"
 >
-  <div class="bg-white rounded-lg shadow-lg w-96 relative">
+  <div
+    class="bg-white rounded-lg shadow-lg w-96 relative"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="addDomainEmailModalTitle"
+  >
     <div class="p-4 border-b">
-      <h3 class="text-lg font-medium">Add Item to Category</h3>
+      <h3 id="addDomainEmailModalTitle" class="text-lg font-medium">Add Item to Category</h3>
       <button
         class="closeModal absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+        aria-label="Close dialog"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -518,6 +560,7 @@
           type="text"
           class="w-full border rounded px-3 py-2"
           placeholder="Enter domain or email address"
+          aria-label="Domain or email value"
         />
       </div>
 

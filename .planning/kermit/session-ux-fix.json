@@ -1,0 +1,36 @@
+{
+  "leg_id": "ux-a11y-fix",
+  "intent": "Fix critical+high WCAG/UX blockers found by Bird (UX-REVIEW.md) on the Gmail Automation Dashboard: icon-button aria-labels, mobile reflow, modal dialog semantics, lang/title/h1, focus ring, contrast, tap targets, input labels, keyboard assignment path. Bird re-verifies over CDP. Driven by Kermit -> Oscar (Bert/Telly/Bird).",
+  "scope": "src/ui/dashboard-html/** (Wave 1, collision-free), src/ui/dashboardController.js + dashboard-api.js (Wave 2, serialized after coverage leg, keep 100%), UX-REVIEW.md, tests-local/ (only after coverage leg done)",
+  "status": "in_progress",
+  "opened": "2026-06-06T00:00:00Z",
+  "waves": {
+    "wave1": {
+      "status": "complete",
+      "oscar_verdict": "PASS",
+      "files": [
+        "src/ui/dashboard-html/DashboardMain.html",
+        "src/ui/dashboard-html/DashboardHeader.html",
+        "src/ui/dashboard-html/DashboardModals.html",
+        "src/ui/dashboard-html/DashboardStyles.html"
+      ],
+      "fixes": [
+        "lang=en + <title> + charset/viewport meta in DashboardMain head",
+        "promoted brand text to <h1>",
+        "<nav aria-label> label rail + <section aria-label> categories landmarks",
+        "all 6 modals -> role=dialog aria-modal aria-labelledby; close buttons aria-label",
+        "aria-label on all search/settings/modal inputs+selects",
+        ":focus-visible gold ring, .sr-only util",
+        "contrast tokens (chip/email/placeholder >=4.5:1)",
+        "44x44 min tap targets for icon buttons",
+        "@media max-width:640px single-column reflow"
+      ]
+    },
+    "wave2": {"status": "blocked-waiting", "reason": "serialized after full-test-coverage leg completes"},
+    "wave3": {"status": "pending"}
+  },
+  "owns_session_json": false,
+  "concurrency_guard": "full-test-coverage leg running in parallel owns session.json + src/**/*.js + tests-local/**; this leg uses session-ux-fix.json; Wave 2 (.js) waits for coverage completion (poll HANDOFF.json last_leg==full-test-coverage)",
+  "wbs": ".planning/kermit/WBS-ux-a11y-fix.md",
+  "source_review": "UX-REVIEW.md (Bird 2026-06-06): 4 critical / 5 high / 5 med / 4 low"
+}
