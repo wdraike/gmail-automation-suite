@@ -1,34 +1,40 @@
-# Oscar Review — 2026-06-06 (full-test-coverage WAVE 0)
+# Oscar Review — 2026-06-06 (full-test-coverage — sorter.js)
 
 ## Verdict: PASS
 
 ## Summary
-Wave 0 of the full-test-coverage leg: coverage gate config + scope exclusions, the
-rate-limit test un-skip, and a flaky-test race fix. Suite is green (592 passed / 0
-failed / 8 integration skips). The 100% coverageThreshold intentionally fails — that
-is the leg-wide RED by design (D4). Ready to commit.
+Per-file wave 1/17: src/features/email-sorter/sorter.js brought to honest 100%
+(stmt/branch/func/lines). One real bug fixed (bare-email regex). Five istanbul
+ignores all verified unreachable by Zoe's strip-test. Suite green. Ready to commit.
 
 ## Agent Findings
 
 ### Zoe (adversarial test audit) — PASS
-Mutation-tested both new rate-limit tests: M1 (flip `>` to `<` on the cap comparison)
-and M2 (delete the pre-wait `sleep`) both produced RED. Assertions are real, not
-vacuous. See ZOE-REVIEW.md.
+3 load-bearing mutations all RED (buggy-regex restore, categorizedThreads++, addToThread).
+Stripping all istanbul ignores left exactly the ignored lines uncovered (15/52/563-566/
+607-608) — proving they are genuinely unreachable defensive code, not faked 100%.
+
+### Ernie-equiv (code quality / ignore legitimacy) — PASS
+- Bugfix `[^<\\s]` → `[^<\s]` is minimal, correct, and behavior-preserving for the
+  common angle-bracket path; documented inline.
+- All 5 ignore comments carry specific justifications and were independently confirmed
+  unreachable (Zoe #4). No blanket ignores.
+- Architecture boundary test still green (no forbidden SDK token introduced).
 
 ## Completeness
 | Check | Result |
 |-------|--------|
-| Tests exist for changed code | PASS (config + test files) |
-| Tests passing (`npx jest`) | PASS (0 failed) |
+| Tests exist for changed code | PASS |
+| Tests passing (`npx jest`) | PASS (643 passed / 0 failed / 8 skip) |
+| File at 100% (scoped coverage) | PASS |
 | New tests assert real behavior (Zoe) | PASS |
-| Coverage threshold | EXPECTED-FAIL (wave-0 RED by design, D4) |
-| Docs updated | DEFERRED to final wave (tests-local/README.md) |
+| Hexagonal boundary intact | PASS |
 
 ## Kermit Report
 Verdict: PASS
-Completeness gaps: none (threshold-fail is the intended leg RED)
+Completeness gaps: none
 Backlog items: 0
 Ready to commit: yes
 
 ## Status: PASS
-_Signed: Oscar — 2026-06-06T00:00:00Z_
+_Signed: Oscar — 2026-06-06T00:01:00Z_

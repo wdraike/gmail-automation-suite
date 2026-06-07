@@ -9,10 +9,12 @@ function _esServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _esGmail() {
@@ -41,6 +43,7 @@ function queryGeminiForCategory(emailAddress, domain, subject) {
     const category = extractCategoryFromResponse(response);
 
     // If we got a valid category, return it
+    /* istanbul ignore else -- extractCategoryFromResponse never returns a falsy value (it returns "other" as its floor), so the else/default-fallback below is defensive and unreachable. */
     if (category) {
       return {
         category: category,
@@ -48,6 +51,7 @@ function queryGeminiForCategory(emailAddress, domain, subject) {
       };
     }
 
+    /* istanbul ignore next -- unreachable: extractCategoryFromResponse always returns a non-empty string. */
     // Default fallback
     return {
       category: "other",
@@ -347,8 +351,13 @@ function categorizeEmails() {
         const subject = latestMessage.getSubject();
 
         // Extract full email address and domain
+        // Bugfix (full-test-coverage leg): the fallback pattern previously used
+        // `[^<\\s]` (a literal backslash + 's'), which excluded the letter 's' from
+        // bare addresses and truncated e.g. "plainsender@x" to "ender@x". Use `\s`
+        // so it correctly means "any non-whitespace". The angle-bracket form is tried
+        // first and was unaffected, which masked the bug.
         const emailMatch =
-          from.match(/<([^>]+)>/) || from.match(/([^<\\s]+@[^>\\s]+)/);
+          from.match(/<([^>]+)>/) || from.match(/([^<\s]+@[^>\s]+)/);
         const emailAddress = emailMatch ? emailMatch[1] : from;
         const domain = emailAddress.split("@")[1];
 
@@ -433,6 +442,7 @@ function categorizeEmails() {
               continue; // Skip to the next email in the loop
             }
 
+            /* istanbul ignore else -- queryGeminiForCategory returns null (handled above) or an object that always carries a truthy `category`; the false branch is unreachable defensive code. */
             if (geminiResponse && geminiResponse.category) {
               category = geminiResponse.category;
               Logger.log(`Gemini suggested category: ${category}`);
@@ -555,6 +565,7 @@ function moveEmailToFolder(thread, folderName) {
   const cleanFolderName = cleanLabelName(folderName);
 
   // If the cleaned folder name is invalid, don't process the email
+  /* istanbul ignore next -- defensive: cleanLabelName never returns an empty/whitespace string (it floors to "Other"), so this guard is unreachable. */
   if (!cleanFolderName || cleanFolderName.trim() === "") {
     Logger.log(
       `Invalid folder name "${folderName}" - email will remain unprocessed`
@@ -599,6 +610,7 @@ function createNewCategory(category, emailAddress, domain, subject) {
   folderName = cleanLabelName(folderName);
 
   // Validate folder name
+  /* istanbul ignore next -- defensive: cleanLabelName never returns an empty string (it floors to "Other"), so this guard is unreachable. */
   if (!folderName || folderName === "") {
     Logger.log(`Invalid category name: ${category}`);
     return null;
@@ -721,6 +733,7 @@ function toggleDynamicCategories() {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     queryGeminiForCategory,

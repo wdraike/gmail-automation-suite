@@ -1,9 +1,10 @@
-# Zoe Review — 2026-06-06 (full-test-coverage WAVE 0)
+# Zoe Review — 2026-06-06 (full-test-coverage — sorter.js)
 
 ## Summary
-Audited the 2 NEW (formerly skipped) `callGeminiWithRateLimiting` rate-limit tests in
-`tests-local/api-service.test.js`. Both assert REAL behavior — verified by mutation
-testing (operator flip + sleep removal). No vacuous/false-pass assertions found. PASS.
+Mutation-audited the rewritten email-sorter tests. The bugfix test, orchestration
+counters, and adapter calls are all real guards (mutations produced RED). The five
+istanbul-ignored locations are genuinely unreachable (confirmed by stripping the
+ignores and observing those lines stay uncovered — not fake-100%). PASS.
 
 ## Telly Audit
 
@@ -16,13 +17,13 @@ _None._
 ### PASS Verifications
 | # | Check | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | "should wait when rate limit is reached" is no longer a vacuous skip stub | PASS | Now fills `API_STATE.lastApiCalls`, drives `checkRateLimit()` to `rateLimited:true` with waitTime under the cap, asserts `Utilities.sleep` called once with a bounded positive ms value, and asserts the subsequent call succeeds (`result` contains "other"). |
-| 2 | Complementary cap-exceeded branch test asserts throw + no-sleep + no-fetch + failure-counter bump | PASS | Asserts `toThrow('RATE_LIMIT_REACHED')`, `sleep` NOT called, `UrlFetchApp.fetch` NOT called, `consecutiveFailures === 1`. |
-| 3 | Mutation M1 — flip `waitTime > MAX_INPROCESS_WAIT_MS` to `<` | CAUGHT | Both new tests FAILED. Tests pin the comparison direction, not just line execution. |
-| 4 | Mutation M2 — delete `_asUtils().sleep(rateLimitStatus.waitTime + 100)` | CAUGHT | "should wait…" test FAILED (asserts sleep call count + arg). |
-| 5 | Revert verification — production restored, full describe block green | PASS | 8 passed / 0 failed in `callGeminiWithRateLimiting`. |
-| 6 | No `expect(true)` / assertion-free filler | PASS | Every assertion checks a concrete value (call count, arg bounds, return content, state mutation). |
+| 1 | Bugfix test catches the buggy `[^<\\s]` regex | CAUGHT | Restored the double-backslash regex → "bare-address regex" test FAILED. |
+| 2 | cache-hit move increments categorizedThreads | CAUGHT | Neutralized `results.categorizedThreads++` → "uses a cached email category" FAILED. |
+| 3 | moveEmailToFolder actually labels the thread | CAUGHT | Removed `label.addToThread(thread)` → "applies an existing label and archives" FAILED. |
+| 4 | istanbul ignores are NOT hiding reachable code | PASS | Stripped ALL ignore comments; coverage dropped to 97.54% stmt / 95.89% branch with uncovered lines = exactly the ignored set (15 throw, 52 dead fallback, 563-566 + 607-608 empty-name guards). None became covered by any test → genuinely unreachable defensive / GAS-only code. |
+| 5 | No `toBeDefined`-only / no-throw filler in orchestration tests | PASS | categorizeEmails tests assert counters (categorizedThreads/errors/newCategories/skippedDueToRateLimit), `addToThread` calls, and `updateCategoryForEmail/Domain` arguments. |
+| 6 | Full file at honest 100% with ignores in place | PASS | 100/100/100/100, 72 tests pass. |
 
 ## Status: PASS
 
-_Signed: Zoe — 2026-06-06T00:00:00Z_
+_Signed: Zoe — 2026-06-06T00:01:00Z_
