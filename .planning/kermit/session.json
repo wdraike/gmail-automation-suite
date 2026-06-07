@@ -30,14 +30,15 @@
       "src/core/services/drive-adapter.js (9773afd)",
       "src/core/api-service.js (68d235a)",
       "src/features/enhanced-label-manager.js (a7d9068)",
-      "src/features/email-sorter/categorizer-cache.js (9dbd2e7)"
+      "src/features/email-sorter/categorizer-cache.js (9dbd2e7)",
+      "src/core/config.js (1abad69)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
     "backlog": [
       "gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope",
       "cache-service.js LabelCategoriesCache: KEYS.LABEL_CATEGORIES collides with its own fallback prop name 'LABEL_CATEGORIES_MAP', making the computeFn truthy branch dead"
     ],
-    "next": "core/config.js",
+    "next": "ui/dashboard-api.js",
     "env_note": "VSCode Jest --watch runner contends worker pool; use `npx jest --runInBand` for reliable runs"
   }
 }
