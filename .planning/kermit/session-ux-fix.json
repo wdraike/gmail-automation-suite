@@ -26,8 +26,23 @@
         "@media max-width:640px single-column reflow"
       ]
     },
-    "wave2": {"status": "blocked-waiting", "reason": "serialized after full-test-coverage leg completes"},
-    "wave3": {"status": "pending"}
+    "wave1b": {
+      "status": "complete",
+      "commit": "c50847e",
+      "note": "dynamic icon-button aria-labels in client-side HTML partials (dashboard-labels.html, dashboard-categories.html) - collision-free, resolves Bird's 77-unnamed-buttons critical"
+    },
+    "wave1c": {
+      "status": "complete",
+      "commit": "ed3bd9b",
+      "note": "modal focus management (setupModalA11y in dashboard-core.html) - focus move-in, Tab trap, Escape + backdrop close, focus restore. Collision-free client JS."
+    },
+    "wave2": {
+      "status": "blocked-waiting",
+      "reason": "serialized after full-test-coverage leg completes (background waiter b6ikc9g21 polling HANDOFF.json/session.json)",
+      "planned_change": "dashboardController.js createCategoryPill: add aria-label=\"Remove <displayName> from <labelName>\" to the remove-X <button> in its innerHTML; extend existing createCategoryPill test to assert the aria-label (no new branch -> coverage stays 100%). dashboard-api.js doGet: confirm only (inner-iframe lang/title already fixed in DashboardMain.html Wave 1).",
+      "keyboard_dnd_alternative": "Bird High: existing modals already give keyboard paths for adding domains/emails to a category and choosing a label at category creation; reassigning an EXISTING category to a different label is still drag-only. Candidate Wave 2 enhancement (touches server moveCategoryBetweenLabels) - evaluate after coverage leg."
+    },
+    "wave3": {"status": "pending", "note": "Bird CDP re-verify + axe-in-iframe; update UX-REVIEW.md; Oscar full gate; clasp push; git push"}
   },
   "owns_session_json": false,
   "concurrency_guard": "full-test-coverage leg running in parallel owns session.json + src/**/*.js + tests-local/**; this leg uses session-ux-fix.json; Wave 2 (.js) waits for coverage completion (poll HANDOFF.json last_leg==full-test-coverage)",
