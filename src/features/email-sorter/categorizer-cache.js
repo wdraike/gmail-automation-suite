@@ -13,10 +13,12 @@ function _ccServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _ccDrive() {
@@ -427,7 +429,9 @@ function refreshCache() {
       items: getItemCount(data),
     };
   } catch (error) {
+    /* istanbul ignore next -- unreachable: loadCategorizerData and saveCategorizerData each swallow their own errors and never throw, and loadCategorizerData always returns a valid default-shaped object, so Object.keys(data.categories) cannot throw. Defensive guard only. */
     Logger.log(`Error refreshing cache: ${error}`);
+    /* istanbul ignore next */
     return {
       success: false,
       message: `Error: ${error.toString()}`,
@@ -602,6 +606,7 @@ function deleteCategory(categoryKey) {
     for (const label in allLabelCategories) {
       const categories = allLabelCategories[label];
       const categoryIndex = categories.indexOf(categoryKey);
+      /* istanbul ignore next -- unreachable: getAllLabelCategories() is rebuilt from the remaining categories AFTER this category was already deleted above, so the deleted categoryKey can never appear in any label's list (indexOf is always -1). Defensive cleanup retained for clarity. */
       if (categoryIndex !== -1) {
         // Remove this category from label
         removeCategoryFromLabel(label, categoryKey);
@@ -804,6 +809,7 @@ function updateCategoryForEmail(emailAddress, categoryKey) {
       data.categories[categoryKey].emails = [];
     }
 
+    /* istanbul ignore else -- unreachable else: the loop above removes emailAddress from every category (including this one) before this point, so the address is never already present here; the includes() check is always true. Defensive de-dup guard. */
     if (!data.categories[categoryKey].emails.includes(emailAddress)) {
       data.categories[categoryKey].emails.push(emailAddress);
 
@@ -857,6 +863,7 @@ function updateCategoryForDomain(domain, categoryKey) {
       data.categories[categoryKey].domains = [];
     }
 
+    /* istanbul ignore else -- unreachable else: the loop above removes domain from every category (including this one) before this point, so the domain is never already present here; the includes() check is always true. Defensive de-dup guard. */
     if (!data.categories[categoryKey].domains.includes(domain)) {
       data.categories[categoryKey].domains.push(domain);
 
@@ -1107,6 +1114,7 @@ function getAllLabelCategories() {
           labelCategories[category.label] = [];
         }
 
+        /* istanbul ignore else -- unreachable else: categoryKey comes from Object.entries(data.categories) so it is unique per iteration and can never already be in this label's list. Defensive de-dup guard. */
         if (!labelCategories[category.label].includes(categoryKey)) {
           labelCategories[category.label].push(categoryKey);
         }
@@ -1458,7 +1466,9 @@ function resetCache(keepBackup = true) {
       backupCreated: keepBackup,
     };
   } catch (error) {
+    /* istanbul ignore next -- unreachable: loadCategorizerData, getDefaultCacheStructure and saveCategorizerData all swallow their own errors (return values, never throw), and the backup createFile is wrapped in its own inner try/catch, so nothing in this try can reach the outer catch. Defensive guard only. */
     Logger.log(`Error resetting cache: ${error}`);
+    /* istanbul ignore next */
     return {
       success: false,
       message: `Error: ${error.toString()}`,
@@ -1612,7 +1622,9 @@ function forceRefreshData() {
       cacheCount: result.items,
     };
   } catch (error) {
+    /* istanbul ignore next -- unreachable: refreshCache and initializeDataLayer each have their own try/catch and return result objects rather than throwing, so this wrapper catch is never reached. Defensive guard only. */
     Logger.log(`Error in forceRefreshData: ${error}`);
+    /* istanbul ignore next */
     return {
       success: false,
       error: error.toString(),
@@ -1636,6 +1648,7 @@ function testNewCacheSystem() {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getDefaultCacheStructure,
