@@ -161,4 +161,145 @@ describe('DriveAdapter', () => {
       expect(mockSubFolder.createFile).toHaveBeenCalledWith('test.txt', 'hello world', 'text/plain');
     });
   });
+
+  describe('getFoldersByName', () => {
+    it('delegates to drive.getFoldersByName', () => {
+      const iter = { hasNext: jest.fn(() => false) };
+      mockDriveApp.getFoldersByName.mockReturnValue(iter);
+      expect(adapter.getFoldersByName('Docs')).toBe(iter);
+      expect(mockDriveApp.getFoldersByName).toHaveBeenCalledWith('Docs');
+    });
+  });
+
+  describe('getOrCreateFolder with an explicit parent', () => {
+    it('searches the given parent folder, not the root', () => {
+      const child = { getName: () => 'Child' };
+      const parent = {
+        getFolders: jest.fn(() => ({
+          hasNext: jest.fn().mockReturnValueOnce(true).mockReturnValue(false),
+          next: jest.fn(() => child),
+        })),
+      };
+      const result = adapter.getOrCreateFolder('Child', parent);
+      expect(result).toBe(child);
+      // Root folder must NOT be consulted when a parent is supplied.
+      expect(mockDriveApp.getRootFolder).not.toHaveBeenCalled();
+    });
+
+    it('skips a non-matching folder then creates the requested one', () => {
+      const other = { getName: () => 'Other' };
+      const created = { getName: () => 'Wanted' };
+      const parent = {
+        getFolders: jest.fn(() => ({
+          hasNext: jest.fn().mockReturnValueOnce(true).mockReturnValue(false),
+          next: jest.fn(() => other),
+        })),
+        createFolder: jest.fn(() => created),
+      };
+      const result = adapter.getOrCreateFolder('Wanted', parent);
+      expect(parent.createFolder).toHaveBeenCalledWith('Wanted');
+      expect(result).toBe(created);
+    });
+  });
+
+  describe('readTextFile', () => {
+    it('reads a file blob as a string', () => {
+      mockDriveApp.getFileById.mockReturnValue({
+        getBlob: () => ({ getDataAsString: () => 'file contents' }),
+      });
+      expect(adapter.readTextFile('file-1')).toBe('file contents');
+      expect(mockDriveApp.getFileById).toHaveBeenCalledWith('file-1');
+    });
+  });
+
+  describe('searchFiles', () => {
+    it('delegates to drive.searchFiles with the query', () => {
+      const iter = { hasNext: jest.fn(() => false) };
+      mockDriveApp.searchFiles = jest.fn(() => iter);
+      expect(adapter.searchFiles('title contains "x"')).toBe(iter);
+      expect(mockDriveApp.searchFiles).toHaveBeenCalledWith('title contains "x"');
+    });
+  });
+
+  describe('getFilesInFolder', () => {
+    it('collects all files via getFiles when no mimeType is given', () => {
+      const f1 = { getName: () => 'a' };
+      const f2 = { getName: () => 'b' };
+      const folder = {
+        getFiles: jest.fn(() => {
+          let i = 0;
+          const items = [f1, f2];
+          return { hasNext: () => i < items.length, next: () => items[i++] };
+        }),
+        getFilesByType: jest.fn(),
+      };
+      const result = adapter.getFilesInFolder(folder);
+      expect(result).toEqual([f1, f2]);
+      expect(folder.getFilesByType).not.toHaveBeenCalled();
+    });
+
+    it('uses getFilesByType when a mimeType is given', () => {
+      const f1 = { getName: () => 'doc' };
+      const folder = {
+        getFiles: jest.fn(),
+        getFilesByType: jest.fn(() => {
+          let i = 0;
+          const items = [f1];
+          return { hasNext: () => i < items.length, next: () => items[i++] };
+        }),
+      };
+      const result = adapter.getFilesInFolder(folder, 'application/pdf');
+      expect(folder.getFilesByType).toHaveBeenCalledWith('application/pdf');
+      expect(result).toEqual([f1]);
+    });
+  });
+
+  describe('listFolderFiles', () => {
+    it('returns [] when the named folder does not exist', () => {
+      mockDriveApp.getFoldersByName.mockReturnValue({ hasNext: jest.fn(() => false) });
+      expect(adapter.listFolderFiles('Missing')).toEqual([]);
+    });
+
+    it('returns the files of the first matching folder', () => {
+      const file = { getName: () => 'f' };
+      const folder = {
+        getFiles: jest.fn(() => {
+          let done = false;
+          return { hasNext: () => !done, next: () => { done = true; return file; } };
+        }),
+      };
+      mockDriveApp.getFoldersByName.mockReturnValue({
+        hasNext: jest.fn(() => true),
+        next: jest.fn(() => folder),
+      });
+      expect(adapter.listFolderFiles('Docs')).toEqual([file]);
+    });
+  });
+
+  describe('deleteFile', () => {
+    it('trashes the given file', () => {
+      const file = { setTrashed: jest.fn() };
+      adapter.deleteFile(file);
+      expect(file.setTrashed).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('getRootFolder', () => {
+    it('delegates to drive.getRootFolder', () => {
+      const root = { getName: () => 'root' };
+      mockDriveApp.getRootFolder.mockReturnValue(root);
+      expect(adapter.getRootFolder()).toBe(root);
+    });
+  });
+
+  describe('default DriveApp dependency', () => {
+    it('uses the global DriveApp when none is injected', () => {
+      // setup.js provides a global DriveApp mock.
+      const defaultAdapter = new DriveAdapter();
+      const file = { getName: () => 'g' };
+      DriveApp.getFileById = jest.fn(() => file);
+      expect(defaultAdapter.getFileById('id')).toBe(file);
+      expect(DriveApp.getFileById).toHaveBeenCalledWith('id');
+    });
+  });
 });

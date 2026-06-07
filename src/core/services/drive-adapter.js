@@ -149,6 +149,7 @@ class DriveAdapter {
 }
 
 // Export for both GAS and Node.js
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { DriveAdapter };
 }
