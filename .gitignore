@@ -46,3 +46,7 @@ yarn-error.log*
 
 # Bird UX auth session (never commit)
 tests-ux/.auth/
+
+# Review artifacts at repo root (Oscar/muppet outputs) — kept untracked.
+# The lasting a11y record lives at docs/UX-REVIEW.md (not matched by this root-anchored rule).
+/*REVIEW*.md
