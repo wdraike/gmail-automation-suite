@@ -70,6 +70,12 @@ describe('Google Apps Script - Global Scope Validation', () => {
     const files = fs.readdirSync(dir);
 
     files.forEach(file => {
+      // Skip the transient fixture planted/unplanted by architecture-boundary.test.js
+      // running in a parallel worker; otherwise a list-then-stat/read race throws ENOENT.
+      if (file === '__boundary_plant__.js') {
+        return;
+      }
+
       const filePath = path.join(dir, file);
       const stat = fs.statSync(filePath);
 

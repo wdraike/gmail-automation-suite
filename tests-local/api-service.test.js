@@ -568,9 +568,67 @@ describe('Gemini API Service - Complete Test Suite', () => {
     });
 
     describe('callGeminiWithRateLimiting', () => {
-      it.skip('should wait when rate limit is reached', () => {
-          // Skipped: internal rate-limit state is hard to mock reliably.
-          // Rate limiting behavior is covered by checkRateLimit unit tests.
+      it('should wait when rate limit is reached (within the in-process cap)', () => {
+          // Fill the per-minute window so checkRateLimit() reports rateLimited.
+          // The oldest call is 45s old, so waitTime ~= 60000 - 45000 = 15000ms,
+          // which is <= MAX_INPROCESS_WAIT_MS (20000ms) -> the code SLEEPS
+          // (line: _asUtils().sleep(rateLimitStatus.waitTime + 100)) rather than
+          // surfacing RATE_LIMIT_REACHED.
+          const now = Date.now();
+          API_STATE.lastApiCalls = [];
+          for (let i = 0; i < JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE; i++) {
+            // All within the last minute; oldest at now-45000.
+            API_STATE.lastApiCalls.push(now - 45000 + i);
+          }
+          API_STATE.consecutiveFailures = 0;
+
+          const sleepSpy = jest.spyOn(Utilities, 'sleep');
+
+          UrlFetchApp.fetch = jest.fn(() => ({
+            getResponseCode: jest.fn(() => 200),
+            getContentText: jest.fn(() => JSON.stringify({
+              candidates: [{ content: { parts: [{ text: '{"category": "other"}' }] } }]
+            }))
+          }));
+
+          const result = callGeminiWithRateLimiting('Test prompt');
+
+          // It must have actually waited (slept) for the rate-limit window.
+          expect(sleepSpy).toHaveBeenCalledTimes(1);
+          const sleptMs = sleepSpy.mock.calls[0][0];
+          // waitTime (~15000) + 100 padding, capped under the in-process limit.
+          expect(sleptMs).toBeGreaterThan(0);
+          expect(sleptMs).toBeLessThanOrEqual(API_SERVICE_CONFIG.MAX_INPROCESS_WAIT_MS + 100);
+          // And after waiting it proceeded to a successful call.
+          expect(result).toContain('other');
+
+          sleepSpy.mockRestore();
+      });
+
+      it('throws RATE_LIMIT_REACHED without sleeping when wait exceeds the in-process cap', () => {
+          // Oldest call only 5s old -> waitTime ~= 55000ms, which is GREATER than
+          // MAX_INPROCESS_WAIT_MS (20000ms). The code must NOT sleep; it must bump
+          // consecutiveFailures and throw RATE_LIMIT_REACHED so the email is queued.
+          const now = Date.now();
+          API_STATE.lastApiCalls = [];
+          for (let i = 0; i < JOB_FINDER_CONFIG.MAX_CALLS_PER_MINUTE; i++) {
+            API_STATE.lastApiCalls.push(now - 5000 + i);
+          }
+          API_STATE.consecutiveFailures = 0;
+
+          const sleepSpy = jest.spyOn(Utilities, 'sleep');
+          UrlFetchApp.fetch = jest.fn();
+
+          expect(() => callGeminiWithRateLimiting('Test prompt'))
+            .toThrow('RATE_LIMIT_REACHED');
+
+          // Did not sleep, did not even attempt the HTTP call.
+          expect(sleepSpy).not.toHaveBeenCalled();
+          expect(UrlFetchApp.fetch).not.toHaveBeenCalled();
+          // Failure counter bumped for exponential backoff.
+          expect(API_STATE.consecutiveFailures).toBe(1);
+
+          sleepSpy.mockRestore();
       });
 
       it('should not wait when under rate limit', () => {

@@ -1,42 +1,20 @@
 {
-  "leg_id": "full-hexagonal-conversion",
-  "intent": "Convert EVERY layer of the app to hexagonal architecture: domain/app/ui/utils code accesses platform ONLY through ports in src/core/services (the single SDK-touching ring). Document (ADR + ARCHITECTURE.md + src/CLAUDE.md), test (port tests + expanded boundary guard), review (Oscar full), build (clasp), commit + push. Driven by Kermit-orchestrator agent -> Oscar (which dispatches ernie/telly/zoe/cookie/bert) per wave.",
-  "scope": "src/ui/** (dashboardController, dashboard-api, gmail-addon), src/utils/label-cache.js, src/core/config.js, src/core/cache-service.js, src/core/api-service.js, src/core/gmail-service.js (delete), src/core/services/** (extend adapter ring), tests-local/**, docs (ADR, ARCHITECTURE.md, src/CLAUDE.md), cookie SKILL.md",
+  "leg_id": "full-test-coverage",
+  "intent": "Drive every testable source file to 100% coverage and keep the full suite green. Enforce a 100% jest coverageThreshold (after excluding genuinely-untestable dev scaffolds / secrets / real-API integration). Kermit-orchestrator agent dispatches test-writing work through Oscar (Telly writes, Zoe audits for vacuous tests) and LOOPS per-file until the 100% gate passes.",
+  "scope": "jest.config.js (coverage gate + exclusions), package.json (test:coverage), tests-local/** (new + expanded tests for all weak files), minimal src/** istanbul-ignore justifications / dead-code removal only, tests-local/README.md",
   "status": "in_progress",
   "opened": "2026-06-06T00:00:00Z",
   "last_update": "2026-06-06T00:00:00Z",
-  "prior_leg": "fix-nojobs-output-truncation (f40da67, PASS, deployed, pushed)",
-  "wbs": ".planning/kermit/WBS-full-hexagonal.md",
+  "prior_leg": "full-hexagonal-conversion (c4aeeaf, PASS, deployed, pushed)",
+  "wbs": ".planning/kermit/WBS-100-coverage.md",
   "decisions": {
-    "allowed_sdk_ring": "src/core/services/** ONLY",
-    "api_service": "relocate Gemini HTTP into adapter ring (or whitelist w/ ADR)",
-    "cache_service": "move/classify as CacheAdapter in ring",
-    "config": "PropertiesAdapter; isolate+document bootstrap exception",
-    "gmail_service_legacy": "migrate callers to GmailAdapter then DELETE",
-    "enforcement": "boundary test + Cookie expand to features+ui+utils+core(excl services)"
+    "coverage_scope_excludes": ["src/dev/**", "src/core/local-secrets.js", "*.integration.test.js (real-Gemini, describe.skip)"],
+    "target": "100% statements/functions/lines; 100% branch where reachable, /* istanbul ignore */ with justification otherwise",
+    "skipped_tests": "8 real-Gemini integration stay excluded; 1 api-service rate-limit it.skip must be un-skipped + pass",
+    "gate": "jest coverageThreshold.global=100 after exclusions"
   },
-  "baseline_violations": {
-    "src/ui/dashboardController.js": 21,
-    "src/core/config.js": 21,
-    "src/core/cache-service.js": 19,
-    "src/core/api-service.js": 14,
-    "src/core/gmail-service.js": 11,
-    "src/utils/label-cache.js": 10,
-    "src/ui/dashboard-api.js": 6,
-    "src/ui/gmail-addon.js": 4
-  },
-  "baseline_tests": "574 passed / 0 failed / 9 skipped",
-  "waves": {
-    "wave1": { "status": "complete", "commit": "9ba02c3", "tests": "600 passed / 0 failed / 9 skipped", "verdict": "PASS" },
-    "wave2": { "status": "complete", "commit": "1ee9d25", "tests": "607 passed / 0 failed / 9 skipped", "verdict": "PASS" },
-    "wave3": { "status": "complete", "commit": "32a6fbc", "tests": "584 passed / 0 failed / 9 skipped", "verdict": "PASS", "notes": "gmail-service.js DELETED; .clasp.json filePushOrder updated (gitignored, on-disk)" },
-    "wave4": { "status": "complete", "commit": "c413dd6", "tests": "584 passed / 0 failed / 9 skipped", "verdict": "PASS" },
-    "wave5": { "status": "complete", "commit": "5650a6c", "tests": "590 passed / 0 failed / 9 skipped", "verdict": "PASS", "notes": "boundary scope = features+ui+utils+core-excl-services; cookie SKILL.md updated out-of-repo" },
-    "wave6": { "status": "complete", "commit": "3d29c80", "tests": "590 passed / 0 failed / 9 skipped", "verdict": "PASS", "notes": "ARCHITECTURE.md written; clasp push deployed (8 adapters incl http+cache, gmail-service gone); git push origin master f40da67..3d29c80" }
-  },
-  "leg_status": "complete",
-  "final_verdict": "PASS",
-  "deployed": true,
-  "pushed_to_github": true,
-  "final_tests": "590 passed / 0 failed / 9 skipped (baseline 574)"
+  "baseline": {
+    "tests": "590 passed / 0 failed / 9 skipped",
+    "coverage": "56.6% stmt / 53.5% branch / 66% func / 56.5% lines"
+  }
 }
