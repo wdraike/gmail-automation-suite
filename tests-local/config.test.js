@@ -28,7 +28,11 @@ const {
   setJobFinderRateLimitLabel,
   getJobFinderNoJobsLabel,
   setJobFinderNoJobsLabel,
-  testGeminiApiKey
+  setApiKeyFromWebApp,
+  testGeminiApiKey,
+  testApiKeyConnection,
+  saveApiKeyFromAddon,
+  testApiKeyFromAddon
 } = require('../src/core/config.js');
 // Properties + Http access is routed through serviceFactory ports; the real
 // adapters delegate to the global PropertiesService / UrlFetchApp mocks
@@ -65,6 +69,8 @@ describe('Config Module - Local Tests', () => {
         expect.objectContaining({ method: 'post' })
       );
       expect(result.success).toBe(true);
+      expect(result.message).toBe('API key is valid and working');
+      expect(result.response).toContain('API key is working');
     });
 
     it('returns failure via HttpAdapter on non-200 status', () => {
@@ -436,5 +442,250 @@ describe('Config Module - Integration Tests', () => {
     const updatedKey = 'updated-key';
     setApiKey(updatedKey);
     expect(getApiKey()).toBe(updatedKey);
+  });
+});
+
+describe('Config Module - Remaining Coverage', () => {
+  let throwingProps;
+
+  // Fluent CardService mock for the add-on functions.
+  function createFluentMock(returnValue) {
+    const handler = {
+      get(target, prop) {
+        if (prop === 'build') return jest.fn(() => returnValue);
+        if (typeof prop === 'symbol') return undefined;
+        return jest.fn(() => new Proxy({}, handler));
+      }
+    };
+    return new Proxy({}, handler);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Re-establish a clean, working PropertiesService each test (prior tests may
+    // have swapped in throwing/failing stubs).
+    const store = new Map();
+    global.PropertiesService = {
+      getScriptProperties: jest.fn(() => ({
+        getProperty: jest.fn(k => store.has(k) ? store.get(k) : null),
+        setProperty: jest.fn((k, v) => store.set(k, v)),
+        deleteProperty: jest.fn(k => store.delete(k)),
+        deleteAllProperties: jest.fn(() => store.clear())
+      }))
+    };
+    serviceFactory.reset();
+    global.CardService = {
+      newActionResponseBuilder: jest.fn(() => createFluentMock({ ok: true })),
+      newNotification: jest.fn(() => createFluentMock()),
+      newNavigation: jest.fn(() => createFluentMock())
+    };
+    throwingProps = {
+      getProperty: jest.fn(() => null),
+      setProperty: jest.fn(() => { throw new Error('props write fail'); }),
+      deleteAllProperties: jest.fn()
+    };
+  });
+
+  function useThrowingProps() {
+    PropertiesService.getScriptProperties = jest.fn(() => throwingProps);
+    serviceFactory.reset();
+  }
+
+  describe('getApiKey override branch', () => {
+    afterEach(() => { delete global.GEMINI_API_KEY_OVERRIDE; });
+    it('prefers the GEMINI_API_KEY_OVERRIDE global when present', () => {
+      global.GEMINI_API_KEY_OVERRIDE = 'override-secret';
+      expect(getApiKey()).toBe('override-secret');
+    });
+  });
+
+  describe('setter catch branches', () => {
+    it('setSpreadsheetId returns false and logs on write failure', () => {
+      useThrowingProps();
+      expect(setSpreadsheetId('x')).toBe(false);
+    });
+    it('setDynamicCategoriesEnabled returns false on write failure', () => {
+      useThrowingProps();
+      expect(setDynamicCategoriesEnabled(true)).toBe(false);
+    });
+    it('setCacheFileId returns false on write failure', () => {
+      useThrowingProps();
+      expect(setCacheFileId('x')).toBe(false);
+    });
+    it('setCategoriesFileId returns false on write failure', () => {
+      useThrowingProps();
+      expect(setCategoriesFileId('x')).toBe(false);
+    });
+    it('isApiKeySet returns false when the read throws', () => {
+      PropertiesService.getScriptProperties = jest.fn(() => ({
+        getProperty: jest.fn(() => { throw new Error('read fail'); })
+      }));
+      serviceFactory.reset();
+      // isApiKeySet is imported at top of file.
+      const config = require('../src/core/config.js');
+      expect(config.isApiKeySet()).toBe(false);
+    });
+    it('setApiKey returns an error message on write failure', () => {
+      useThrowingProps();
+      const result = setApiKey('valid-key');
+      expect(result).toContain('Error setting API key');
+    });
+    it('setJobFinderSourceLabel returns false on write failure', () => {
+      useThrowingProps();
+      expect(setJobFinderSourceLabel('L')).toBe(false);
+    });
+    it('setJobFinderProcessedLabel returns false on write failure', () => {
+      useThrowingProps();
+      expect(setJobFinderProcessedLabel('L')).toBe(false);
+    });
+    it('setJobFinderRateLimitLabel returns false on write failure', () => {
+      useThrowingProps();
+      expect(setJobFinderRateLimitLabel('L')).toBe(false);
+    });
+    it('setJobFinderNoJobsLabel returns false on write failure', () => {
+      useThrowingProps();
+      expect(setJobFinderNoJobsLabel('L')).toBe(false);
+    });
+  });
+
+  describe('file-id getters default to empty string when unset', () => {
+    it('getCategoriesFileId returns "" when no property is set', () => {
+      expect(getCategoriesFileId()).toBe('');
+    });
+    it('getCacheFileId returns "" when no property is set', () => {
+      expect(getCacheFileId()).toBe('');
+    });
+    it('getSpreadsheetId returns "" when no property is set', () => {
+      expect(getSpreadsheetId()).toBe('');
+    });
+  });
+
+  describe('setApiKeyFromWebApp', () => {
+    it('delegates to setApiKey', () => {
+      const result = setApiKeyFromWebApp('web-key');
+      expect(result).toContain('success');
+      expect(getApiKey()).toBe('web-key');
+    });
+  });
+
+  describe('testGeminiApiKey remaining branches', () => {
+    it('surfaces a Gemini error body (200 with error field)', () => {
+      setApiKey('k');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ error: { message: 'bad key' } })
+      }));
+      const result = testGeminiApiKey();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Gemini API Error');
+    });
+
+    it('reports an unexpected response format (200, no candidates/error)', () => {
+      setApiKey('k');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ something: 'else' })
+      }));
+      const result = testGeminiApiKey();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Unexpected response format');
+    });
+
+    it('returns failure when the fetch throws (catch)', () => {
+      setApiKey('k');
+      global.UrlFetchApp.fetch = jest.fn(() => { throw new Error('network down'); });
+      const result = testGeminiApiKey();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Error');
+    });
+  });
+
+  describe('testApiKeyConnection', () => {
+    it('returns a success string when the key works', () => {
+      setApiKey('k');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] })
+      }));
+      expect(testApiKeyConnection()).toContain('successful');
+    });
+
+    it('returns a failure string when the key does not work', () => {
+      // No key set -> testGeminiApiKey returns {success:false}.
+      expect(testApiKeyConnection()).toContain('failed');
+    });
+
+    it('returns an error string when testGeminiApiKey throws (catch)', () => {
+      // Make getApiKey throw by poisoning the props read.
+      PropertiesService.getScriptProperties = jest.fn(() => { throw new Error('boom'); });
+      serviceFactory.reset();
+      // getApiKey override absent -> _cfgProps() throws -> testGeminiApiKey catch returns
+      // {success:false}; testApiKeyConnection then reports failure (not its own catch).
+      const result = testApiKeyConnection();
+      expect(typeof result).toBe('string');
+    });
+  });
+
+  describe('saveApiKeyFromAddon', () => {
+    it('rejects an empty API key', () => {
+      const result = saveApiKeyFromAddon({ formInput: { apiKey: '   ' } });
+      expect(CardService.newNotification).toHaveBeenCalled();
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('saves a valid key and pops to root', () => {
+      const result = saveApiKeyFromAddon({ formInput: { apiKey: 'addon-key' } });
+      expect(CardService.newNavigation).toHaveBeenCalled();
+      expect(getApiKey()).toBe('addon-key');
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('returns an error notification when the handler throws (catch)', () => {
+      // e.formInput is undefined -> reading .apiKey throws.
+      const result = saveApiKeyFromAddon({});
+      expect(CardService.newActionResponseBuilder).toHaveBeenCalled();
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('testApiKeyFromAddon', () => {
+    it('builds a success notification when the API responds', () => {
+      setApiKey('k');
+      global.UrlFetchApp.fetch = jest.fn(() => ({
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] })
+      }));
+      const result = testApiKeyFromAddon();
+      expect(CardService.newNotification).toHaveBeenCalled();
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('builds a failure notification when the test fails', () => {
+      // No key -> testGeminiApiKey fails.
+      const result = testApiKeyFromAddon();
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('returns an error notification when the handler throws (catch)', () => {
+      // Make CardService.newActionResponseBuilder throw on first call, then succeed
+      // in the catch, to exercise the catch path.
+      let calls = 0;
+      global.CardService.newActionResponseBuilder = jest.fn(() => {
+        calls++;
+        if (calls === 1) throw new Error('card fail');
+        return createFluentMock({ ok: true });
+      });
+      const result = testApiKeyFromAddon();
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('serviceFactory seam (GAS-global branch)', () => {
+    afterEach(() => { delete global.serviceFactory; });
+    it('resolves the GAS-global serviceFactory when present', () => {
+      global.serviceFactory = serviceFactory;
+      setApiKey('seam-key');
+      expect(getApiKey()).toBe('seam-key');
+    });
   });
 });

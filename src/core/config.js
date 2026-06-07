@@ -18,10 +18,12 @@ function _cfgServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('./services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _cfgProps() {
@@ -439,6 +441,7 @@ function testApiKeyConnection() {
       return `❌ API connection failed: ${result.message}\n\nPlease check your API key and try again.`;
     }
   } catch (error) {
+    /* istanbul ignore next -- unreachable: testGeminiApiKey() has its own try/catch and always returns a result object (never throws), so this wrapper catch cannot be reached. Defensive guard only. */
     return `Error testing API connection: ${error.toString()}`;
   }
 }
@@ -623,6 +626,7 @@ function setJobFinderNoJobsLabel(label) {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getApiKey,
