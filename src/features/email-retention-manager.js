@@ -16,10 +16,12 @@ function _ermServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _ermGmail() {
@@ -726,7 +728,9 @@ function runAllRetentionRulesFromUI() {
       results: results,
     };
   } catch (error) {
+    /* istanbul ignore next -- defensive: runAllRetentionRules() has its own try/catch and never throws, and the formatting/logRetentionActivity calls don't throw, so this wrapper catch is unreachable. */
     logRetentionActivity(`Error running retention rules: ${error.toString()}`);
+    /* istanbul ignore next */
     return {
       success: false,
       message: `Error: ${error.toString()}`,
@@ -944,7 +948,9 @@ function getAllGmailLabels() {
       labels: labelInfo,
     };
   } catch (error) {
+    /* istanbul ignore next -- defensive: GmailAdapter.getAllLabels() returns [] on a Gmail error (documented ADR exception), and .map/.sort/.localeCompare cannot throw, so this catch is unreachable. */
     Logger.log(`Error getting Gmail labels: ${error}`);
+    /* istanbul ignore next */
     return {
       success: false,
       message: `Error: ${error.toString()}`,
@@ -1211,7 +1217,9 @@ function getRetentionManagerDiagnostics() {
           diagnostics.retentionRulesStatus = "failed to initialize";
         }
       } catch (initError) {
+        /* istanbul ignore next -- defensive: initializeRetentionManager() has its own try/catch and returns a result object instead of throwing, so this catch is unreachable. */
         diagnostics.retentionRulesStatus = "error during initialization";
+        /* istanbul ignore next */
         diagnostics.initializationError = initError.toString();
       }
     }
@@ -1265,6 +1273,7 @@ function getRetentionManagerDiagnostics() {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     initializeRetentionManager,

@@ -1,37 +1,41 @@
-# Oscar Review — 2026-06-06 (full-test-coverage — cache-service.js)
+# Oscar Review — 2026-06-06 (full-test-coverage — email-retention-manager.js)
 
 ## Verdict: PASS
 
 ## Summary
-File 6/17: core/cache-service.js to honest 100%. Zoe mutation-confirmed (3 RED) incl.
-all 3 storage backends. 3 ignores verified unreachable (seam, module guard, a real
-key-collision dead branch in LabelCategoriesCache). Suite green (822 passed). Ready.
+File 7/17: features/email-retention-manager.js (1293 lines) to honest 100%. Zoe found
+2 under-assertions (delete moveToTrash, totalAffected); fix added the assertions and all
+3 mutations are now RED. 5 ignores verified unreachable. Boundary intact. Suite green
+(885 passed). Ready to commit.
 
 ## Agent Findings
-### Zoe — PASS
-getOrCompute gate, toLowerCase key, Drive file-id persistence all RED. DRIVE/specialized
-managers assert real ops. line-380 key-collision ignore strip-verified unreachable. See
-ZOE-REVIEW.md.
+### Zoe — PASS (after 1 fix iteration)
+Initial gaps: delete action / totalAffected not asserted (mutations survived). Fixed with
+moveToTrash + affected-total assertions; re-audit RED. archive-target real. Strip-test
+confirms the 3 defensive catches + seam + module guard unreachable. See ZOE-REVIEW.md.
 
 ### Ernie-equiv — PASS
-No production behavior change (test-only + 3 justified istanbul-ignores). The key-collision
-finding (KEYS.LABEL_CATEGORIES === its own fallback property name) is documented inline; the
-dead truthy branch is harmless. Boundary green.
+No production behavior change (test-only + 5 justified istanbul-ignores: seam, module
+guard, runAllRetentionRulesFromUI catch, getAllGmailLabels catch [getAllLabels returns []
+on error per ADR], diagnostics initError catch). Boundary green.
+
+## Fix Loop
+- Iteration 1: added moveToTrash + totalAffected/affected-total assertions.
 
 ## Completeness
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
-| Tests passing | PASS (822 / 0 / 8 skip) |
+| Tests passing | PASS (885 / 0 / 8 skip) |
 | File at 100% (scoped) | PASS |
-| Real-behavior assertions (Zoe) | PASS |
+| Real-behavior assertions (Zoe re-audit) | PASS |
 | Hexagonal boundary intact | PASS |
 
 ## Kermit Report
 Verdict: PASS
 Completeness gaps: none
-Backlog items: 0 (key-collision noted; cosmetic, no functional impact)
+Backlog items: 0
 Ready to commit: yes
 
 ## Status: PASS
-_Signed: Oscar — 2026-06-06T00:06:00Z_
+_Signed: Oscar — 2026-06-06T00:07:30Z_
