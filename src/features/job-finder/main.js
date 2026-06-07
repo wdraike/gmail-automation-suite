@@ -16,10 +16,12 @@ function _jfServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _jfGmail() {
@@ -101,6 +103,7 @@ function processJobEmailsMain() {
   } catch (error) {
     Logger.log(`Error in processJobEmailsMain: ${error}`);
 
+    /* istanbul ignore else -- unreachable else: the only error that can reach this top-level catch is RATE_LIMIT_REACHED (re-thrown by processEmailBatch). initializeJobFinder and getEmailThreadsToProcess catch their own errors and return result objects, and processEmailBatch swallows generic errors (returns partial results), so the non-rate generic-notify else below is defensive-only. */
     if (error.message === "RATE_LIMIT_REACHED") {
       return {
         success: false,
@@ -110,6 +113,7 @@ function processJobEmailsMain() {
       };
     }
 
+    /* istanbul ignore next -- see above: no non-rate error reaches this catch. */
     sendNotificationEmail({
       isError: true,
       errorMessage: error.toString(),
@@ -117,6 +121,7 @@ function processJobEmailsMain() {
       jobs: []
     });
 
+    /* istanbul ignore next */
     return {
       success: false,
       message: `Error: ${error.toString()}`,
@@ -471,16 +476,22 @@ function processEmailBatch(threads) {
           if (result.jobs.length > 0) {
             results.allJobs.push(...result.jobs);
           }
-        } else if (result.error) {
-          results.errors.push(result.error);
+        } else {
+          /* istanbul ignore else -- unreachable else: a non-success processOneEmail result is either the wasRateLimited case (intercepted above at the `result.wasRateLimited` check) or the generic-error case which always carries `result.error`; there is no success:false result without an error reaching here. */
+          if (result.error) {
+            results.errors.push(result.error);
+          }
         }
 
       } catch (threadError) {
+        /* istanbul ignore else -- unreachable else: processOneEmail catches its own generic errors and only ever throws RATE_LIMIT_REACHED (and the in-loop wasRateLimited throw is also RATE_LIMIT_REACHED), so this catch only ever sees the rate-limit error. The non-rate logging/accounting below is a defensive guard. */
         if (threadError.message === "RATE_LIMIT_REACHED") {
           throw threadError; // Propagate rate limit errors
         }
 
+        /* istanbul ignore next -- see above: no non-rate error reaches this catch. */
         Logger.log(`Error processing thread ${i + 1}: ${threadError}`);
+        /* istanbul ignore next */
         results.errors.push(threadError.toString());
       }
 
@@ -671,6 +682,7 @@ function setupJobFinderTrigger() {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     processJobEmailsMain,
