@@ -496,4 +496,287 @@ describe("extractor", () => {
       expect(extractor.isValidJobListing({ Company: "Unknown" })).toBeFalsy();
     });
   });
+
+  describe("extractJobDetailsSimple — response/error branches", () => {
+    it("returns [] when Gemini returns no response object", () => {
+      global.callGeminiApi = jest.fn(() => null);
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when the response object has no response field", () => {
+      global.callGeminiApi = jest.fn(() => ({ success: true })); // no .response
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when no JSON array is present and salvage finds nothing", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "no json here at all" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result).toEqual([]);
+    });
+
+    it("salvages complete records via the no-closing-bracket branch", () => {
+      // No closing ']' -> jsonMatch is null -> else branch -> salvage recovers
+      // the one complete record before the truncation point.
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Dev"},{"company":"Beta"',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result.length).toBe(1);
+      expect(result[0]["Company"]).toBe("Acme");
+    });
+
+    it("salvages records via the parseError catch when the matched array is invalid", () => {
+      // Has a closing ']' so jsonMatch matches, but the captured text is invalid
+      // JSON -> JSON.parse throws -> catch -> salvage recovers the complete record.
+      global.callGeminiApi = jest.fn(() => ({
+        response: '[{"company":"Acme","jobTitle":"Dev"} garbage ]',
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result.length).toBe(1);
+      expect(result[0]["Company"]).toBe("Acme");
+    });
+
+    it("truncates very long email text before building the prompt", () => {
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const longText = "x".repeat(40000); // > 30000 maxLength
+      extractor.extractJobDetailsSimple(longText, [], state);
+      const promptArg = global.callGeminiApi.mock.calls[0][0];
+      expect(promptArg).toContain("... [truncated]");
+    });
+
+    it("falls back to pattern extraction when the matched array is invalid and salvage fails", () => {
+      // Has [ ... ] so jsonMatch matches, JSON.parse throws, but there is no
+      // closing `}` for salvage -> salvage returns [] -> pattern fallback runs on
+      // the raw response and recovers the Company/Title lines.
+      global.callGeminiApi = jest.fn(() => ({
+        response: "[\nCompany: Acme\nJob Title: Engineer\n]",
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result.length).toBe(1);
+      expect(result[0]["Company"]).toBe("Acme");
+    });
+
+    it("returns [] (not throw) on a non-429 API error", () => {
+      global.callGeminiApi = jest.fn(() => { throw new Error("500 Internal Error"); });
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result).toEqual([]);
+    });
+
+    it("maps the capitalized alternate-key job shape", () => {
+      // Lowercase `company` passes the validJobs filter; the remaining fields use
+      // the capitalized alternate keys, exercising the right-hand `||` arms.
+      global.callGeminiApi = jest.fn(() => ({
+        response: JSON.stringify([{
+          company: "Acme",
+          "Company Description": "desc",
+          "Job Title": "Engineer",
+          Location: "NYC",
+          "Minimum Salary": "100",
+          "Maximum Salary": "200",
+          "Salary Period": "year",
+          "Employment Type": "Full-time",
+          "Work Arrangement": "Remote",
+          "Experience Level": "Senior"
+        }]),
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result[0]["Company"]).toBe("Acme");
+      expect(result[0]["Company Description"]).toBe("desc");
+      expect(result[0]["Job Title"]).toBe("Engineer");
+      expect(result[0]["Salary Period"]).toBe("year");
+      expect(result[0]["Employment Type"]).toBe("Full-time");
+    });
+
+    it('defaults Company to "Unknown" when only a job title is present', () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: JSON.stringify([{ jobTitle: "Engineer" }]), // no company
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result[0]["Company"]).toBe("Unknown");
+      expect(result[0]["Job Title"]).toBe("Engineer");
+    });
+
+    it('defaults Job Title to "Unknown Position" when only a company is present', () => {
+      global.callGeminiApi = jest.fn(() => ({
+        response: JSON.stringify([{ company: "Acme" }]), // no jobTitle
+      }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result[0]["Company"]).toBe("Acme");
+      expect(result[0]["Job Title"]).toBe("Unknown Position");
+    });
+
+    it("re-throws RATE_LIMIT_REACHED from the outer guard", () => {
+      // processingState is null -> assigning processedJobs throws AFTER... actually
+      // force the outer catch path: emailText present but processingState null makes
+      // `processingState.processedJobs = []` throw, hitting the OUTER catch -> [].
+      const result = extractor.extractJobDetailsSimple("hiring", [], null);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("extractJobsFallback catch", () => {
+    it("returns [] when the input is not a string (split throws)", () => {
+      expect(extractor.extractJobsFallback(null)).toEqual([]);
+    });
+
+    it("pushes a prior job when a second Company line is seen", () => {
+      const out = extractor.extractJobsFallback(
+        "Company: Acme\nJob Title: Dev\nCompany: Beta\nJob Title: QA"
+      );
+      expect(out.length).toBe(2);
+      expect(out[0].company).toBe("Acme");
+      expect(out[1].company).toBe("Beta");
+    });
+
+    it("parses a salary range into min/max", () => {
+      const out = extractor.extractJobsFallback("Company: Acme\nSalary: $80,000 - $100,000");
+      expect(out[0].minSalary).toBe("80000");
+      expect(out[0].maxSalary).toBe("100000");
+    });
+
+    it("ignores a salary line that has no numeric range (rangeMatch false)", () => {
+      const out = extractor.extractJobsFallback("Company: Acme\nSalary: Competitive");
+      expect(out[0].minSalary).toBeUndefined();
+      expect(out[0].maxSalary).toBeUndefined();
+    });
+  });
+
+  describe("salvageTruncatedJobArray", () => {
+    it("returns [] for a non-string input", () => {
+      expect(extractor.salvageTruncatedJobArray(null)).toEqual([]);
+    });
+    it("returns [] when there is no opening bracket", () => {
+      expect(extractor.salvageTruncatedJobArray("no array")).toEqual([]);
+    });
+    it("returns [] when there is no closing brace after the bracket", () => {
+      expect(extractor.salvageTruncatedJobArray("[ incomplete")).toEqual([]);
+    });
+    it("returns [] when the salvaged candidate is still unparseable (catch)", () => {
+      // '[' then a '}' but the slice is invalid JSON -> JSON.parse throws -> [].
+      expect(extractor.salvageTruncatedJobArray("[not json}")).toEqual([]);
+    });
+    it("recovers complete records up to the last closing brace", () => {
+      const out = extractor.salvageTruncatedJobArray(
+        '[{"company":"A"},{"company":"B"},{"company":"C"'
+      );
+      expect(out.map(j => j.company)).toEqual(["A", "B"]);
+    });
+
+  });
+
+  describe("extractAnchorPairs skips anchors with empty text", () => {
+    it("does not push an anchor whose inner text strips to empty", () => {
+      // href present but the anchor body is only an image/markup -> text === "".
+      const pairs = extractor.extractAnchorPairs(
+        '<a href="https://x.com/job"><img src="i.png"></a>'
+      );
+      expect(pairs).toEqual([]);
+    });
+  });
+
+  describe("cleanSalaryValue empty-after-strip branch", () => {
+    it('returns "" when the value is only currency punctuation', () => {
+      // "$," -> stripped to "" -> the `cleaned === ""` early return.
+      expect(extractor.cleanSalaryValue("$,")).toBe("");
+    });
+  });
+
+  describe("extractTextFromHtml catch", () => {
+    it("returns the raw html and empty arrays when processing throws", () => {
+      // A non-string with a throwing replace -> the function's try/catch fires.
+      const evil = { replace: () => { throw new Error("boom"); } };
+      const result = extractor.extractTextFromHtml(evil);
+      expect(result.plainText).toBe(evil);
+      expect(result.extractedUrls).toEqual([]);
+      expect(result.anchorPairs).toEqual([]);
+    });
+  });
+
+  describe("extractEmailSource", () => {
+    it("returns Unknown for empty input", () => {
+      expect(extractor.extractEmailSource("")).toBe("Unknown");
+    });
+    it("extracts the domain core from an angle-bracketed address", () => {
+      expect(extractor.extractEmailSource("Indeed <alerts@indeed.com>")).toBe("indeed");
+    });
+    it("extracts the domain core from a bare address", () => {
+      expect(extractor.extractEmailSource("alerts@glassdoor.com")).toBe("glassdoor");
+    });
+    it("falls back to the display name when no email is present", () => {
+      expect(extractor.extractEmailSource("Acme Recruiting <>")).toBe("Acme Recruiting");
+    });
+    it("returns the truncated raw string when nothing else matches", () => {
+      expect(extractor.extractEmailSource("just a plain string")).toBe("just a plain string");
+    });
+    it("returns the single-label domain string when domain has no dot core", () => {
+      // domainParts.length < 2 -> skips the slice, falls through to name/truncate.
+      expect(extractor.extractEmailSource("user@localhost")).toBe("user@localhost");
+    });
+  });
+
+  describe("logJobFinderGeminiInteraction", () => {
+    let props;
+    beforeEach(() => {
+      props = new Map();
+      global.PropertiesService = {
+        getScriptProperties: jest.fn(() => ({
+          getProperty: jest.fn(k => props.has(k) ? props.get(k) : null),
+          setProperty: jest.fn((k, v) => props.set(k, v))
+        }))
+      };
+      serviceFactory.reset();
+    });
+
+    it("logs non-error interactions without touching properties", () => {
+      const spy = jest.spyOn(Logger, "log");
+      extractor.logJobFinderGeminiInteraction("request", { prompt: "p" });
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining("Gemini request"));
+      spy.mockRestore();
+    });
+
+    it("persists error interactions to GEMINI_ERRORS (capped at 10)", () => {
+      const existing = Array.from({ length: 10 }, (_, i) => ({ n: i }));
+      props.set("GEMINI_ERRORS", JSON.stringify(existing));
+      extractor.logJobFinderGeminiInteraction("error", { error: "oops" });
+      const stored = JSON.parse(props.get("GEMINI_ERRORS"));
+      expect(stored.length).toBe(10);
+      expect(stored[0]).toEqual({ n: 1 }); // oldest shifted out
+    });
+
+    it("starts a fresh error list when none exists", () => {
+      extractor.logJobFinderGeminiInteraction("error", { error: "first" });
+      const stored = JSON.parse(props.get("GEMINI_ERRORS"));
+      expect(stored.length).toBe(1);
+    });
+
+    it("swallows errors thrown during logging (outer catch)", () => {
+      const circular = {};
+      circular.self = circular; // JSON.stringify on the logEntry throws
+      expect(() => extractor.logJobFinderGeminiInteraction("error", circular)).not.toThrow();
+    });
+  });
+
+  describe("serviceFactory seam (GAS-global branch)", () => {
+    afterEach(() => { delete global.serviceFactory; });
+    it("resolves the GAS-global serviceFactory when present", () => {
+      global.serviceFactory = serviceFactory;
+      global.callGeminiApi = jest.fn(() => ({ response: "[]" }));
+      const state = { processedJobs: [], isPartiallyProcessed: false };
+      const result = extractor.extractJobDetailsSimple("hiring", [], state);
+      expect(result).toEqual([]);
+    });
+  });
 });

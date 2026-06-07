@@ -13,10 +13,12 @@ function _exServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _exGemini() {
@@ -162,7 +164,9 @@ function extractJobDetailsSimple(emailText, extractedUrls, processingState, anch
       let jobs = [];
       try {
         Logger.log(`Gemini response type: ${typeof geminiResponse.response}`);
+        /* istanbul ignore next -- `geminiResponse.response` is guaranteed truthy here: the `!geminiResponse.response` guard above returns [] before this point, so the `: 'null'` ternary arms are unreachable diagnostic-log defaults. */
         Logger.log(`Gemini response length: ${geminiResponse.response ? geminiResponse.response.length : 'null'}`);
+        /* istanbul ignore next */
         Logger.log(`First 200 chars of response: ${geminiResponse.response ? geminiResponse.response.substring(0, 200) : 'null'}`);
 
         // Extract JSON from the response
@@ -339,6 +343,7 @@ function salvageTruncatedJobArray(response) {
 
     const candidate = response.substring(start, lastBrace + 1) + ']';
     const parsed = JSON.parse(candidate);
+    /* istanbul ignore next -- unreachable else: candidate always begins with the '[' at `start`, so a successful JSON.parse always yields an array; the `: []` arm cannot be taken. Defensive guard only. */
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     Logger.log(`Truncated-array salvage failed: ${e}`);
@@ -568,6 +573,7 @@ function logJobFinderGeminiInteraction(type, content) {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     extractAnchorPairs,
