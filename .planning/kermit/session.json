@@ -16,5 +16,13 @@
   "baseline": {
     "tests": "590 passed / 0 failed / 9 skipped",
     "coverage": "56.6% stmt / 53.5% branch / 66% func / 56.5% lines"
+  },
+  "progress": {
+    "wave0": "done (74284a3) — 100 gate set, rate-limit test un-skipped, flaky race fixed",
+    "files_at_100": [
+      "src/features/email-sorter/sorter.js (27fd624)"
+    ],
+    "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
+    "next": "core/services/spreadsheet-adapter.js"
   }
 }
