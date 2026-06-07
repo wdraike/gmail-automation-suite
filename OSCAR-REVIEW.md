@@ -1,36 +1,41 @@
-# Oscar Review — 2026-06-06 (full-test-coverage — dashboardController.js)
+# Oscar Review — 2026-06-06 (full-test-coverage — gmail-addon.js)
 
 ## Verdict: PASS
 
 ## Summary
-File 3/17: ui/dashboardController.js (1042 lines) to honest 100%. Zoe mutation-confirmed
-(3 RED) incl. DOM handler outcomes. 2 GAS-only istanbul-ignores verified unreachable.
-Boundary intact. Suite green (721 passed). Ready to commit.
+File 4/17: ui/gmail-addon.js to honest 100%. Zoe found a real vacuousness gap
+(applyCategory routing under-asserted); fix loop added negative assertions and both
+mutations are now RED. 4 GAS-only/dead-guard ignores verified unreachable. Boundary
+intact. Suite green (759 passed). 1 backlog item (dead writeLog guard). Ready to commit.
 
 ## Agent Findings
-### Zoe — PASS
-3 load-bearing mutations RED (drop "already assigned" guard, 100+ thread threshold,
-moveCategory remove-before-add). DOM tests assert real outcomes. Strip-test confirms
-ignores unreachable. See ZOE-REVIEW.md.
+### Zoe — PASS (after 1 fix iteration)
+Initial: applyCategory assignmentType routing not asserted (email-branch mutation
+survived). Fix: domain-only/email-only tests now assert the other updater is NOT called;
+re-audit RED on both mutations. Dead-guard ignore confirmed legitimate. See ZOE-REVIEW.md.
 
 ### Ernie-equiv — PASS
-No production behavior change (test-only + 2 GAS-seam ignores). Architecture boundary
-green (no forbidden SDK token outside the adapter ring).
+No production behavior change (test-only + 4 justified istanbul-ignores: seam throw,
+module guard, getDisplayName "Unknown" tail, writeLog dead 100000-guard + `|| ""`).
+
+## Fix Loop
+- Iteration 1: strengthened applyCategory email-only/domain-only tests with negative
+  assertions; re-ran Zoe mutations (now RED).
 
 ## Completeness
 | Check | Result |
 |-------|--------|
 | Tests exist for changed code | PASS |
-| Tests passing | PASS (721 / 0 / 8 skip) |
+| Tests passing | PASS (759 / 0 / 8 skip) |
 | File at 100% (scoped) | PASS |
-| Real-behavior assertions (Zoe) | PASS |
+| Real-behavior assertions (Zoe re-audit) | PASS |
 | Hexagonal boundary intact | PASS |
 
 ## Kermit Report
 Verdict: PASS
 Completeness gaps: none
-Backlog items: 0
+Backlog items: 1 (dead writeLog estimatedSize>100000 guard)
 Ready to commit: yes
 
 ## Status: PASS
-_Signed: Oscar — 2026-06-06T00:03:00Z_
+_Signed: Oscar — 2026-06-06T00:04:30Z_

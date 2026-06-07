@@ -15,10 +15,12 @@ function _addonServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _addonGmail() {
@@ -593,6 +595,7 @@ function getDisplayNameForCategory(categoryKey) {
     return categoryKey;
   } catch (error) {
     writeLog("Error in getDisplayNameForCategory: " + error.toString());
+    /* istanbul ignore next -- categoryKey is guaranteed truthy here: a falsy key returns "None" at the top before this try block, so the `|| "Unknown"` tail is unreachable. */
     return categoryKey || "Unknown";
   }
 }
@@ -677,7 +680,9 @@ function writeLog(message) {
 
     // Extra guard: if total properties usage is approaching the 500KB limit,
     // clear older entries more aggressively before saving.
+    /* istanbul ignore next -- `log` is always a string here (initialized via `|| ""` on read and only ever string-concatenated), so the `|| ""` fallback is unreachable defensive code. */
     const estimatedSize = (log || "").length + 200; // rough overhead
+    /* istanbul ignore next -- DEAD GUARD: the 5000-char cap above bounds `log` to <=5000, so estimatedSize (<=5200) can never exceed 100000. Kept as a documented defensive marker; see backlog (full-test-coverage leg) to remove or re-scope the threshold. */
     if (estimatedSize > 100000) {
       log = log.substring(log.length - 2000);
     }
@@ -750,6 +755,7 @@ function onGmailCompose(e) {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getContextualAddOn,

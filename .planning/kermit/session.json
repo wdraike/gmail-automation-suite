@@ -22,9 +22,11 @@
     "files_at_100": [
       "src/features/email-sorter/sorter.js (27fd624)",
       "src/core/services/spreadsheet-adapter.js (4b7f5ea)",
-      "src/ui/dashboardController.js (pending commit)"
+      "src/ui/dashboardController.js (f3544b9)",
+      "src/ui/gmail-addon.js (pending commit)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
-    "next": "ui/gmail-addon.js"
+    "backlog": ["gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope"],
+    "next": "utils/label-cache.js"
   }
 }

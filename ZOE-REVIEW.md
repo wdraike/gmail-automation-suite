@@ -1,25 +1,30 @@
-# Zoe Review — 2026-06-06 (full-test-coverage — dashboardController.js)
+# Zoe Review — 2026-06-06 (full-test-coverage — gmail-addon.js) [RE-AUDIT]
 
 ## Summary
-Mutation-audited the dashboardController tests (server-side GAS API + client-side DOM
-handlers). 3 load-bearing mutations all RED; DOM handler tests assert real outcomes via
-deps; the 2 istanbul-ignores are genuinely unreachable (strip-test). PASS.
+Re-audit after fix. The applyCategory assignmentType routing gap is closed: domain-only
+and email-only tests now assert the OTHER updater is NOT called, and both mutations
+(email-branch-always / domain-branch-always) are now RED. Dead-guard ignore legitimate.
+PASS.
 
 ## Telly Audit
 
 ### BLOCK Findings
-_None._
+_None (Finding #1 from prior audit resolved)._
 
 ### PASS Verifications
 | # | Check | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Drop-handler "already assigned" guard is real | CAUGHT | Inverting `!existingCategories.includes(...)` → "does not re-add" FAILED. |
-| 2 | getNestedLabelsHierarchy 100+ threshold is real | CAUGHT | `===100`→`===999` → "returns 100+" FAILED. |
-| 3 | moveCategoryBetweenLabels remove-before-add ordering | CAUGHT | Skipping the remove call → "moves the category by removing from source" FAILED. |
-| 4 | DOM tests assert outcomes, not just listener registration | PASS | drop → addCategoryToLabel/removeCategoryFromLabel called w/ correct args; createCategoryPill → innerHTML contains display name; dragstart → dataTransfer.setData exact JSON payload. |
-| 5 | moveCategoryBetweenLabels branch tests assert behavior | PASS | same-label no-op (changed:false, no deps called), remove-fail returns remove result, add-fail partial (changed:true + "failed to add"), exception path. |
-| 6 | istanbul-ignores NOT hiding reachable code | PASS | Stripping ignores leaves only line 42 (seam throw) + module guard uncovered — unreachable in Node and GAS. |
+| 1 | applyCategory email-only skips domain | CAUGHT | Mutating domain guard to `if(domain)` (always run) fails "applies to email only and does NOT touch the domain". |
+| 2 | applyCategory domain-only skips email | CAUGHT | Mutating email guard to `if(true)` fails "applies to domain only and does NOT touch the email". |
+| 3 | createCategoryCard domain-skip is real | CAUGHT | (prior) forcing getCategoryForDomain to always run fails the no-domain test. |
+| 4 | applyCategory email-arg is real | CAUGHT | (prior) wrong arg fails the email-success test. |
+| 5 | Dead-guard + seam + module ignores | PASS | Strip-test leaves only lines 21 + 683 uncovered — unreachable. |
+
+## Backlog Items
+| Item | File |
+|------|------|
+| writeLog `estimatedSize > 100000` is dead code (5000-char cap runs first). Remove the block or re-scope the threshold to be a real second-tier guard. | src/ui/gmail-addon.js |
 
 ## Status: PASS
 
-_Signed: Zoe — 2026-06-06T00:03:00Z_
+_Signed: Zoe — 2026-06-06T00:04:30Z_
