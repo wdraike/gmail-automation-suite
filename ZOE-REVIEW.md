@@ -1,9 +1,9 @@
-# Zoe Review — 2026-06-06 (full-test-coverage — spreadsheet-adapter.js)
+# Zoe Review — 2026-06-06 (full-test-coverage — dashboardController.js)
 
 ## Summary
-Mutation-audited the spreadsheet-adapter delegation tests. clear/setValues and both
-empty-guard branches are real (all mutations RED). The single istanbul-ignore is the
-standard GAS-only module.exports guard. PASS.
+Mutation-audited the dashboardController tests (server-side GAS API + client-side DOM
+handlers). 3 load-bearing mutations all RED; DOM handler tests assert real outcomes via
+deps; the 2 istanbul-ignores are genuinely unreachable (strip-test). PASS.
 
 ## Telly Audit
 
@@ -13,12 +13,13 @@ _None._
 ### PASS Verifications
 | # | Check | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | writeSheetData truly clears + writes | CAUGHT | Removing `sheet.clear()` failed "clears the sheet and writes". |
-| 2 | writeSheetData empty/null no-op is real | CAUGHT | Disabling the `!data || length===0` guard failed both no-op tests. |
-| 3 | getSheetData empty-row/empty-col guards are real | CAUGHT | Disabling the `lastRow===0 || lastCol===0` guard failed both "returns []" tests. |
-| 4 | Delegation tests check args + return value, not just call | PASS | e.g. getSheetData asserts getRange(1,1,2,2) and returns the exact values array; findRowByValue asserts 1-indexed row + -1. |
-| 5 | istanbul-ignore is standard GAS export guard | PASS | Only the `typeof module` export guard is ignored. |
+| 1 | Drop-handler "already assigned" guard is real | CAUGHT | Inverting `!existingCategories.includes(...)` → "does not re-add" FAILED. |
+| 2 | getNestedLabelsHierarchy 100+ threshold is real | CAUGHT | `===100`→`===999` → "returns 100+" FAILED. |
+| 3 | moveCategoryBetweenLabels remove-before-add ordering | CAUGHT | Skipping the remove call → "moves the category by removing from source" FAILED. |
+| 4 | DOM tests assert outcomes, not just listener registration | PASS | drop → addCategoryToLabel/removeCategoryFromLabel called w/ correct args; createCategoryPill → innerHTML contains display name; dragstart → dataTransfer.setData exact JSON payload. |
+| 5 | moveCategoryBetweenLabels branch tests assert behavior | PASS | same-label no-op (changed:false, no deps called), remove-fail returns remove result, add-fail partial (changed:true + "failed to add"), exception path. |
+| 6 | istanbul-ignores NOT hiding reachable code | PASS | Stripping ignores leaves only line 42 (seam throw) + module guard uncovered — unreachable in Node and GAS. |
 
 ## Status: PASS
 
-_Signed: Zoe — 2026-06-06T00:02:00Z_
+_Signed: Zoe — 2026-06-06T00:03:00Z_

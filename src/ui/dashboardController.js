@@ -36,10 +36,12 @@ function _dcServiceFactory() {
   if (typeof serviceFactory !== 'undefined') {
     return serviceFactory;
   }
+  /* istanbul ignore else -- in Node `require` is always defined; the else (defensive throw) is unreachable in both Node and GAS. */
   if (typeof require !== 'undefined') {
     return require('../core/services/index.js').serviceFactory;
+  } else {
+    throw new Error('serviceFactory is not available');
   }
-  throw new Error('serviceFactory is not available');
 }
 
 function _dcGmail() {
@@ -1017,6 +1019,7 @@ function generateRuleId() {
 }
 
 // Conditional exports for testing (works in both Node.js and Apps Script)
+/* istanbul ignore next -- the `typeof module` guard is always true under Node/Jest and always false in GAS; the false branch is never taken in the test runtime. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getAllLabelsAndCategories,

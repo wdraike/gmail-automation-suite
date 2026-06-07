@@ -20,9 +20,11 @@
   "progress": {
     "wave0": "done (74284a3) — 100 gate set, rate-limit test un-skipped, flaky race fixed",
     "files_at_100": [
-      "src/features/email-sorter/sorter.js (27fd624)"
+      "src/features/email-sorter/sorter.js (27fd624)",
+      "src/core/services/spreadsheet-adapter.js (4b7f5ea)",
+      "src/ui/dashboardController.js (pending commit)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
-    "next": "core/services/spreadsheet-adapter.js"
+    "next": "ui/gmail-addon.js"
   }
 }
