@@ -608,6 +608,118 @@ function checkViewStates() {
 
     // Set up auto-scrolling for drag and drop
     setupAutoScroll();
+
+    // Accessibility: modal focus management, focus trap, and Escape-to-close
+    setupModalA11y();
+  }
+
+  /**
+   * Accessibility wiring for all modals ([id$="Modal"]):
+   *  - When a modal is shown (its `.hidden` class is removed), remember the
+   *    element that had focus, move focus to the first focusable control inside
+   *    the dialog, and trap Tab within the dialog.
+   *  - Escape closes the visible modal.
+   *  - When a modal is hidden again, focus is restored to the trigger element.
+   * Implemented with a MutationObserver so it works regardless of which code
+   * path opens/closes a given modal (the toggles are scattered across files).
+   */
+  function setupModalA11y() {
+    var FOCUSABLE =
+      'a[href], button:not([disabled]), textarea:not([disabled]), ' +
+      'input:not([disabled]):not([type="hidden"]), select:not([disabled]), ' +
+      '[tabindex]:not([tabindex="-1"])';
+
+    function focusableIn(modal) {
+      return Array.prototype.slice
+        .call(modal.querySelectorAll(FOCUSABLE))
+        .filter(function (el) {
+          return (
+            el.offsetWidth > 0 ||
+            el.offsetHeight > 0 ||
+            el === document.activeElement
+          );
+        });
+    }
+
+    function isOpen(modal) {
+      return !modal.classList.contains("hidden");
+    }
+
+    function onOpen(modal) {
+      if (modal.__a11yLastFocus === undefined) {
+        modal.__a11yLastFocus = document.activeElement;
+      }
+      var focusables = focusableIn(modal);
+      if (focusables.length) {
+        focusables[0].focus();
+      }
+    }
+
+    function onClose(modal) {
+      var last = modal.__a11yLastFocus;
+      modal.__a11yLastFocus = undefined;
+      if (last && typeof last.focus === "function") {
+        last.focus();
+      }
+    }
+
+    function handleKeydown(e, modal) {
+      if (e.key === "Escape" || e.keyCode === 27) {
+        modal.classList.add("hidden");
+        return;
+      }
+      if (e.key === "Tab" || e.keyCode === 9) {
+        var focusables = focusableIn(modal);
+        if (!focusables.length) {
+          e.preventDefault();
+          return;
+        }
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    var modals = document.querySelectorAll('[id$="Modal"]');
+    Array.prototype.forEach.call(modals, function (modal) {
+      // Per-modal keydown handler (Escape + Tab trap), active only while open.
+      modal.addEventListener("keydown", function (e) {
+        if (isOpen(modal)) {
+          handleKeydown(e, modal);
+        }
+      });
+
+      var observer = new MutationObserver(function () {
+        var openNow = isOpen(modal);
+        if (openNow && !modal.__a11yOpen) {
+          modal.__a11yOpen = true;
+          onOpen(modal);
+        } else if (!openNow && modal.__a11yOpen) {
+          modal.__a11yOpen = false;
+          onClose(modal);
+        }
+      });
+      observer.observe(modal, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+
+      // Backdrop click closes the modal (clicking the overlay, not the dialog).
+      modal.addEventListener("mousedown", function (e) {
+        if (e.target === modal && isOpen(modal)) {
+          modal.classList.add("hidden");
+        }
+      });
+
+      // Initialize state in case a modal is already visible at wire-up.
+      modal.__a11yOpen = isOpen(modal);
+    });
   }
 
   // Function to show the new category modal with populated labels

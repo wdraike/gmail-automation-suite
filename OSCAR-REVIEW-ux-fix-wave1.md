@@ -40,5 +40,14 @@ Safety: all innerHTML interpolations remain wrapped in escapeAttr(); setAttribut
 
 The ONLY remaining Wave 2 (.js, coverage-tracked) item is dashboardController.js createCategoryPill's single remove-button innerHTML (add one aria-label + extend its existing test) and a doGet confirmation in dashboard-api.js. Deferred until the parallel coverage leg completes.
 
+## Wave 1c — modal focus management (client-side HTML JS, collision-free)
+Bird flagged: opening a modal leaves focus on BODY, Escape is a no-op, no focus trap, no focus restore. This wiring lives in client-side JS inside dashboard-core.html (an HTML partial, not in jest coverage) — collision-free.
+
+Added `setupModalA11y()` (called from setupEventListeners), one MutationObserver per `[id$="Modal"]` watching the `.hidden` class:
+- on open: remember the trigger (activeElement), move focus to first focusable control in the dialog.
+- Tab/Shift+Tab trapped within the dialog; Escape closes; backdrop mousedown (overlay, not dialog) closes.
+- on close: restore focus to the trigger.
+Works regardless of which scattered code path toggles a given modal. Script block validated with `new Function()` (PARSE_OK). Controller/api jest 99/99 green.
+
 ## Status: PASS
 _Signed: Oscar — 2026-06-06T00:00:00Z_
