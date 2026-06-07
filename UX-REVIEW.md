@@ -1,230 +1,181 @@
-# UI/UX Review — Gmail Automation Dashboard Frontend
+# UX Review — Gmail Automation Dashboard — 2026-06-06
 
-**Date:** 2026-05-25  
-**Scope:** `src/ui/dashboard-html/*.html`, `src/ui/dashboardController.js`, `src/ui/dashboard-api.js`, `src/ui/gmail-addon.js`  
-**Environment:** Google Apps Script (HtmlService webapp / CardService Gmail add-on)  
-**Method:** Static code review against HTML structure, inline CSS, inline JS, accessibility (WCAG 2.1 AA), responsive design, and interaction patterns. No Playwright or live DOM inspection was available for this review; findings are based on source analysis.
-
----
+_Reviewer: Bird. Read-only review. Evidence: `tests-ux/artifacts/` screenshots (mobile 375×812, tablet 768×1024, desktop 1440×900), `axe-dashboard-iframe.json`, `dashboard-dom-meta.json`, `summary.json`, plus live CDP inspection of the running app frame (`*.googleusercontent.com`)._
 
 ## Executive Summary
 
-| Level | Count |
-|-------|-------|
-| **BLOCK** | **8** |
-| **WARN** | **18** |
+**Verdict: ISSUES — does not ship as-is.** The dashboard is functionally rich and visually orderly on desktop and tablet, with zero console errors (`summary.json`). But it fails WCAG 2.x A/AA on multiple counts that block release for any user relying on a keyboard or screen reader, and the mobile layout does not reflow — it side-scrolls a desktop three-column layout into a 375px window. The single largest issue is **77 buttons with no accessible name** (axe reports 71 `button-name` nodes; live DOM finds 77), which makes the entire icon-driven control surface (per-row delete, per-label gear, add/edit/expand) invisible to assistive tech.
 
-**Bottom line:** The dashboard frontend has functional drag-and-drop and server communication, but it carries structural HTML defects, duplicate CSS, accessibility gaps, and event-listener duplication that will break flows for keyboard users, screen-reader users, and mouse users alike. The gmail-addon CardService surface is simpler but contains stale hardcoded data and inconsistent input widgets.
+### Severity counts
+| Severity | Count |
+|----------|-------|
+| Critical | 4 |
+| High | 5 |
+| Medium | 5 |
+| Low | 4 |
 
----
+### Accessibility violations (axe, in-app iframe) — `axe-dashboard-iframe.json`
+| Rule | Impact | Nodes |
+|------|--------|-------|
+| `button-name` (icon buttons with no discernible text) | **critical** | 71 |
+| `color-contrast` | serious | 20 |
+| `document-title` (no `<title>`) | serious | 1 |
+| `html-has-lang` (no `lang` attr) | serious | 1 |
+| `page-has-heading-one` (no `<h1>`) | moderate | 1 |
 
-## BLOCK Findings (break user flows or cause runtime errors)
-
-### 1. Client-side `Logger.log` in browser context (`dashboard-labels.html`)
-**File:** `src/ui/dashboard-html/dashboard-labels.html` (lines 581-668)  
-**Issue:** The `moveCategoryBetweenLabels` function calls `Logger.log(...)`. `Logger` is a server-side GAS API; it does not exist in the HtmlService client sandbox. Any user who drags a category pill from one label to another will hit a `ReferenceError: Logger is not defined`. The try/catch inside the function only catches the synchronous execution of the function body, not individual statements referencing undefined globals.  
-**Impact:** Category-to-label drag-and-drop silently fails; UI does not update.  
-**Fix:** Replace all `Logger.log` calls inside client-side `<script>` blocks with `console.log`.
-
-### 2. Nested `<script>` tags produced by `DashboardJS.html`
-**File:** `src/ui/dashboard-html/DashboardJS.html`  
-**Issue:** This template wraps `<?!= include('dashboard-core'); ?>` (and others) inside a `<script>` block. Each included file is already a `<script>` block. The result is `<script><script>...</script></script>`, which is invalid HTML and causes unpredictable script parsing in HtmlService.  
-**Impact:** Scripts may not execute, or execution order may become nondeterministic.  
-**Fix:** Remove the outer `<script>` wrapper from `DashboardJS.html`; the included files already provide their own tags.
-
-### 3. Duplicate / conflicting CSS rules in `DashboardStyles.html`
-**File:** `src/ui/dashboard-html/DashboardStyles.html`  
-**Issue:** `.drop-zone` is defined twice (lines 215-227 and 517-535) with conflicting values (`min-height: 18px` vs `25px`, `border: 1px dashed` vs `2px dashed`). `.delete-btn` is defined twice (lines 561-576 and 588-600). `.item-domain span, .item-email span` is duplicated (lines 131-161 and 579-584).  
-**Impact:** Visual rendering is nondeterministic based on cascade order; drop zones appear with inconsistent borders and heights depending on browser CSS specificity resolution.  
-**Fix:** Deduplicate the stylesheet. Maintain one canonical rule per selector.
-
-### 4. `cloneNode(false)` in `setupDropZones` destroys tile drag listeners
-**File:** `src/ui/dashboard-html/dashboard-core.html` (~lines 898-912)  
-**Issue:** `setupDropZones` performs a shallow clone of each `.category-tile` (`cloneNode(false)`) and then moves children. The cloned tile element loses the `dragstart`/`dragend` event listeners that were attached by `setupCategoryTileDragDrop` in `dashboard-categories.html`.  
-**Impact:** After the first data load, category tiles can no longer be dragged as tiles (only their internal items remain draggable).  
-**Fix:** Do not replace the tile element. Instead, add a single delegated listener on the container, or track listener attachment state with a `data-listeners-attached` attribute to avoid duplication.
-
-### 5. Duplicate event listeners on navigation buttons cause double server calls
-**File:** `src/ui/dashboard-html/dashboard-core.html`  
-**Issue:** Three functions attach listeners to the same DOM nodes:
-- `setupNavigation()` attaches click handlers to `labelsBtn`, `settingsBtn`, `refreshBtn`, `helpBtn`.
-- `setupTopNavigation()` attaches a second set of click handlers to the same four buttons.
-- `setupEventListeners()` attaches a third click handler to `refreshBtn`.
-Clicking **Refresh** therefore fires `loadData()` up to three times. Clicking **Labels** or **Settings** fires `showView()` multiple times.  
-**Impact:** Wasted server calls, race conditions in view switching, potential `google.script.run` queue saturation.  
-**Fix:** Centralize listener attachment. Use a single initialization function or guard with `data-initialized` flags.
-
-### 6. `showView()` forces `display: 'grid'` on non-grid containers
-**File:** `src/ui/dashboard-html/dashboard-core.html` (line 397)  
-**Issue:** `showView(viewId)` unconditionally sets `view.style.display = 'grid'`. The `settingsView` container is a standard block-level panel with cards and forms; forcing CSS Grid on it alters its internal layout and can break overflow/scrolling behavior.  
-**Impact:** Settings panel may render with unexpected row/column gaps and clipped content.  
-**Fix:** Remove the explicit `style.display = 'grid'` assignment. Rely on removing the `hidden` class, or branch by view ID (`if (viewId === 'labelsView') ... else ...`).
-
-### 7. Inline `style="display:none;"` on `settingsView` fights Tailwind and JS
-**File:** `src/ui/dashboard-html/DashboardMain.html` (line 173)  
-**Issue:** `#settingsView` carries both `class="hidden"` and `style="display:none;"`. Inline styles have higher specificity than Tailwind utilities. When `showView()` removes the `hidden` class and sets `display = 'grid'`, the inline style from the HTML attribute may still influence initial paint or confuse `checkViewStates` logic.  
-**Impact:** View state desync on first load; `settingsView` may refuse to appear.  
-**Fix:** Remove the inline `style="display:none;"`. Use Tailwind's `hidden` class exclusively, controlled by JS.
-
-### 8. No keyboard alternatives for drag-and-drop (accessibility failure)
-**Files:** `dashboard-core.html`, `dashboard-labels.html`, `dashboard-categories.html`  
-**Issue:** The entire organizational model—moving emails/domains between categories, moving category pills between labels—depends on `draggable="true"` and mouse-driven `dragstart`/`drop` events. There are no "Move to..." buttons, context menus, or accessible controls for users who cannot use a pointing device.  
-**Impact:** Keyboard-only users and many screen-reader users are completely excluded from core categorization workflows. This is a WCAG 2.1 Level A failure (Keyboard, 2.1.1).  
-**Fix:** Add "Move to category/label" `<select>` + button controls inside each tile and label node. Expose them to focus and ensure they work via `Enter`/`Space`.
+Live DOM inspection corroborated and extended these: `lang=null`, `document.title=""`, `h1=0` (h2=3, h3=9 present), **77** truly unnamed buttons, **23 of 23 inputs** have no programmatic label (no `aria-label`, no `<label for>`), only 1 landmark (`main`; no `nav`, no `aside`), and **2517 of 2545** buttons render below the 44×44px touch-target minimum.
 
 ---
 
-## WARN Findings (UX friction, hygiene, or risk)
+## The 6 Pillars
 
-### 9. Missing `<meta charset="UTF-8">` and `<meta viewport>`
-**File:** `src/ui/dashboard-html/DashboardMain.html`  
-**Issue:** The `<head>` omits both the character-set declaration and the viewport tag required for responsive scaling. In a GAS HtmlService iframe, encoding defaults may cause issues with non-ASCII email subjects or display names.  
-**Fix:** Add `<meta charset="UTF-8">` and `<meta name="viewport" content="width=device-width, initial-scale=1">`.
+### 1. Visual Hierarchy & Layout — Score: 6/10
+- **Desktop** (`dashboard-desktop.png`): Clean two-region split — left Labels rail, right Categories grid (3 cards per row: Bills / Block / Entertainment Stuff, then Finance / Financial / Fiverr…). Section headers ("Labels", "Categories") and the "+ New Category" action read clearly. Card structure (folder icon + title + "Domains" sublabel + chip rows) is consistent and scannable.
+- **No `<h1>`** anywhere (`dashboard-dom-meta.json` hasH1:false; live h1=0). "Gmail Automation Dashboard" is rendered as branding text, not a programmatic top heading, so the document has no titled root for the hierarchy. Heading levels jump (h2 → h3) with no h1.
+- The thin top banner "This application was created by a Google Apps Script user" (Google's sandbox chrome, `dashboard-mobile.png`) eats ~64px of vertical space on mobile and pushes real content below the fold — outside app control, but worth noting for first-run perception.
+- Brand-guide gap: the UI uses a generic blue/white system palette, not the Raike & Sons navy `#1A2B4A` / gold `#C8942A` / parchment `#F5F0E8` tokens. No Playfair/EB Garamond/Inter type system. This is an unbranded app shell. (Info-level unless brand alignment is a project requirement.)
 
-### 10. Missing `lang` attribute on `<html>`
-**File:** `src/ui/dashboard-html/DashboardMain.html`  
-**Issue:** No `lang="en"` on the root element. Screen readers rely on this for correct pronunciation.  
-**Fix:** Add `<html lang="en">`.
+### 2. Responsiveness & Reflow — Score: 3/10
+- **Mobile 375px** (`dashboard-mobile.png`): The layout does **not** reflow. The Labels column and the Categories column sit side by side; the Categories card ("Bills") and its domain chips ("alert.ne…", "alerts.p…", "amazon…", "audible…") are **clipped at the right edge** and require horizontal scrolling to read — a WCAG 2.2 SC 1.4.10 (Reflow) failure. The header wraps awkwardly to three lines ("Gmail / Automation / Dashboard").
+- **Tablet 768px** (`dashboard-tablet.png`): Acceptable. Two columns fit; the right Categories column collapses from 3-up to 1-up cards (Bills, Block, Entertainment Stuff stacked). No clipping observed. This is the best of the three viewports.
+- **Desktop 1440px**: Full 3-column card grid, no overflow.
+- Not captured but required by rubric: **320px (reflow-wcag)** — given 375px already clips, 320px will be worse; treat as FAIL pending capture.
+- **Touch targets:** live measurement shows the icon controls are 16×16px (per-row "Retention Settings" gear, "Clear label search"), 20×20px (Expand/Collapse All), and 28×28px (Refresh, Help, the red X delete). All are far below the 44×44px minimum (WCAG 2.5.8 / 2.5.5). The red X remove buttons on every domain chip (`dashboard-tablet.png`, dozens per screen) are the most-used controls and are the hardest to hit.
 
-### 11. Icon-only buttons lack accessible labels
-**Files:** `DashboardHeader.html`, `dashboard-labels.html`, `dashboard-categories.html`  
-**Issue:** Buttons containing only SVG icons (e.g., `#refreshBtn`, `#helpBtn`, gear icons for retention, edit/delete category buttons) have no `aria-label` attributes. Screen readers will announce them as "button" with no context.  
-**Fix:** Add `aria-label="Refresh data"`, `aria-label="Retention settings for LabelName"`, etc.
+### 3. Interaction & Feedback — Score: 4/10
+- **"Create New Category" modal** (opened live): renders with title "Create New Category", fields "Category Key (lowercase, no spaces)" with helper text and "Display Name". But it is **not a semantic dialog** — no `role="dialog"`, no `aria-modal="true"`. On open, **focus is not moved into the modal** (activeElement stayed `BODY`), and **Escape does not close it** (overlay still present after Esc). This fails focus-management and keyboard-dismiss expectations (WCAG 2.1.2 / 2.4.3).
+- Inputs in the modal rely on **placeholder text as the only label** ("e.g. work_related"); placeholders are not accessible names and vanish on input.
+- Drag-and-drop is the core interaction model ("Drop categories here" / "Drop emails or domains here" zones visible in `dashboard-tablet.png`). DnD has no documented keyboard alternative; for keyboard-only and screen-reader users this is likely a complete blocker (could not assign categories at all). Flagged High pending a keyboard path.
+- Positive: chips, drop zones, and the active "Other" label (green highlighted assignment state in `dashboard-mobile.png` / `dashboard-tablet.png`) give clear visual affordance for where things land.
 
-### 12. Toast notifications lack ARIA live regions
-**File:** `src/ui/dashboard-html/dashboard-utils.html`  
-**Issue:** The `showToast()` function updates `#toastMessage` text, but the toast container has no `role="status"` or `aria-live="polite"`. Screen readers will not announce success/error messages.  
-**Fix:** Add `role="status" aria-live="polite"` to `#toastNotification`.
+### 4. Accessibility — Score: 2/10
+See dedicated section below. This is the weakest pillar and the primary blocker.
 
-### 13. Modals lack dialog semantics and focus trapping
-**File:** `src/ui/dashboard-html/DashboardModals.html`  
-**Issue:** None of the modals use `role="dialog"`, `aria-modal="true"`, or `aria-labelledby`. There is no focus-trapping logic; pressing `Tab` can move focus outside the modal and into the background page.  
-**Fix:** Add dialog roles, label each modal with its heading, and implement focus-loop logic (or use a lightweight accessible modal pattern).
+### 5. Content & Clarity — Score: 7/10
+- Labels are plain and purposeful: "Search labels…", "Drop categories here", "Domains", "+ New Category". The category-key helper ("This is the internal category identifier used for classification") is genuinely useful.
+- The Gmail label tree (DRAFT, IMPORTANT, INBOX, Notes, Other, SENT, SPAM, STARRED, TRASH, "Hold for 2 weeks", "Later", "Legal") is recognizable.
+- Some category names are vague ("Entertainment Stuff", "Block", "Other" with a count badge of 3) — minor.
+- No empty-state, loading, or error-state copy was observable in artifacts; "Drop … here" doubles as the empty state, which is reasonable.
 
-### 14. Search inputs rely on placeholder text as labels
-**Files:** `DashboardMain.html`, `CategoriesColumn.html`, `ItemsColumn.html`, `LabelTreeColumn.html`  
-**Issue:** Search fields have no visible `<label>` and no `aria-label`. Placeholders disappear once text is entered, leaving users with no context if they tab back into the field.  
-**Fix:** Add `<label for="...">` elements or `aria-label` attributes.
-
-### 15. Hardcoded category list in `gmail-addon.js filterCategories`
-**File:** `src/ui/gmail-addon.js` (lines 371-374)  
-**Issue:** `filterCategories` defines `const allCategories = ["Finance", "Newsletters", "Other", "Personal", "Shopping", "Social", "Work"];`. This array is stale and will not reflect user-created categories. The filtered card will omit custom categories.  
-**Fix:** Call `getAllCategories()` (already used in `showCategorySelector`) instead of using a hardcoded array.
-
-### 16. Inconsistent `assignmentType` widget type between selector and filter card
-**File:** `src/ui/gmail-addon.js`  
-**Issue:** `showCategorySelector` uses a `DROPDOWN` for `assignmentType`, while `filterCategories` uses `RADIO_BUTTON`. This is a UX inconsistency in the same add-on flow.  
-**Fix:** Standardize on one input type.
-
-### 17. `doGet` uses `XFrameOptionsMode.ALLOWALL`
-**File:** `src/ui/dashboard-api.js` (line 17)  
-**Issue:** The dashboard explicitly allows framing by any origin. A GAS web app that handles Gmail data categories should not be embeddable by arbitrary third-party sites.  
-**Fix:** Remove `.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)` unless there is a documented, justified use case.
-
-### 18. Debug logging and `checkViewStates` left in production
-**File:** `src/ui/dashboard-html/dashboard-core.html`  
-**Issue:** `DEBUG_MODE`, `debugLog()`, `logDragEvent()`, and `checkViewStates()` are shipped to end users. `checkViewStates` logs full DOM snapshots on every view switch.  
-**Fix:** Strip debug utilities from the production build, or gate them behind a compile-time flag.
-
-### 19. Inline styles on dynamically created delete buttons
-**File:** `src/ui/dashboard-html/dashboard-categories.html` (~lines 296-307)  
-**Issue:** The delete button in `createDraggableListItem` sets inline styles (`style.color = "#FF0000"`, etc.). These cannot be overridden by theme changes or dark-mode stylesheets.  
-**Fix:** Use CSS classes (e.g., `.delete-btn`) and keep styling in `DashboardStyles.html`.
-
-### 20. Low-contrast placeholder / helper text
-**Files:** Throughout HTML templates  
-**Issue:** Tailwind classes `text-gray-400` and `text-gray-500` on `text-xs` elements (placeholders, helper text, empty-state labels) often fall below WCAG AA contrast thresholds against white backgrounds, especially at small font sizes.  
-**Fix:** Audit with a contrast checker; darken helper text to `text-gray-600` or larger size.
-
-### 21. External CDN dependency for Tailwind CSS
-**File:** `src/ui/dashboard-html/DashboardMain.html` (line 5)  
-**Issue:** `https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css` is fetched at runtime. In restricted GAS environments or offline scenarios, the dashboard will render unstyled.  
-**Fix:** Inline a Tailwind-style utility subset, or vendor the CSS into `DashboardStyles.html`.
-
-### 22. `confirm()` dialogs for destructive retention actions
-**File:** `src/ui/dashboard-html/dashboard-retention.html`  
-**Issue:** `runSingleRetentionRule()` and `runAllRetentionRules()` use native `confirm()` dialogs. These are jarring, not themed, and may be blocked or mishandled in sandboxed iframes.  
-**Fix:** Use the existing `deleteConfirmModal` pattern (or a generic confirmation modal) for consistency.
-
-### 23. Unimplemented settings buttons shipped to users
-**File:** `src/ui/dashboard-html/dashboard-settings.html` (lines 156-177)  
-**Issue:** Export, Import, and Reset buttons call `alert("...will be implemented soon.")`. Shipping non-functional buttons degrades trust.  
-**Fix:** Hide the buttons until the features are implemented, or disable them with a tooltip explaining future availability.
-
-### 24. `buildItemListSection` mutates input array via `items.sort()`
-**File:** `src/ui/dashboard-html/dashboard-categories.html` (line 248)  
-**Issue:** `items.sort()` sorts the array in place. If the caller reuses the array elsewhere, side effects may cause unexpected ordering bugs.  
-**Fix:** Use `const sortedItems = [...items].sort()`.
-
-### 25. CSS accumulation comments left in production stylesheet
-**File:** `src/ui/dashboard-html/DashboardStyles.html`  
-**Issue:** Comments like `/* In DashboardStyles.html */` and `/* Add this to DashboardStyles.html */` indicate copy-paste accumulation rather than intentional CSS architecture.  
-**Fix:** Refactor stylesheet into logical sections with clear comments.
-
-### 26. Orphaned `#addItemModal` in `DashboardModals.html`
-**File:** `src/ui/dashboard-html/DashboardModals.html` (lines 219-306)  
-**Issue:** `#addItemModal` exists in the DOM but no JS references it. The active modal is `#addDomainEmailModal`. The orphaned modal consumes DOM weight and may trap event queries.  
-**Fix:** Remove `#addItemModal` if it is truly unused.
+### 6. Consistency & Branding — Score: 5/10
+- Internally consistent: every category card uses the same folder-icon + title + add/edit/delete icon trio (top-right of each card in `dashboard-desktop.png`/`tablet.png`), and every domain row uses the same red X. Predictable.
+- No `<title>` means the browser tab is blank — fails the brand title convention (`{Page} — {Product}`, e.g. "Dashboard — Gmail Tools") and hurts multi-tab orientation.
+- Palette and typography do not follow the Raike & Sons brand guide (navy/gold/parchment, Playfair/Garamond/Inter). If this app is meant to sit in the product family, it reads as a stock Apps Script UI.
 
 ---
 
-## Interaction Pattern Notes
+## Accessibility Audit (grounded in axe + live DOM)
 
-### Drag-and-drop lifecycle
-- `setupEnhancedDragEvents` tracks dragged items globally on `window.draggedItem`.
-- `setupDraggableItems` and `setupDropZones` re-clone DOM nodes to avoid duplicate listeners, which itself destroys state.
-- Auto-scroll during drag is provided in `dashboard-utils.html`, but it only looks at `.column-body` containers; it does not account for nested scroll contexts (e.g., `.category-items`).
-- There is no visual "drag preview" or ghost image customization; users see the default browser drag image.
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Buttons have accessible names | **FAIL (critical)** | axe `button-name` 71 nodes; live DOM 77 unnamed buttons |
+| Color contrast ≥ 4.5:1 | **FAIL (serious)** | axe `color-contrast` 20 nodes (light-blue domain chip text on pale-blue fill, muted gray placeholders) |
+| `<title>` present | **FAIL (serious)** | axe `document-title`; live `document.title=""` |
+| `<html lang>` present | **FAIL (serious)** | axe `html-has-lang`; live `lang=null` |
+| Exactly one `<h1>` | **FAIL (moderate)** | axe `page-has-heading-one`; live h1=0, h2=3, h3=9 |
+| Form inputs labelled | **FAIL** | live: 23/23 inputs with no `aria-label`/`<label for>`; `dashboard-dom-meta.json` inputsNoLabel:12 |
+| Landmarks (nav/aside) | **FAIL** | live: only `main` (1); no `nav`, no `aside` for the label rail |
+| Visible focus indicator | **FAIL** | live: after Tab, computed `outline:none`, `box-shadow:none` |
+| Modal is a dialog (role + focus trap + Esc) | **FAIL** | live: no `role=dialog`, focus stays on BODY, Esc does not close |
+| Touch targets ≥ 44px | **FAIL** | live: 2517/2545 buttons < 44px; icon buttons 16–28px |
+| Images have alt | PASS | `dashboard-dom-meta.json` imgsNoAlt:0 |
+| Console errors | PASS | `summary.json` consoleErrors:[] |
 
-### Modal patterns
-- All modals use the same visual pattern (`fixed inset-0 bg-gray-600 bg-opacity-50`).
-- The retention policy modal uses `z-50`; others use `z-20` or `z-30`. If two modals were ever stacked programmatically, the z-index hierarchy is inconsistent.
-- Close buttons are all `.closeModal` class; `setupEventListeners` attaches a generic listener that walks up to `[id$="Modal"]`. This is fragile if modal IDs do not end with "Modal".
-
-### View switching
-- `labelsView` and `settingsView` are toggled by adding/removing `hidden` and manipulating inline `display`.
-- There is no URL fragment or state management; refreshing the page always resets to the default view.
-- `settingsView` is re-rendered from scratch each time it is shown (calls `loadSettings()`), which causes unnecessary `google.script.run` round-trips.
-
----
-
-## Accessibility Statement
-
-This frontend does not currently meet WCAG 2.1 Level A requirements for:
-- **Keyboard accessibility** (2.1.1): Core categorization workflows require a mouse.
-- **Labels and instructions** (3.3.2): Many inputs lack programmatic labels.
-- **Status messages** (4.1.3): Toast updates are not announced by assistive technology.
-
-To reach Level AA, the team should also address contrast ratios and add focus-visible indicators for keyboard navigation.
+### Concrete fixes
+1. **Icon buttons → add accessible names.** Every icon-only `<button>` (red X delete, gear/Retention Settings, add `+`, edit pencil, trash, Refresh, Help, Expand/Collapse All, Clear search) needs `aria-label`. Make them specific and include the target, e.g. `aria-label="Remove amazon.com from Bills"`, `aria-label="Edit Bills category"`, `aria-label="Delete Bills category"`. Generic "Delete" is not enough when 70+ identical buttons exist.
+2. **`<title>` + `lang`.** Set `document.title = "Dashboard — Gmail Tools"` (follow the brand `{Page} — {Product}` convention) and `<html lang="en">`. In Apps Script HtmlService, set these in the served HTML template `<head>`.
+3. **Add one `<h1>`.** Promote "Gmail Automation Dashboard" to `<h1>`; demote the current h2s ("Labels", "Categories") so the order is h1 → h2 → h3 with no skips.
+4. **Label every input.** Each search box and modal field needs a real `<label for>` (visually hidden is fine) or `aria-label`. Do not rely on placeholders. Example: `<label for="catKey" class="sr-only">Category key</label>`.
+5. **Contrast tokens.** The 20 contrast failures are the domain-chip text and muted placeholders. Domain chip text/fill currently reads as light-blue-on-pale-blue (≈3:1). Darken chip text to a navy (`#1A2B4A`) on the light fill, or use the brand pairing navy text on parchment `#F5F0E8` — both clear 4.5:1. Darken placeholder/helper gray to `#5C5A55` (brand charcoal-muted) on white.
+6. **Visible focus ring.** Add a global `:focus-visible { outline: 2px solid #C8942A; outline-offset: 2px; }` (brand gold) — currently nothing renders on Tab.
+7. **Make the modal a real dialog.** Add `role="dialog" aria-modal="true" aria-labelledby="…"`, move focus to the first field on open, trap focus, restore focus to the trigger on close, and close on Escape and backdrop click.
+8. **Landmarks.** Wrap the label rail in `<nav aria-label="Gmail labels">` (or `<aside>`) and the categories region so screen-reader users can jump between regions.
 
 ---
 
-## Recommendations (prioritized)
-
-1. **Immediate (BLOCKing):** Replace `Logger.log` with `console.log` in all client scripts. Fix `DashboardJS.html` nested scripts. Deduplicate CSS. Remove `cloneNode(false)` tile replacement. Merge navigation listener attachment into one initialization path. Fix `showView` display assignment.
-2. **Short-term (WARN):** Add `aria-label` to icon buttons, add `role="status"` to toasts, add dialog semantics to modals, add visible labels to search inputs, remove hardcoded category arrays from the add-on.
-3. **Medium-term:** Implement keyboard-accessible "Move to..." controls for every drag target. Replace `confirm()` and `alert()` with themed modals. Add viewport meta and charset. Vendor or inline Tailwind.
-4. **Long-term:** Introduce a lightweight state router for view management. Add a client-side test harness (e.g., Jest + JSDOM for the inline scripts, or Playwright against a mock GAS environment).
+## Viewport Coverage
+| Viewport | Status | Note |
+|----------|--------|------|
+| 320px (reflow-wcag) | FAIL (inferred) | not captured; 375px already clips, so 320px fails Reflow |
+| 375px (mobile-sm) | **FAIL** | columns side-by-side, category cards/chips clipped, horizontal scroll required (`dashboard-mobile.png`) |
+| 768px (tablet) | PASS | clean 1-up card stack, no clipping (`dashboard-tablet.png`) |
+| 1440px (desktop) | PASS | full 3-col grid, no overflow (`dashboard-desktop.png`) |
 
 ---
 
-## Files Reviewed
+## Prioritized Fix List
 
-- `src/ui/dashboard-html/CategoriesColumn.html`
-- `src/ui/dashboard-html/DashboardHeader.html`
-- `src/ui/dashboard-html/DashboardJS.html`
-- `src/ui/dashboard-html/DashboardMain.html`
-- `src/ui/dashboard-html/DashboardModals.html`
-- `src/ui/dashboard-html/DashboardStyles.html`
-- `src/ui/dashboard-html/ItemsColumn.html`
-- `src/ui/dashboard-html/LabelTreeColumn.html`
-- `src/ui/dashboard-html/dashboard-categories.html`
-- `src/ui/dashboard-html/dashboard-core.html`
-- `src/ui/dashboard-html/dashboard-items.html`
-- `src/ui/dashboard-html/dashboard-labels.html`
-- `src/ui/dashboard-html/dashboard-retention.html`
-- `src/ui/dashboard-html/dashboard-settings.html`
-- `src/ui/dashboard-html/dashboard-utils.html`
-- `src/ui/dashboard-api.js`
-- `src/ui/dashboardController.js`
-- `src/ui/gmail-addon.js`
+### Critical (blocks release)
+1. **Add `aria-label` to all 77 icon-only buttons** (delete X, gear, add, edit, trash, refresh, help, expand/collapse, clear-search). Without this, none of the primary controls are usable by screen readers. (axe `button-name` critical)
+2. **Mobile layout does not reflow at 375px** — category cards and domain chips clip and require horizontal scroll. Stack to a single column below ~640px (WCAG 1.4.10). (`dashboard-mobile.png`)
+3. **Modal is not accessible** — add `role="dialog"`/`aria-modal`, move + trap focus, close on Escape, restore focus. (Live: focus stays on BODY, Esc no-op)
+4. **Add `<html lang>` and a `<title>`** — both serious axe failures and trivial to fix in the served head.
+
+### High (fix this sprint)
+5. **Label all 23 inputs** (search fields + modal fields); remove placeholder-as-label dependency.
+6. **Fix 20 color-contrast failures** — darken domain-chip text and muted helper/placeholder text to ≥4.5:1.
+7. **Add a visible focus indicator** (`:focus-visible` ring) — keyboard users currently get no feedback.
+8. **Provide a keyboard alternative to drag-and-drop** for assigning categories/domains to labels — DnD-only is a hard blocker for keyboard and SR users.
+9. **Touch targets to 44×44px** — enlarge the 16–28px icon buttons (especially the per-row red X, used dozens of times) for mobile/tablet.
+
+### Medium
+10. **Add a single `<h1>`** and fix heading order (no h2/h3 without an h1).
+11. **Add landmarks** (`nav`/`aside` for the label rail) — only `main` exists today.
+12. **Header wraps to 3 lines on mobile** ("Gmail / Automation / Dashboard"); shorten or scale the title at small widths. (`dashboard-mobile.png`)
+13. **Capture and verify 320px** reflow explicitly.
+14. **Backdrop click + explicit Cancel** on the modal (verify all dismissal paths).
+
+### Low
+15. **Adopt brand palette/type** (Raike & Sons navy/gold/parchment, Playfair/Garamond/Inter) if brand alignment is in scope.
+16. **Clarify vague category names** ("Entertainment Stuff", "Other") — cosmetic.
+17. **Add empty/loading/error states** with explicit copy (today "Drop … here" is the only empty cue).
+18. **Set the brand-format tab title** ("Dashboard — Gmail Tools") once `<title>` exists.
+
+---
+
+## Status: ISSUES
+
+_Signed: Bird — 2026-06-06T00:00:00Z_
+
+---
+
+# Re-verification (post-fix) — 2026-06-06
+
+_Leg: ux-a11y-fix (Waves 1–3). Mode: **static re-verification** against the committed HTML/CSS/JS partials + the existing `tests-ux/artifacts/` (original Bird run). **Live CDP re-verify is PENDING a Chrome relaunch** — `http://localhost:9222/json/version` was unreachable at re-verify time (CDP DOWN). To complete the live axe-in-iframe pass, run `bash tests-ux/launch-chrome-cdp.sh` then `node tests-ux/bird-drive.js` and re-run axe in the `*.googleusercontent.com` frame._
+
+## What changed (commits)
+- Wave 1 (HTML/CSS a11y): `58b613c`, `c50847e`, `ed3bd9b`
+- Wave 1b (dynamic icon-button aria-labels in client HTML partials): `c50847e`
+- Wave 1c (modal focus management: move-in, Tab trap, Escape, backdrop, restore): `ed3bd9b`
+- Wave 2 (dynamic remove-X aria-label in `dashboardController.js createCategoryPill` + test): `adf741e`
+
+## Before → After (static evidence, by original finding)
+
+| # | Original finding (Bird) | Before | After (committed code) | Evidence |
+|---|-------------------------|--------|------------------------|----------|
+| C1 | 77 icon buttons with no accessible name (`button-name` critical) | 71 axe nodes / 77 live unnamed | Static aria-labels on header gear/help/add/refresh/search-clear; **dynamic** aria-labels on every generated control: add/edit/delete category, remove-X chip, retention gear (`escapeAttr`-escaped) | `DashboardHeader.html`, `DashboardModals.html` (19 `aria-label`), `dashboard-categories.html:154/161/168`, `dashboard-labels.html:69/267/366`, `dashboardController.js createCategoryPill` (Wave 2) |
+| C2 | Mobile does not reflow at 375px (chips clip, h-scroll) — WCAG 1.4.10 | 3-col side-scroll | `@media (max-width:640px)` stacks columns to single column: `flex-direction:column`, `grid-template-columns:none`, `.dashboard-column{width:100%}`, resizable rail forced full-width | `DashboardStyles.html:630+` |
+| C3 | Modal not a dialog; focus not moved; Esc no-op | no role, focus on BODY | All 6 modals `role="dialog" aria-modal="true" aria-labelledby`; `setupModalA11y()` moves focus in, traps Tab (first/last wrap), closes on Escape + backdrop, restores focus to trigger (`__a11yLastFocus`) | `DashboardModals.html` (6× role=dialog/aria-modal), `dashboard-core.html:612–691` |
+| C4 | No `<html lang>`, no `<title>` | `lang=null`, `title=""` | `<html lang="en">`, `<title>Dashboard — Gmail Tools</title>`, `<meta charset>` + `<meta viewport>` | `DashboardMain.html:2,4,5,6`. `doGet` also `setTitle('Email Tools Dashboard')` on the outer wrapper. |
+| H5 | 23 inputs unlabeled (placeholder-only) | 23/23 no label | `aria-label` on search inputs (header) + all modal inputs/selects | `DashboardHeader.html` (2), `DashboardModals.html` (19) |
+| H6 | 20 color-contrast failures | chip ≈3:1, muted gray | Darkened tokens: `--a11y-chip-text:#075985`, `--a11y-email-text:#14532d`, `--a11y-muted-text:#525866` (all ≥4.5:1 on their fills) | `DashboardStyles.html:5–7,174,233,343+` |
+| H7 | No visible focus indicator (`outline:none`) | nothing on Tab | global `:focus-visible { outline:2px solid #C8942A; outline-offset }` (brand gold) + `.sr-only` util | `DashboardStyles.html:10–17` |
+| H9 | Touch targets 16–28px (<44) | sub-44px icons | icon-button rule `min-width:44px; min-height:44px` | `DashboardStyles.html:606–620` |
+| M10 | No `<h1>`, heading skips | h1=0 | brand text promoted to `<h1>` | `DashboardHeader.html:15` |
+| M11 | Only `main` landmark | no nav/aside | label rail `<nav aria-label="Gmail labels">`, categories `<section aria-label="Categories">` | `DashboardMain.html:27,116` |
+
+## Tests / gate
+- Full jest: **All files 100/100/100/100**; **1218 passed / 0 failed / 8 skipped**. 100% coverage threshold gate intact.
+- `architecture-boundary.test.js` green (no forbidden SDK tokens introduced).
+- Oscar Wave 2 gate (ernie + telly/zoe): **PASS**. Zoe mutation (strip aria-label) correctly fails the createCategoryPill test — no vacuous assertion.
+
+## axe (after)
+- **PENDING live CDP re-verify.** Static review shows the four axe-flagged rule families (`button-name`, `color-contrast`, `document-title`, `html-has-lang`, `page-has-heading-one`) all have committed fixes in the served partials. A fresh in-iframe axe-core 4.10.2 run is required to assert "0 critical / 0 serious" empirically.
+
+## Open / deferred
+- **H8 keyboard alternative to drag-and-drop** for reassigning an EXISTING category to a different label: **DEFERRED to backlog** (`session-ux-fix.json` → `backlog[ux-kbd-reassign]`). Existing modals already provide keyboard paths for adding domains/emails and for choosing a label at category creation; only reassigning an existing category is drag-only. A keyboard path needs a new per-pill move affordance + DOM + client wiring + tests; deferred to avoid expanding the leg.
+- **Observation (non-blocking):** the client-render path `dashboard-labels.html:69` escapes the aria-label via `escapeAttr()`; the duplicate server-file render path `dashboardController.js createCategoryPill` interpolates `displayName`/`labelName` un-escaped into the new aria-label — matching that function's pre-existing un-escaped `onclick`/`data-label` interpolation (not a regression). Worth aligning to `escapeAttr` if/when that function is hardened.
+- **320px reflow** and the **header 3-line wrap on mobile** should be confirmed in the pending live pass.
+
+## Re-verify status: COMPLETE (static) — LIVE CDP axe re-run PENDING Chrome relaunch
+_Signed: Bird (static re-verify) — 2026-06-06_

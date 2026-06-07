@@ -1,4 +1,41 @@
 {
+  "last_leg": "ux-a11y-fix",
+  "status": "complete-pending-live-verify",
+  "verdict": "PASS",
+  "completed": "2026-06-06",
+  "deployed": true,
+  "pushed_to_github": true,
+  "ux_a11y_fix": {
+    "last_leg": "ux-a11y-fix",
+    "status": "complete-pending-live-verify",
+    "verdict": "PASS",
+    "completed": "2026-06-06",
+    "deployed": true,
+    "pushed_to_github": true,
+    "summary": "Fixed Bird's critical+high WCAG/UX blockers on the dashboard. Wave 1 (HTML/CSS): lang+title+viewport, <h1>, nav/section landmarks, 6 modals -> role=dialog/aria-modal/aria-labelledby, :focus-visible gold ring, contrast tokens >=4.5:1, 44px tap targets, @media max-width:640px single-column reflow. Wave 1b: dynamic icon-button aria-labels (escapeAttr) in client HTML partials. Wave 1c: setupModalA11y focus move-in + Tab trap + Escape + backdrop + focus restore. Wave 2: aria-label on the dynamic remove-X button in dashboardController.js createCategoryPill + test (commit adf741e); dashboard-api.js doGet left unchanged (viewport meta already in DashboardMain.html). Wave 3 re-verify ran STATIC (Chrome CDP DOWN); UX-REVIEW.md got a before/after 'Re-verification (post-fix)' section; live axe-in-iframe re-run PENDING a Chrome relaunch.",
+    "waves": [
+      {"wave": "1", "commits": ["58b613c", "c50847e", "ed3bd9b"], "desc": "HTML/CSS a11y partials"},
+      {"wave": "1b", "commit": "c50847e", "desc": "dynamic icon-button aria-labels in client HTML"},
+      {"wave": "1c", "commit": "ed3bd9b", "desc": "modal focus management (setupModalA11y)"},
+      {"wave": "2", "commit": "adf741e", "desc": "createCategoryPill remove-X aria-label + test (100% gate held)"},
+      {"wave": "3", "mode": "static", "desc": "static re-verify; UX-REVIEW.md before/after section; live CDP axe PENDING"}
+    ],
+    "wave3_mode": "static",
+    "cdp_up": false,
+    "coverage_gate_intact": true,
+    "tests": "1218 passed / 0 failed / 8 skipped; All files 100/100/100/100; architecture-boundary green",
+    "oscar_verdict": "PASS (Wave 2: ernie + telly/zoe)",
+    "axe_after": "pending live CDP re-run (bash tests-ux/launch-chrome-cdp.sh; node tests-ux/bird-drive.js; inject axe-core 4.10.2 in the googleusercontent frame)",
+    "keyboard_alt": "deferred-backlog",
+    "backlog_items": [
+      {"id": "ux-kbd-reassign", "title": "Keyboard-accessible alternative to drag-and-drop for reassigning an EXISTING category to a different label", "source": "UX-REVIEW.md Bird High", "status": "open"}
+    ],
+    "observations": [
+      "dashboardController.js createCategoryPill aria-label interpolates displayName/labelName un-escaped, matching that function's pre-existing un-escaped onclick/data-label (not a regression). The parallel client path dashboard-labels.html:69 uses escapeAttr(); align if that function is later hardened."
+    ],
+    "issues": []
+  },
+  "prior_leg_full_test_coverage": {
   "last_leg": "full-test-coverage",
   "status": "complete",
   "verdict": "PASS",
@@ -105,5 +142,6 @@
       "GAS predeploy 'Sensitive Data Check' flags src/core/local-secrets.js (by-design git-ignored API-key override, deployed via clasp per the prior leg). All 4 architecture-relevant GAS checks PASS.",
       "cookie SKILL.md lives in ~/.claude (out of repo) and was updated there to expand the BLOCK rule to all non-adapter layers."
     ]
+  }
   }
 }

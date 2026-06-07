@@ -2,7 +2,6 @@
   "leg_id": "ux-a11y-fix",
   "intent": "Fix critical+high WCAG/UX blockers found by Bird (UX-REVIEW.md) on the Gmail Automation Dashboard: icon-button aria-labels, mobile reflow, modal dialog semantics, lang/title/h1, focus ring, contrast, tap targets, input labels, keyboard assignment path. Bird re-verifies over CDP. Driven by Kermit -> Oscar (Bert/Telly/Bird).",
   "scope": "src/ui/dashboard-html/** (Wave 1, collision-free), src/ui/dashboardController.js + dashboard-api.js (Wave 2, serialized after coverage leg, keep 100%), UX-REVIEW.md, tests-local/ (only after coverage leg done)",
-  "status": "in_progress",
   "opened": "2026-06-06T00:00:00Z",
   "waves": {
     "wave1": {
@@ -48,8 +47,16 @@
       "coverage_after": "All files 100/100/100/100; 1218 passed / 0 failed / 8 skipped",
       "keyboard_dnd_alternative": "DEFERRED to backlog (see backlog[]). Bird High: existing modals already give keyboard paths for adding domains/emails to a category and choosing a label at category creation; only reassigning an EXISTING category to a different label is drag-only. A keyboard alternative needs a new UI affordance (per-pill move menu/buttons) + new DOM + new client event wiring + tests, which meaningfully expands the leg's scope. Deferred rather than blow the leg open."
     },
-    "wave3": {"status": "pending", "note": "Bird CDP re-verify + axe-in-iframe; update UX-REVIEW.md; Oscar full gate; clasp push; git push"}
+    "wave3": {
+      "status": "complete-static",
+      "mode": "static",
+      "cdp_up": false,
+      "note": "Chrome CDP was DOWN at re-verify (curl http://localhost:9222/json/version unreachable). Did NOT block. Statically re-confirmed every Wave 1/1b/1c/2 fix against the committed HTML/CSS/JS partials + existing tests-ux artifacts; wrote 'Re-verification (post-fix)' before/after section in UX-REVIEW.md. Live axe-in-iframe re-run PENDING a Chrome relaunch (bash tests-ux/launch-chrome-cdp.sh; node tests-ux/bird-drive.js).",
+      "static_evidence": "DashboardMain.html lang/title/viewport/charset + nav/section landmarks; DashboardHeader.html h1 + 2 input aria-labels; DashboardModals.html 6x role=dialog/aria-modal + 19 aria-labels; dashboard-core.html setupModalA11y (focus move-in, Tab trap, Escape, backdrop, restore); DashboardStyles.html :focus-visible gold ring, contrast tokens >=4.5:1, 44px tap targets, @media max-width:640px single-column reflow; dashboard-categories.html + dashboard-labels.html dynamic aria-labels (escapeAttr); dashboardController.js createCategoryPill aria-label (Wave 2).",
+      "axe_after": "pending live"
+    }
   },
+  "status": "complete-pending-live-verify",
   "backlog": [
     {
       "id": "ux-kbd-reassign",
