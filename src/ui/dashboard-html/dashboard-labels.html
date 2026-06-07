@@ -66,7 +66,7 @@
       '<path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />',
       '</svg>',
       '<span class="truncate">' + escapeAttr(displayName) + '</span>',
-      '<button class="ml-0.5 text-blue-400 hover:text-red-500 focus:outline-none" onclick="removeCategoryFromLabel(\'' + escapeAttr(labelName) + '\', \'' + escapeAttr(categoryKey) + '\')">',
+      '<button class="ml-0.5 text-blue-400 hover:text-red-500 focus:outline-none" aria-label="Remove ' + escapeAttr(displayName) + ' from ' + escapeAttr(labelName) + '" onclick="removeCategoryFromLabel(\'' + escapeAttr(labelName) + '\', \'' + escapeAttr(categoryKey) + '\')">',
       '<svg class="h-2 w-2" viewBox="0 0 20 20" fill="currentColor">',
       '<path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" />',
       '</svg>',
@@ -264,6 +264,7 @@
         gearButton.className =
           "ml-1 text-gray-400 hover:text-gray-700 retention-settings-btn focus:outline-none"; // Reduced margin
         gearButton.setAttribute("title", "Retention Settings");
+        gearButton.setAttribute("aria-label", "Retention settings for " + labelName);
         gearButton.setAttribute("data-label", labelName);
         gearButton.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -362,6 +363,7 @@
           gearButton.className =
             "ml-1 text-gray-400 hover:text-gray-700 retention-settings-btn focus:outline-none"; // Reduced margin
           gearButton.setAttribute("title", "Folder Retention Settings");
+          gearButton.setAttribute("aria-label", "Retention settings for folder " + node.path);
           gearButton.setAttribute("data-label", node.path);
           gearButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

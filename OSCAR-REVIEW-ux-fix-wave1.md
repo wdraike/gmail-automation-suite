@@ -29,5 +29,16 @@ Completeness gaps: none for Wave 1
 Backlog items: 0 (Wave 2 + Wave 3 are planned, not backlog)
 Ready to commit: yes
 
+## Wave 1b — dynamic icon-button aria-labels (client-side HTML partials, also collision-free)
+Discovered during Wave 2 prep that the dynamic icon buttons Bird flagged (the ~77 unnamed buttons) are built in the CLIENT-SIDE JS that lives inside HTML partials (dashboard-labels.html, dashboard-categories.html) — NOT in dashboardController.js (which is the server-side Apps Script controller) and NOT in jest coverage. These are therefore collision-free HTML and correctly belong to Wave 1.
+
+Fixes:
+- dashboard-labels.html: category pill remove-X -> `aria-label="Remove <cat> from <label>"`; per-label gear -> `aria-label="Retention settings for <label>"`; per-folder gear -> `aria-label="Retention settings for folder <path>"`.
+- dashboard-categories.html: per-card add/edit/delete buttons -> specific aria-labels incl. category name; per-item (domain/email) delete "×" -> `aria-label="Remove <item> from <category>"`.
+
+Safety: all innerHTML interpolations remain wrapped in escapeAttr(); setAttribute() cases are DOM-API safe (no markup injection). Controller + api jest suites: 99/99 pass (HTML changes do not touch coverage-tracked JS).
+
+The ONLY remaining Wave 2 (.js, coverage-tracked) item is dashboardController.js createCategoryPill's single remove-button innerHTML (add one aria-label + extend its existing test) and a doGet confirmation in dashboard-api.js. Deferred until the parallel coverage leg completes.
+
 ## Status: PASS
 _Signed: Oscar — 2026-06-06T00:00:00Z_
