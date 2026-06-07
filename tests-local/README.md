@@ -199,22 +199,65 @@ After running coverage:
 2. See line-by-line coverage
 3. Identify untested code
 
-### Coverage Thresholds
+### Coverage Policy — 100% Enforced Gate
 
+The local suite enforces a **100% coverage threshold** on all four metrics.
 Configured in `jest.config.js`:
 
 ```javascript
 coverageThreshold: {
   global: {
-    branches: 40,
-    functions: 40,
-    lines: 40,
-    statements: 40
+    branches: 100,
+    functions: 100,
+    lines: 100,
+    statements: 100
   }
 }
 ```
 
-Tests fail if coverage drops below 40%.
+`npm run test:coverage` (and `npx jest --coverage`) **fail** if statements,
+branches, functions, or lines drop below 100% for any in-scope file. This gate
+is the regression guard: new untested source code breaks the build.
+
+#### Scope (what 100% applies to)
+
+Coverage is collected from `src/**/*.js` **except** the genuinely-untestable
+scaffolds, set via `collectCoverageFrom` / `coveragePathIgnorePatterns`:
+
+- `src/dev/**` — manual GAS scaffolds that call live DriveApp/Gemini (not unit-testable).
+- `src/core/local-secrets.js` — git-ignored API-key stub (secret, not in the repo).
+
+The `*.integration.test.js` real-Gemini suite stays `describe.skip` (needs a live
+API key + quota) and is the only remaining set of skipped tests.
+
+#### Honest 100% — justified `istanbul ignore`
+
+A handful of branches are genuinely unreachable in the Node/Jest runtime and are
+wrapped with a **justified** `/* istanbul ignore … -- <reason> */` comment (never
+a blanket ignore). The recurring categories are:
+
+- **Dual-runtime guards** — `if (typeof module !== 'undefined' && module.exports)`
+  export blocks (always true under Node, always false in GAS) and the
+  `_xxServiceFactory()` GAS-global / `require` resolution seams.
+- **Defensive catches on swallow-only callees** — `try/catch` wrappers around
+  helpers that already catch their own errors and never throw.
+- **`const` global guards** — e.g. `typeof API_MONITOR === 'undefined'` on a
+  module-scope const object that is always defined and truthy.
+- **Mock-coerced cell defenses** — live-GAS null-cell handling in the Sheets
+  audit path; the Sheets test mock coerces empty cells to `""`, so the
+  null/undefined arms cannot be exercised under test (but are real defenses live).
+
+Each ignore carries a one-line reason explaining why the branch is unreachable.
+Prefer deleting dead code over ignoring it; ignore only where the code is a
+required GAS/Node bridge or a defensive guard with no test-reachable path.
+
+#### Running the gate
+
+```bash
+npm run test:coverage     # full suite + 100% gate + coverage/ report
+# or, deterministically (avoids the VS Code Jest watch worker contention):
+npx jest --coverage --runInBand
+```
 
 ## Best Practices
 

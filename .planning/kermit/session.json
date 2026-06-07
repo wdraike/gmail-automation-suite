@@ -2,7 +2,7 @@
   "leg_id": "full-test-coverage",
   "intent": "Drive every testable source file to 100% coverage and keep the full suite green. Enforce a 100% jest coverageThreshold (after excluding genuinely-untestable dev scaffolds / secrets / real-API integration). Kermit-orchestrator agent dispatches test-writing work through Oscar (Telly writes, Zoe audits for vacuous tests) and LOOPS per-file until the 100% gate passes.",
   "scope": "jest.config.js (coverage gate + exclusions), package.json (test:coverage), tests-local/** (new + expanded tests for all weak files), minimal src/** istanbul-ignore justifications / dead-code removal only, tests-local/README.md",
-  "status": "in_progress",
+  "status": "complete",
   "opened": "2026-06-06T00:00:00Z",
   "last_update": "2026-06-06T00:00:00Z",
   "prior_leg": "full-hexagonal-conversion (c4aeeaf, PASS, deployed, pushed)",
@@ -34,14 +34,17 @@
       "src/core/config.js (1abad69)",
       "src/ui/dashboard-api.js (2b92aae)",
       "src/features/job-finder/extractor.js (39af0f4)",
-      "src/features/job-finder/main.js (b2f13de)"
+      "src/features/job-finder/main.js (b2f13de)",
+      "src/core/services/gmail-adapter.js + cache/gemini/http/properties/utilities + index.js (08d3165)",
+      "src/features/job-finder/sheets-handler.js (4021a09)"
     ],
     "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
     "backlog": [
       "gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope",
       "cache-service.js LabelCategoriesCache: KEYS.LABEL_CATEGORIES collides with its own fallback prop name 'LABEL_CATEGORIES_MAP', making the computeFn truthy branch dead"
     ],
-    "next": "core/services/gmail-adapter.js + adapter branch backfill",
-    "env_note": "VSCode Jest --watch runner contends worker pool; use `npx jest --runInBand` for reliable runs"
+    "next": "DONE — 100% gate green (All files 100/100/100/100); 1219 passed / 0 failed / 8 skipped",
+    "final_coverage": "100% statements / 100% branches / 100% functions / 100% lines",
+    "env_note": "VSCode Jest --watch runner contends worker pool; use `npx jest --runInBand` for reliable runs. ENOSPC on the harness CLAUDE_CODE_TMPDIR during long runs — set TMPDIR=~/.claude-tmp for coverage runs."
   }
 }
