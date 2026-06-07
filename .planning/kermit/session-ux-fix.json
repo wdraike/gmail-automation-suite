@@ -37,14 +37,29 @@
       "note": "modal focus management (setupModalA11y in dashboard-core.html) - focus move-in, Tab trap, Escape + backdrop close, focus restore. Collision-free client JS."
     },
     "wave2": {
-      "status": "blocked-waiting",
-      "reason": "serialized after full-test-coverage leg completes (background waiter b6ikc9g21 polling HANDOFF.json/session.json)",
-      "planned_change": "dashboardController.js createCategoryPill: add aria-label=\"Remove <displayName> from <labelName>\" to the remove-X <button> in its innerHTML; extend existing createCategoryPill test to assert the aria-label (no new branch -> coverage stays 100%). dashboard-api.js doGet: confirm only (inner-iframe lang/title already fixed in DashboardMain.html Wave 1).",
-      "keyboard_dnd_alternative": "Bird High: existing modals already give keyboard paths for adding domains/emails to a category and choosing a label at category creation; reassigning an EXISTING category to a different label is still drag-only. Candidate Wave 2 enhancement (touches server moveCategoryBetweenLabels) - evaluate after coverage leg."
+      "status": "complete",
+      "applied": [
+        "dashboardController.js createCategoryPill: added aria-label=\"Remove ${displayName} from ${labelName}\" to the remove-X <button> in its innerHTML (resolves Bird's unnamed dynamic remove-X button finding).",
+        "Extended existing createCategoryPill test in tests-local/dashboardController.test.js to assert the aria-label is present (no new branch -> coverage stays 100%)."
+      ],
+      "no_change": [
+        "dashboard-api.js doGet: confirmed it sets setTitle('Email Tools Dashboard'). The inner-iframe lang/title/h1 + viewport meta were fixed in Wave 1 DashboardMain.html; the served template already carries <meta name=viewport>. Adding .addMetaTag('viewport',...) in doGet would be redundant -> left unchanged per plan."
+      ],
+      "coverage_after": "All files 100/100/100/100; 1218 passed / 0 failed / 8 skipped",
+      "keyboard_dnd_alternative": "DEFERRED to backlog (see backlog[]). Bird High: existing modals already give keyboard paths for adding domains/emails to a category and choosing a label at category creation; only reassigning an EXISTING category to a different label is drag-only. A keyboard alternative needs a new UI affordance (per-pill move menu/buttons) + new DOM + new client event wiring + tests, which meaningfully expands the leg's scope. Deferred rather than blow the leg open."
     },
     "wave3": {"status": "pending", "note": "Bird CDP re-verify + axe-in-iframe; update UX-REVIEW.md; Oscar full gate; clasp push; git push"}
   },
-  "owns_session_json": false,
+  "backlog": [
+    {
+      "id": "ux-kbd-reassign",
+      "title": "Keyboard-accessible alternative to drag-and-drop for reassigning an EXISTING category to a different label",
+      "source": "UX-REVIEW.md Bird High",
+      "why_deferred": "Adding a keyboard path requires a new per-pill move affordance (menu/buttons) + DOM + client event wiring + matching tests to keep the 100% gate; touches server moveCategoryBetweenLabels indirectly. Larger than the Wave 2 a11y-label scope; deferred to avoid expanding the leg.",
+      "status": "open"
+    }
+  ],
+  "owns_session_json": true,
   "concurrency_guard": "full-test-coverage leg running in parallel owns session.json + src/**/*.js + tests-local/**; this leg uses session-ux-fix.json; Wave 2 (.js) waits for coverage completion (poll HANDOFF.json last_leg==full-test-coverage)",
   "wbs": ".planning/kermit/WBS-ux-a11y-fix.md",
   "source_review": "UX-REVIEW.md (Bird 2026-06-06): 4 critical / 5 high / 5 med / 4 low"

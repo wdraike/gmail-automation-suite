@@ -841,6 +841,10 @@ describe("dashboardController", () => {
         expect(result).toBe(pill);
         expect(pill.innerHTML).toContain("Pretty Name");
         expect(pill.setAttribute).toHaveBeenCalledWith("data-category", "k");
+        // a11y: the remove-X button carries a descriptive aria-label (ux-a11y-fix Wave 2)
+        expect(pill.innerHTML).toContain(
+          'aria-label="Remove Pretty Name from Work"'
+        );
       });
 
       it("uses the object displayName when present", () => {
