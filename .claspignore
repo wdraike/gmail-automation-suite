@@ -3,10 +3,9 @@ node_modules/
 package.json
 package-lock.json
 
-# Tests and dev tools (relative to rootDir which is ./src)
+# Tests (relative to rootDir which is ./src)
 ../tests/
 ../tests-local/
-dev/
 **/*.test.js
 **/*.spec.js
 
