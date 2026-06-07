@@ -43,3 +43,6 @@ package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Bird UX auth session (never commit)
+tests-ux/.auth/

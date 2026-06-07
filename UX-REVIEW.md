@@ -141,7 +141,7 @@ _Signed: Bird — 2026-06-06T00:00:00Z_
 
 # Re-verification (post-fix) — 2026-06-06
 
-_Leg: ux-a11y-fix (Waves 1–3). Mode: **static re-verification** against the committed HTML/CSS/JS partials + the existing `tests-ux/artifacts/` (original Bird run). **Live CDP re-verify is PENDING a Chrome relaunch** — `http://localhost:9222/json/version` was unreachable at re-verify time (CDP DOWN). To complete the live axe-in-iframe pass, run `bash tests-ux/launch-chrome-cdp.sh` then `node tests-ux/bird-drive.js` and re-run axe in the `*.googleusercontent.com` frame._
+_Leg: ux-a11y-fix (Waves 1–3). Mode: **LIVE CDP re-verification** (2026-06-07) — axe-core 4.10.2 run inside the live `*.googleusercontent.com` dashboard frame, plus fresh mobile screenshot. Evidence: `tests-ux/artifacts/axe-after.json`, `dashboard-mobile-after.png`._
 
 ## What changed (commits)
 - Wave 1 (HTML/CSS a11y): `58b613c`, `c50847e`, `ed3bd9b`
@@ -169,13 +169,15 @@ _Leg: ux-a11y-fix (Waves 1–3). Mode: **static re-verification** against the co
 - `architecture-boundary.test.js` green (no forbidden SDK tokens introduced).
 - Oscar Wave 2 gate (ernie + telly/zoe): **PASS**. Zoe mutation (strip aria-label) correctly fails the createCategoryPill test — no vacuous assertion.
 
-## axe (after)
-- **PENDING live CDP re-verify.** Static review shows the four axe-flagged rule families (`button-name`, `color-contrast`, `document-title`, `html-has-lang`, `page-has-heading-one`) all have committed fixes in the served partials. A fresh in-iframe axe-core 4.10.2 run is required to assert "0 critical / 0 serious" empirically.
+## axe (after) — LIVE, 2026-06-07
+- **0 violations.** Live axe-core 4.10.2 in the dashboard iframe returned `violations: []` (was 5: `button-name` critical ×71, `color-contrast` ×20, `document-title`, `html-has-lang`, `page-has-heading-one`).
+- DOM meta: `hasH1: true`, `htmlLang: "en"`, `title: "Dashboard — Gmail Tools"`, **unnamedButtons: 0** (was 71–77), `inputsNoLabel: 2` — both `type="hidden"` (`retentionLabelName`, `addItemCategoryKey`); hidden inputs need no label and axe does not flag them → **0 real residual**.
+- Mobile 375px: single-column reflow confirmed visually (`dashboard-mobile-after.png`) — labels stack, full-width search, pills wrap, no horizontal scroll.
 
 ## Open / deferred
 - **H8 keyboard alternative to drag-and-drop** for reassigning an EXISTING category to a different label: **DEFERRED to backlog** (`session-ux-fix.json` → `backlog[ux-kbd-reassign]`). Existing modals already provide keyboard paths for adding domains/emails and for choosing a label at category creation; only reassigning an existing category is drag-only. A keyboard path needs a new per-pill move affordance + DOM + client wiring + tests; deferred to avoid expanding the leg.
 - **Observation (non-blocking):** the client-render path `dashboard-labels.html:69` escapes the aria-label via `escapeAttr()`; the duplicate server-file render path `dashboardController.js createCategoryPill` interpolates `displayName`/`labelName` un-escaped into the new aria-label — matching that function's pre-existing un-escaped `onclick`/`data-label` interpolation (not a regression). Worth aligning to `escapeAttr` if/when that function is hardened.
 - **320px reflow** and the **header 3-line wrap on mobile** should be confirmed in the pending live pass.
 
-## Re-verify status: COMPLETE (static) — LIVE CDP axe re-run PENDING Chrome relaunch
-_Signed: Bird (static re-verify) — 2026-06-06_
+## Re-verify status: COMPLETE — LIVE CDP axe = 0 violations; all Bird criticals + highs cleared
+_Signed: Bird (live re-verify) — 2026-06-07_

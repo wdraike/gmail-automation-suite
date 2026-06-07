@@ -1,0 +1,32 @@
+[
+  {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 71,
+    "help": "Buttons must have discernible text"
+  },
+  {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 20,
+    "help": "Elements must meet minimum color contrast ratio thresholds"
+  },
+  {
+    "id": "document-title",
+    "impact": "serious",
+    "n": 1,
+    "help": "Documents must have <title> element to aid in navigation"
+  },
+  {
+    "id": "html-has-lang",
+    "impact": "serious",
+    "n": 1,
+    "help": "<html> element must have a lang attribute"
+  },
+  {
+    "id": "page-has-heading-one",
+    "impact": "moderate",
+    "n": 1,
+    "help": "Page should contain a level-one heading"
+  }
+]
