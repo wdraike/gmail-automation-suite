@@ -1,50 +1,42 @@
 {
-  "leg_id": "full-test-coverage",
-  "intent": "Drive every testable source file to 100% coverage and keep the full suite green. Enforce a 100% jest coverageThreshold (after excluding genuinely-untestable dev scaffolds / secrets / real-API integration). Kermit-orchestrator agent dispatches test-writing work through Oscar (Telly writes, Zoe audits for vacuous tests) and LOOPS per-file until the 100% gate passes.",
-  "scope": "jest.config.js (coverage gate + exclusions), package.json (test:coverage), tests-local/** (new + expanded tests for all weak files), minimal src/** istanbul-ignore justifications / dead-code removal only, tests-local/README.md",
+  "leg_id": "repo-cleanup",
+  "intent": "Clean up the repo per locked WBS decisions D1–D5: remove root review artifacts (relocate the a11y record), untrack regenerable tests-ux artifacts, delete unused src/dev scaffolds, archive stale point-in-time docs, and remove two documented dead-code branches + their istanbul-ignores. Keep the 100% coverage gate green and clasp push valid throughout; Kermit-orchestrator gates src-touching commits through Oscar.",
+  "scope": ".gitignore, .claspignore, root *REVIEW*.md + test-tracking docs, tests-ux/artifacts (untrack), src/dev/** (delete), docs/** (archive + INDEX/README link fixes), src/ui/gmail-addon.js + src/core/cache-service.js (dead-code removal), tests-local/cache-service.test.js",
   "status": "complete",
-  "opened": "2026-06-06T00:00:00Z",
-  "last_update": "2026-06-06T00:00:00Z",
-  "prior_leg": "full-hexagonal-conversion (c4aeeaf, PASS, deployed, pushed)",
-  "wbs": ".planning/kermit/WBS-100-coverage.md",
-  "decisions": {
-    "coverage_scope_excludes": ["src/dev/**", "src/core/local-secrets.js", "*.integration.test.js (real-Gemini, describe.skip)"],
-    "target": "100% statements/functions/lines; 100% branch where reachable, /* istanbul ignore */ with justification otherwise",
-    "skipped_tests": "8 real-Gemini integration stay excluded; 1 api-service rate-limit it.skip must be un-skipped + pass",
-    "gate": "jest coverageThreshold.global=100 after exclusions"
+  "verdict": "PASS",
+  "opened": "2026-06-07T00:00:00Z",
+  "last_update": "2026-06-07T00:00:00Z",
+  "prior_leg": "full-test-coverage (complete, PASS) / ux-a11y-fix (complete-pending-live-verify, PASS)",
+  "wbs": ".planning/kermit/WBS-repo-cleanup.md",
+  "head_at_start": "1025f8d",
+  "git_range": "1025f8d..c928b71",
+  "commits": [
+    {"sha": "3970d57", "decision": "D1", "desc": "remove root review artifacts; git mv UX-REVIEW.md -> docs/; /*REVIEW*.md gitignore"},
+    {"sha": "beae5db", "decision": "D2", "desc": "git rm -r --cached tests-ux/artifacts; gitignore tests-ux/artifacts/"},
+    {"sha": "97feaf3", "decision": "D3", "desc": "remove src/dev/*.js scaffolds; drop dev/ from .claspignore"},
+    {"sha": "789803a", "decision": "D4", "desc": "archive 10 stale docs to docs/archive/; refresh INDEX/README/TESTING-OVERVIEW links"},
+    {"sha": "c928b71", "decision": "D5", "desc": "remove proven-dead branches + istanbul-ignores (gmail-addon writeLog estimatedSize>100000; cache-service LabelCategoriesCache self-collision); Oscar PASS"}
+  ],
+  "results": {
+    "review_artifacts_removed": 17,
+    "ux_review_relocated": "docs/UX-REVIEW.md",
+    "tests_ux_artifacts_untracked": true,
+    "dev_scaffolds_removed": ["src/dev/simple-drive-test.js", "src/dev/test-drive-logging.js", "src/dev/test-gemini-api.js"],
+    "docs_archived": ["PHASE-1-COMPLETION", "PHASE-2-COMPLETE", "PHASE-2-PROGRESS", "REORGANIZATION-SUMMARY", "TEST-COVERAGE-PLAN", "IMPROVEMENT-RECOMMENDATIONS", "TESTING-SUMMARY", "TEST-RUN-LOG", "TEST-REGISTRY", "TRACEABILITY-MATRIX"],
+    "dead_code_removed": ["gmail-addon.js writeLog estimatedSize>100000 guard + estimatedSize", "cache-service.js LabelCategoriesCache.getAll dead truthy branch"],
+    "kept": ["ARCHITECTURE.md", "README.md", ".planning/adr/ADR-001-hexagonal.md", "docs/UX-REVIEW.md", "tests-ux harness (capture-auth.js, launch-chrome-cdp.sh, bird-drive.js)"]
   },
-  "baseline": {
-    "tests": "590 passed / 0 failed / 9 skipped",
-    "coverage": "56.6% stmt / 53.5% branch / 66% func / 56.5% lines"
+  "decisions_resolved": {
+    "note": "The two dead-code backlog items recorded by the full-test-coverage leg are now FIXED in this leg (D5).",
+    "gmail-addon_estimatedSize": "removed (c928b71)",
+    "cache-service_LabelCategoriesCache_collision": "removed (c928b71)"
   },
-  "progress": {
-    "wave0": "done (74284a3) — 100 gate set, rate-limit test un-skipped, flaky race fixed",
-    "files_at_100": [
-      "src/features/email-sorter/sorter.js (27fd624)",
-      "src/core/services/spreadsheet-adapter.js (4b7f5ea)",
-      "src/ui/dashboardController.js (f3544b9)",
-      "src/ui/gmail-addon.js (961654f)",
-      "src/utils/label-cache.js (bd348af)",
-      "src/core/cache-service.js (0464b89)",
-      "src/features/email-retention-manager.js (7d0677b)",
-      "src/core/services/drive-adapter.js (9773afd)",
-      "src/core/api-service.js (68d235a)",
-      "src/features/enhanced-label-manager.js (a7d9068)",
-      "src/features/email-sorter/categorizer-cache.js (9dbd2e7)",
-      "src/core/config.js (1abad69)",
-      "src/ui/dashboard-api.js (2b92aae)",
-      "src/features/job-finder/extractor.js (39af0f4)",
-      "src/features/job-finder/main.js (b2f13de)",
-      "src/core/services/gmail-adapter.js + cache/gemini/http/properties/utilities + index.js (08d3165)",
-      "src/features/job-finder/sheets-handler.js (4021a09)"
-    ],
-    "bugs_fixed": ["sorter.js bare-email regex [^<\\\\s] -> [^<\\s]"],
-    "backlog": [
-      "gmail-addon.js writeLog estimatedSize>100000 is dead code (5000-cap runs first); remove or re-scope",
-      "cache-service.js LabelCategoriesCache: KEYS.LABEL_CATEGORIES collides with its own fallback prop name 'LABEL_CATEGORIES_MAP', making the computeFn truthy branch dead"
-    ],
-    "next": "DONE — 100% gate green (All files 100/100/100/100); 1219 passed / 0 failed / 8 skipped",
-    "final_coverage": "100% statements / 100% branches / 100% functions / 100% lines",
-    "env_note": "VSCode Jest --watch runner contends worker pool; use `npx jest --runInBand` for reliable runs. ENOSPC on the harness CLAUDE_CODE_TMPDIR during long runs — set TMPDIR=~/.claude-tmp for coverage runs."
-  }
+  "coverage_gate_intact": true,
+  "tests": "1219 passed / 0 failed / 8 skipped; All files 100/100/100/100; architecture-boundary 8/8 green",
+  "clasp_valid": true,
+  "deployed": true,
+  "pushed": true,
+  "tree_clean": true,
+  "env_note": "Harness /private/tmp filesystem hit ENOSPC mid-leg; redirected clasp output to a file to recover. Use `npx jest --runInBand` for deterministic runs.",
+  "issues": []
 }

@@ -1,11 +1,52 @@
 {
-  "last_leg": "ux-a11y-fix",
-  "status": "complete-pending-live-verify",
+  "last_leg": "repo-cleanup",
+  "status": "complete",
   "verdict": "PASS",
-  "completed": "2026-06-06",
+  "completed": "2026-06-07",
   "deployed": true,
   "pushed_to_github": true,
-  "ux_a11y_fix": {
+  "repo_cleanup": {
+    "last_leg": "repo-cleanup",
+    "status": "complete",
+    "verdict": "PASS",
+    "completed": "2026-06-07",
+    "deployed": true,
+    "pushed_to_github": true,
+    "git_range": "1025f8d..c928b71",
+    "wbs": ".planning/kermit/WBS-repo-cleanup.md",
+    "summary": "Executed locked WBS decisions D1–D5 as five atomic commits. D1: removed 17 root *REVIEW*.md Oscar/muppet artifacts, git mv UX-REVIEW.md -> docs/UX-REVIEW.md (lasting a11y record), added root-anchored /*REVIEW*.md to .gitignore. D2: git rm -r --cached tests-ux/artifacts + gitignore tests-ux/artifacts/ (kept harness scripts tracked). D3: deleted src/dev/{simple-drive-test,test-drive-logging,test-gemini-api}.js (zero imports/callsites confirmed) and dropped the obsolete dev/ rule from .claspignore. D4: git mv 10 stale point-in-time docs to docs/archive/ (3 phase reports, REORGANIZATION-SUMMARY, TEST-COVERAGE-PLAN, IMPROVEMENT-RECOMMENDATIONS, TESTING-SUMMARY, plus root TEST-RUN-LOG/TEST-REGISTRY/TRACEABILITY-MATRIX — all 2026-05-25 pre-100%-gate, statuses Missing/Gap, superseded by the 100% suite); updated docs/INDEX.md, docs/README.md, docs/testing/TESTING-OVERVIEW.md links and removed dead gmail-service.js/dev/ references + stale coverage stats. D5 (TDD, Oscar-gated): removed two proven-dead branches + their istanbul-ignores while holding the 100% gate.",
+    "commits": [
+      {"sha": "3970d57", "decision": "D1", "desc": "remove root review artifacts; relocate UX-REVIEW to docs/"},
+      {"sha": "beae5db", "decision": "D2", "desc": "untrack tests-ux/artifacts; gitignore run outputs"},
+      {"sha": "97feaf3", "decision": "D3", "desc": "remove src/dev scaffolds; tidy .claspignore"},
+      {"sha": "789803a", "decision": "D4", "desc": "archive stale docs; refresh INDEX/README"},
+      {"sha": "c928b71", "decision": "D5", "desc": "remove proven-dead branches + istanbul-ignores"}
+    ],
+    "dead_code_removed": [
+      "gmail-addon.js writeLog: if (estimatedSize > 100000) guard + estimatedSize var — unreachable (5000-char cap above bounds log to <=5000, so estimatedSize <=5200 < 100000)",
+      "cache-service.js LabelCategoriesCache.getAll: dead truthy branch prop ? JSON.parse(prop) : {} -> () => ({}) — self-collision (KEYS.LABEL_CATEGORIES === 'LABEL_CATEGORIES_MAP', so getOrCompute's prior get() reads the same prop; computeFn only runs on a miss where the re-read is also null). EmailCategoriesCache (distinct keys) left untouched."
+    ],
+    "backlog_items_resolved": [
+      "full-test-coverage leg backlog: gmail-addon.js writeLog estimatedSize>100000 dead code — FIXED",
+      "full-test-coverage leg backlog: cache-service.js LabelCategoriesCache self-collision dead branch — FIXED"
+    ],
+    "review_artifacts_removed": 17,
+    "ux_review_relocated": true,
+    "tests_ux_artifacts_gitignored": true,
+    "dev_scaffolds_removed": ["src/dev/simple-drive-test.js", "src/dev/test-drive-logging.js", "src/dev/test-gemini-api.js"],
+    "docs_archived": ["PHASE-1-COMPLETION", "PHASE-2-COMPLETE", "PHASE-2-PROGRESS", "REORGANIZATION-SUMMARY", "TEST-COVERAGE-PLAN", "IMPROVEMENT-RECOMMENDATIONS", "TESTING-SUMMARY", "TEST-RUN-LOG", "TEST-REGISTRY", "TRACEABILITY-MATRIX"],
+    "kept": ["ARCHITECTURE.md", "README.md", ".planning/adr/ADR-001-hexagonal.md", "docs/UX-REVIEW.md", "tests-ux harness (capture-auth.js, launch-chrome-cdp.sh, bird-drive.js)"],
+    "coverage_gate_intact": true,
+    "tests": "1219 passed / 0 failed / 8 skipped; All files 100/100/100/100; architecture-boundary 8/8 green",
+    "oscar_verdict": "PASS (D3 refactor: ernie + telly/zoe; D5 dead-code: ernie + telly/zoe)",
+    "clasp_valid": true,
+    "tree_clean": true,
+    "src_changes_behavior_neutral": true,
+    "src_diff_note": "git diff --stat src/ clean after final commit; only the two surgical dead-code removals; no stray mutations; architecture-boundary green",
+    "env_notes": ["Harness /private/tmp filesystem hit ENOSPC mid-leg; redirected clasp push output to a file to recover.", "Use npx jest --runInBand for deterministic runs."],
+    "issues": []
+  },
+  "prior_leg_ux_a11y_fix": {
     "last_leg": "ux-a11y-fix",
     "status": "complete-pending-live-verify",
     "verdict": "PASS",
